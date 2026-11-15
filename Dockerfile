@@ -6,7 +6,17 @@ RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
-# --- 2) runtime ---
+# --- 2) zip del plugin de Steam Deck (Decky Loader): el hub lo sirve en /api/deck/plugin ---
+FROM node:25-alpine AS deck
+# package.sh necesita bash y python3 (zipfile); el build usa pnpm 9 (el de la plantilla de Decky y su pnpm-lock.yaml).
+RUN apk add --no-cache bash python3 && npm install -g pnpm@9 --no-audit --no-fund
+WORKDIR /deck
+COPY checkpoint-deck/package.json checkpoint-deck/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY checkpoint-deck/ ./
+RUN pnpm run zip
+
+# --- 3) runtime ---
 FROM python:3.12-alpine
 # `apk upgrade` trae los paquetes de la base con sus correcciones de seguridad (p. ej. krb5-libs, que entra
 # por openssh-client); `setuptools` viene preinstalado en la imagen base y se sube a una versión corregida.
@@ -24,6 +34,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app ./app
 COPY VERSION ./VERSION
 COPY --from=web /web/dist ./static
+COPY --from=deck /deck/out/Checkpoint.zip ./deck/Checkpoint.zip
 # La CLI baja a checkpoint si se invoca como root (docker exec), para no crear ficheros de root en /data.
 RUN printf '#!/bin/sh\nif [ "$(id -u)" = "0" ]; then exec su-exec checkpoint python -m app.cli "$@"; fi\nexec python -m app.cli "$@"\n' > /usr/local/bin/checkpoint && chmod +x /usr/local/bin/checkpoint
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
