@@ -19,9 +19,12 @@ carpeta, de profundidad y de tiempo (`MAX_DIRS`, `MAX_ENTRIES`, `MAX_SECONDS`).
 Dónde busca (por orden): Lutris Flatpak (`~/.var/app/net.lutris.Lutris/data/lutris`, VERIFICADO en una Deck real) y Lutris
 nativo (`~/.local/share/lutris`, con los .yml en `games/` o en `~/.config/lutris/games/`; NO VERIFICADO en una Deck real).
 
+Toda carpeta sugerida (prefijo, `drive_c/users`, candidatos) pasa por `checkpoint_sync.verified_dir`, la comprobación única del
+plugin: existe, es carpeta, se puede listar y pasa la validación de rutas; `checkpoint_games` la repite justo antes de devolver.
+
 Seguridad: `pga.db` se abre con `file:...?mode=ro` (nunca se escribe ni queda `-journal`); el .yml se lee con un
 analizador mínimo (sin PyYAML ni dependencias) y solo la sección `game:`; `configpath` no puede salir de `games/`; la ruta
-final pasa por `checkpoint_sync.validate_game_path` y debe estar dentro del directorio personal. Todo fallo (ficheros
+final pasa por `checkpoint_sync.verified_dir` y debe estar dentro del directorio personal. Todo fallo (ficheros
 ausentes, corruptos, base bloqueada) da «sin sugerencia», sin excepción y sin rutas ni usuarios en el log.
 """
 
@@ -35,7 +38,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 from urllib.parse import quote
 
-from checkpoint_sync import PathNotAllowed, validate_game_path
+from checkpoint_sync import verified_dir
 
 MAX_YML = 256 * 1024  # un .yml de Lutris pesa pocos KB
 MAX_ID = 10**9
@@ -144,28 +147,6 @@ def _yml_prefix(path: Path) -> Optional[str]:
     return None
 
 
-def _valid(candidate: object, home: Path, protected: Sequence[Path], accept: Accept) -> Optional[str]:
-    """La ruta como la validaría la sincronización, existente, dentro del directorio personal y aceptable; si no, None."""
-    if not isinstance(candidate, str):
-        return None
-    try:
-        real = validate_game_path(candidate, home, protected)
-    except PathNotAllowed:
-        return None
-    s = str(real)
-    if s != candidate:  # `..`, enlaces o rutas no normalizadas: no se sugieren
-        return None
-    base = os.path.realpath(home)
-    if not (s == base or s.startswith(base.rstrip("/") + "/")):
-        return None
-    try:
-        if not real.is_dir():
-            return None
-    except OSError:
-        return None
-    return s if accept(s) else None
-
-
 def _locate(
     home: Path,
     launch_options: Optional[str],
@@ -197,7 +178,7 @@ def _locate(
                 if prefix:
                     break
         for cand in (prefix, directory):
-            ok = _valid(cand, home, protected, accept)
+            ok = verified_dir(cand, home, protected, accept)
             if ok:
                 return ok, names
     return None
@@ -388,7 +369,7 @@ def find_saves(
     if name:
         names = names + [name]
     users_dir = prefix + "/drive_c/users"
-    ok_users = _valid(users_dir, home, protected, lambda _s: True)
+    ok_users = verified_dir(users_dir, home, protected, lambda _s: True)
     if not ok_users:
         return out
     out["browse_start"] = ok_users
@@ -407,7 +388,7 @@ def find_saves(
                     files, newest = _stats(path, budget)
                     if not files:
                         continue
-                    ok = _valid(path, home, protected, accept)
+                    ok = verified_dir(path, home, protected, accept)
                     if ok and ok.startswith(prefix + "/"):
                         cands.append({"path": ok, "files": files, "mtime": newest, "score": score})
         cands = _prune_nested(cands)

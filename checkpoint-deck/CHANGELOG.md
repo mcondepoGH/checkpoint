@@ -1,5 +1,21 @@
 # Registro de cambios del plugin
 
+## 1.1.0-rc.5
+
+Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.5` es mayor que `1.1.0-rc.4`, `1.1.0-rc.3`, `1.1.0-rc.2`, `1.1.0-rc.1` y `1.0.0` (el hub la ofrece a quien tenga cualquiera de ellas) y menor que la futura `1.1.0`. Incluye todo lo de la `1.1.0-rc.4`.
+
+### Novedades
+
+- **Solo se sugiere lo que existe, comprobado en el momento de sugerir.** Una comprobación común, `verified_dir` (`checkpoint_sync.py`), se aplica a TODA carpeta sugerida (candidatos de Lutris, `drive_c/users`, prefijo, Proton y Steam Cloud de los juegos de Steam): existe, es carpeta (no fichero), se puede listar, está normalizada y sin enlaces simbólicos, está dentro del home o de la biblioteca de Steam (tarjeta SD), pasa la validación de la sincronización (sin carpetas protegidas) y el filtro de caracteres del hub. Falla cerrado: cualquier excepción o permiso denegado significa que no se sugiere. Antes, las rutas de Steam solo comprobaban que fueran carpeta y los candidatos de Lutris no comprobaban que se pudieran listar; los de Lutris se vuelven a verificar justo antes de devolverlos, por si una carpeta desapareció durante el recorrido.
+- **Se comprueba otra vez al guardar.** Si la carpeta sugerida ya no existe (o ya no es una carpeta) al pulsar «Guardar en el hub», sale «La carpeta sugerida ya no existe o ya no es una carpeta. No se ha creado el juego…» y no se llama al hub: no queda un juego a medias. Una ruta escrita a mano que aún no existe sigue aceptándose (la sincronización la crea al bajar).
+- **«Examinar…» más cerca en Steam.** Si no hay carpeta que sugerir pero existe parte de la ruta esperada (el prefijo de Proton o `userdata/<id>/<appid>`), «Examinar…» abre en su ancestro existente más profundo y validado. La ruta que aún no existe no se sugiere ni se crea.
+- El texto «No se detectó la carpeta de guardado» pasa a «No se encontró ninguna carpeta de guardado que exista…».
+
+### Sin verificar
+
+- El flujo en una Deck real con esta versión. No hay tope de tiempo propio en la comprobación de una sola carpeta (son llamadas locales; un montaje colgado podría bloquearla, aunque el recorrido de Lutris sí tiene tope).
+- Los tipos de TypeScript y la compilación (`tsc`, `rollup`) no se han ejecutado con este cambio.
+
 ## 1.1.0-rc.4
 
 Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.4` es mayor que `1.1.0-rc.3`, `1.1.0-rc.2`, `1.1.0-rc.1` y `1.0.0` (el hub la ofrece a quien tenga cualquiera de ellas) y menor que la futura `1.1.0`. Incluye todo lo de la `1.1.0-rc.3`.

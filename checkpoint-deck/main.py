@@ -51,6 +51,7 @@ class Plugin:
     async def _main(self) -> None:
         self.pairing = Pairing(decky.DECKY_PLUGIN_SETTINGS_DIR, log=self._log)
         self._installed: List[Any] = []  # (appid, nombre) de la última búsqueda en Steam (juegos y atajos)
+        self._offered: Dict[int, Set[str]] = {}  # appid -> carpetas que `suggest_game` ofreció (existían al ofrecerlas)
         self._shortcut_ids: Set[int] = set()  # cuáles de esos appids son atajos de Steam
         self.jobs = Jobs(
             self._make_engine,
@@ -275,7 +276,7 @@ class Plugin:
 
     async def suggest_game(self, appid: int) -> Dict[str, Any]:
         """Datos para configurar un juego que no está en el hub: nombre de Steam y ruta de saves detectada en la Deck
-        (carpetas que existen; vacía si no hay nada; para un atajo de Lutris, `source` = "lutris", `candidates` encontrados en su prefijo y `browse_start`, dónde abre «Examinar…»; el prefijo entero no se sugiere) y el home de la Deck, donde abre el selector de carpetas. Solo lectura."""
+        (carpetas que existen; vacía si no hay nada; para un atajo de Lutris, `source` = "lutris", `candidates` encontrados en su prefijo y `browse_start`, dónde abre «Examinar…»; el prefijo entero no se sugiere; todo se verifica al sugerir con `verified_dir`; sin candidatos de Steam, `browse_start` = el ancestro existente de la ruta natural) y el home de la Deck, donde abre el selector de carpetas. Solo lectura."""
         name = self._unconfigured_name(appid)
         if name is None:
             return self._failure("unknown_game")
@@ -283,7 +284,8 @@ class Plugin:
         if self._is_shortcut(appid):  # atajo: solo hay sugerencia si lanza un juego de Lutris
             found = await asyncio.to_thread(suggest_shortcut, home, appid, protected_dirs(decky), self._log, name)
         else:
-            found = await asyncio.to_thread(suggest_path, home, appid, name)
+            found = await asyncio.to_thread(suggest_path, home, appid, name, protected_dirs(decky))
+        self._offered[appid] = {p for p in [found.get("path", ""), *found.get("candidates", [])] if p}  # lo que se ofreció como existente
         return {"ok": True, "appid": appid, "name": name, "home": str(home), **found}
 
     async def picker_start(self, path: str = "") -> Dict[str, Any]:
@@ -302,7 +304,7 @@ class Plugin:
             return self._failure("not_linked")
         if self._unconfigured_name(appid) is None:
             return self._failure("unknown_game")
-        out = await asyncio.to_thread(tools.create, appid, str(name), str(path))
+        out = await asyncio.to_thread(tools.create, appid, str(name), str(path), str(path) in self._offered.get(appid, ()))
         if out["ok"]:
             g = out["game"]
             self.jobs.add_game(g)

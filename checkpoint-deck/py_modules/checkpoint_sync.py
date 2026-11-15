@@ -20,6 +20,7 @@ import hashlib
 import os
 import re
 import shutil
+import stat
 import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
@@ -116,6 +117,40 @@ def validate_game_path(raw: Any, home: Path, protected: Sequence[Path] = ()) -> 
     if real != p and _forbidden(real, homes, keep_inside, keep_around):
         raise PathNotAllowed("la ruta real es una carpeta protegida")
     return Path(real)
+
+
+def verified_dir(
+    candidate: Any,
+    home: Path,
+    protected: Sequence[Path] = (),
+    accept: Optional[Callable[[str], bool]] = None,
+    extra_roots: Sequence[Any] = (),
+) -> Optional[str]:
+    """Comprobación ÚNICA de toda carpeta que el plugin sugiere (Steam, Lutris...), hecha en el momento de sugerir. Devuelve la
+    ruta si, a la vez: es absoluta y está normalizada (sin `..`, sin enlaces ni rutas distintas de su ruta real); pasa
+    `validate_game_path` (la regla de la sincronización: ni sistema ni carpetas protegidas); está dentro del home o de alguna
+    de `extra_roots` (p. ej. la biblioteca de Steam en la tarjeta SD); EXISTE, es una CARPETA y se puede listar (lo mismo que
+    hará el selector de Decky); y `accept` (filtro del hub) la admite. Falla cerrado: cualquier excepción da None. No escribe."""
+    try:
+        if not isinstance(candidate, str):
+            return None
+        real = str(validate_game_path(candidate, home, protected))
+        if real != candidate:
+            return None
+        roots = [os.path.realpath(home)] + [os.path.realpath(r) for r in extra_roots]
+        if not any(_under(real, r) for r in roots):
+            return None
+        if not stat.S_ISDIR(os.lstat(real).st_mode):
+            return None
+        if not os.access(real, os.R_OK | os.X_OK):
+            return None
+        with os.scandir(real):
+            pass
+        if accept is not None and not accept(real):
+            return None
+        return real
+    except Exception:  # noqa: BLE001  (fallo cerrado: ante la duda, no se sugiere)
+        return None
 
 
 def validate_rel(rel: Any) -> str:

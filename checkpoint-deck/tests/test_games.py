@@ -305,3 +305,216 @@ def test_suggest_shortcut_drops_a_path_the_hub_would_reject(home):
     con.close()
     out = cg.suggest_shortcut(home, 2389644016)
     assert out["path"] == "" and out["candidates"] == []  # el hub rechaza «&»: no se ofrece
+
+
+# ---- sugerencias: solo lo que existe, se lee y pasa la validación (Steam)
+def _cloud(home: Path, appid: int = 9) -> Path:
+    d = steam(home) / "userdata/123456" / str(appid) / "remote"
+    d.mkdir(parents=True)
+    return d
+
+
+def test_steam_suggestion_requires_a_folder_not_a_file(home):
+    acf(steam(home), 9, "Juego", "Juego")
+    f = prefix(home, 9) / "AppData/Local/Juego"
+    f.parent.mkdir(parents=True)
+    f.write_text("no soy una carpeta")
+    assert cg.suggest_path(home, 9, "Juego")["candidates"] == []
+
+
+@pytest.mark.skipif(__import__("os").geteuid() == 0, reason="root ignora los permisos")
+def test_steam_suggestion_skips_an_unreadable_folder(home):
+    acf(steam(home), 9, "Juego", "Juego")
+    d = _cloud(home)
+    d.chmod(0)
+    try:
+        out = cg.suggest_path(home, 9, "Juego")
+        assert out["path"] == "" and out["candidates"] == [] and out["source"] == ""
+    finally:
+        d.chmod(0o755)
+
+
+def test_steam_suggestion_skips_an_unreadable_folder_simulated(home, monkeypatch):
+    import os
+
+    acf(steam(home), 9, "Juego", "Juego")
+    d = _cloud(home)
+    real = os.scandir
+
+    def deny(p="."):
+        if str(p) == str(d):
+            raise PermissionError("denegado")
+        return real(p)
+
+    monkeypatch.setattr(os, "scandir", deny)
+    assert cg.suggest_path(home, 9, "Juego")["candidates"] == []
+
+
+def test_steam_suggestion_skips_a_symlink_that_points_outside_home(home, tmp_path):
+    acf(steam(home), 9, "Juego", "Juego")
+    outside = tmp_path / "fuera"
+    outside.mkdir()
+    remote = steam(home) / "userdata/123456/9/remote"
+    remote.parent.mkdir(parents=True)
+    remote.symlink_to(outside)
+    out = cg.suggest_path(home, 9, "Juego")
+    assert out["path"] == "" and out["candidates"] == [] and str(outside) not in str(out)
+
+
+def test_steam_suggestion_skips_a_protected_folder(home):
+    acf(steam(home), 9, "Juego", "Juego")
+    d = _cloud(home)
+    assert cg.suggest_path(home, 9, "Juego", [d])["candidates"] == []
+    assert cg.suggest_path(home, 9, "Juego", [])["candidates"] == [str(d)]
+
+
+def test_steam_suggestion_writes_nothing(home):
+    acf(steam(home), 9, "Juego", "Juego")
+    before = sorted(str(p) for p in home.rglob("*"))
+    cg.suggest_path(home, 9, "Juego")
+    assert sorted(str(p) for p in home.rglob("*")) == before
+
+
+# ---- «Examinar…» de Steam: lo más cerca de la ruta natural que exista
+def test_steam_without_candidates_browses_from_the_deepest_existing_ancestor_of_the_proton_path(home):
+    acf(steam(home), 9, "Juego", "Juego")
+    pfx = prefix(home, 9)
+    (pfx / "AppData/Roaming").mkdir(parents=True)  # la carpeta del juego aún no existe
+    out = cg.suggest_path(home, 9, "Juego")
+    assert out == {"path": "", "candidates": [], "source": "", "browse_start": str(pfx / "AppData/Roaming")}
+
+
+def test_steam_browse_start_stops_at_compatdata_when_the_prefix_is_missing(home):
+    acf(steam(home), 9, "Juego", "Juego")
+    (steam(home) / "steamapps/compatdata/9").mkdir(parents=True)  # compatdata sin pfx
+    out = cg.suggest_path(home, 9, "Juego")
+    assert out["path"] == "" and out["browse_start"] == str(steam(home) / "steamapps/compatdata/9")
+
+
+def test_steam_browse_start_follows_the_cloud_path_for_a_native_game(home):
+    acf(steam(home), 9, "Juego", "Juego")
+    user_app = steam(home) / "userdata/123456/9"
+    user_app.mkdir(parents=True)  # `remote` aún sin crear
+    out = cg.suggest_path(home, 9, "Juego")
+    assert out["path"] == "" and out["browse_start"] == str(user_app)
+
+
+def test_steam_has_no_browse_start_when_there_is_a_candidate_or_nothing_natural(home):
+    acf(steam(home), 5, "Nativo", "Nativo")
+    acf(steam(home), 9, "Juego", "Juego")
+    assert cg.suggest_path(home, 5, "Nativo") == {"path": "", "candidates": [], "source": ""}  # ni compatdata ni userdata
+    _cloud(home)
+    assert "browse_start" not in cg.suggest_path(home, 9, "Juego")
+
+
+# ---- sugerencias de Lutris: lo mismo
+def _lutris_with_saves(home):
+    pfx = _lutris_deck(home, [LUTRIS_SC])
+    return pfx, _dq7_saves(pfx)
+
+
+def test_lutris_suggestion_skips_a_candidate_that_is_a_file(home):
+    pfx = _lutris_deck(home, [LUTRIS_SC])
+    docs = pfx / "drive_c/users/deck/Documents/My Games"
+    docs.mkdir(parents=True)
+    (docs / "Juego").write_text("fichero")
+    assert cg.suggest_shortcut(home, 2389644016)["candidates"] == []
+
+
+def test_lutris_suggestion_skips_a_missing_candidate_but_keeps_the_others(home, monkeypatch):
+    import shutil
+
+    import checkpoint_lutris as lu
+
+    pfx = _lutris_deck(home, [LUTRIS_SC])
+    docs = pfx / "drive_c/users/deck/Documents"
+    for n in ("Uno", "Dos"):
+        (docs / n).mkdir(parents=True)
+        (docs / n / "f.dat").write_text("x")
+    real = lu.find_saves
+
+    def vanish(*a, **k):  # entre el recorrido y la sugerencia desaparece una carpeta
+        out = real(*a, **k)
+        shutil.rmtree(docs / "Uno")
+        return out
+
+    monkeypatch.setattr(lu, "find_saves", vanish)
+    out = cg.suggest_shortcut(home, 2389644016)
+    assert out["candidates"] == [str(docs / "Dos")] and out["path"] == str(docs / "Dos")
+
+
+def test_lutris_suggestion_drops_everything_if_the_only_candidate_vanishes(home, monkeypatch):
+    import shutil
+
+    import checkpoint_lutris as lu
+
+    _pfx, saves = _lutris_with_saves(home)
+    real = lu.find_saves
+
+    def vanish(*a, **k):
+        out = real(*a, **k)
+        shutil.rmtree(saves)
+        return out
+
+    monkeypatch.setattr(lu, "find_saves", vanish)
+    out = cg.suggest_shortcut(home, 2389644016)
+    assert out["path"] == "" and out["candidates"] == [] and out["source"] == "lutris"
+
+
+@pytest.mark.skipif(__import__("os").geteuid() == 0, reason="root ignora los permisos")
+def test_lutris_suggestion_skips_an_unreadable_candidate(home):
+    _pfx, saves = _lutris_with_saves(home)
+    saves.chmod(0)
+    try:
+        assert cg.suggest_shortcut(home, 2389644016)["candidates"] == []
+    finally:
+        saves.chmod(0o755)
+
+
+def test_lutris_suggestion_skips_an_unreadable_candidate_simulated(home, monkeypatch):
+    import os
+
+    _pfx, saves = _lutris_with_saves(home)
+    real = os.access
+    monkeypatch.setattr(os, "access", lambda p, m, **k: False if str(p) == str(saves) else real(p, m, **k))
+    assert cg.suggest_shortcut(home, 2389644016)["candidates"] == []
+
+
+def test_lutris_suggestion_skips_a_candidate_symlinked_outside_home(home, tmp_path):
+    pfx = _lutris_deck(home, [LUTRIS_SC])
+    outside = tmp_path / "fuera"
+    (outside / "saves").mkdir(parents=True)
+    (outside / "saves" / "a.sav").write_text("x")
+    docs = pfx / "drive_c/users/deck/Documents"
+    docs.mkdir(parents=True)
+    (docs / "Juego").symlink_to(outside / "saves")
+    assert cg.suggest_shortcut(home, 2389644016)["candidates"] == []
+
+
+def test_lutris_suggestion_skips_a_candidate_the_hub_would_reject_and_writes_nothing(home):
+    pfx = _lutris_deck(home, [LUTRIS_SC])
+    d = pfx / "drive_c/users/deck/Documents/Raro; juego"
+    d.mkdir(parents=True)
+    (d / "a.sav").write_text("x")
+    before = sorted(str(p) for p in home.rglob("*"))
+    assert cg.suggest_shortcut(home, 2389644016)["candidates"] == []
+    assert sorted(str(p) for p in home.rglob("*")) == before
+
+
+def test_lutris_browse_start_vanishing_is_dropped(home, monkeypatch):
+    import shutil
+
+    import checkpoint_lutris as lu
+
+    pfx = _lutris_deck(home, [LUTRIS_SC])
+    (pfx / "drive_c/users/deck/Documents").mkdir(parents=True)
+    real = lu.find_saves
+
+    def vanish(*a, **k):
+        out = real(*a, **k)
+        shutil.rmtree(pfx / "drive_c")
+        return out
+
+    monkeypatch.setattr(lu, "find_saves", vanish)
+    out = cg.suggest_shortcut(home, 2389644016)
+    assert out["browse_start"] == str(pfx)  # el ancestro que sí existe

@@ -359,3 +359,67 @@ def test_suggest_game_gives_lutris_candidates_for_a_lutris_shortcut_and_nothing_
     assert lutris["browse_start"] == str(pfx / "drive_c/users") and picker["path"] == lutris["browse_start"]
     assert emu["ok"] and emu["path"] == "" and emu["source"] == "" and emu["home"] == str(home)
     assert steam_game["source"] != "lutris" and steam_game["path"] == ""
+
+
+def test_configure_game_refuses_a_suggested_folder_that_vanished_and_does_not_call_the_hub(fake_decky, scripthub, tmp_path, monkeypatch, caplog):
+    import shutil
+
+    st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    save = Path(tmp_path / "card/steamapps/compatdata/730/pfx/drive_c/users/steamuser/AppData/Local/Counter-Strike 2")
+
+    async def go():
+        await p._main()
+        await p.refresh_library()
+        await settled(p)
+        save.mkdir(parents=True)
+        sug = await p.suggest_game(730)
+        shutil.rmtree(save)  # desaparece entre sugerir y guardar
+        r = await p.configure_game(730, "Counter-Strike 2", sug["path"])
+        s = await p.get_sync_state()
+        await p._unload()
+        return sug, r, s
+
+    sug, r, s = asyncio.run(go())
+    assert sug["path"] == str(save)
+    assert r["ok"] is False and r["error"] == "path_missing"
+    assert not [q for q in hub.requests if q.method == "POST" and q.path == "/api/steam/games"]
+    assert 730 in [u["appid"] for u in s["unconfigured"]] and [g["id"] for g in s["games"]] == ["hl2"]  # no queda a medias
+    assert str(save) not in caplog.text and "tmp" not in " ".join(m for m in caplog.messages if "crear juego" in m)
+
+
+def test_configure_game_refuses_a_suggested_folder_that_became_a_file(fake_decky, scripthub, tmp_path, monkeypatch):
+    import shutil
+
+    st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    save = Path(tmp_path / "card/steamapps/compatdata/730/pfx/drive_c/users/steamuser/AppData/Local/Counter-Strike 2")
+
+    async def go():
+        await p._main()
+        await p.refresh_library()
+        await settled(p)
+        save.mkdir(parents=True)
+        sug = await p.suggest_game(730)
+        shutil.rmtree(save)
+        save.write_text("ahora soy un fichero")
+        r = await p.configure_game(730, "Counter-Strike 2", sug["path"])
+        await p._unload()
+        return r
+
+    r = asyncio.run(go())
+    assert r["ok"] is False and r["error"] == "path_missing"
+    assert not [q for q in hub.requests if q.method == "POST" and q.path == "/api/steam/games"]
+
+
+def test_configure_game_still_accepts_a_typed_folder_that_does_not_exist_yet(fake_decky, scripthub, tmp_path, monkeypatch):
+    st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    nueva = tmp_path / "deckhome" / "saves" / "nueva"  # nunca se sugirió: la sincronización la crea al bajar
+
+    async def go():
+        await p._main()
+        await p.refresh_library()
+        await settled(p)
+        r = await p.configure_game(730, "Counter-Strike 2", str(nueva))
+        await p._unload()
+        return r
+
+    assert asyncio.run(go())["ok"] is True

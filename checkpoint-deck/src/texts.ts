@@ -140,7 +140,7 @@ export const TOGGLE_HELP =
   "El interruptor activa o desactiva el juego en el hub, para todos tus dispositivos. Desactivado no se sincroniza.";
 export const UNCONFIGURED_HELP =
   "Instalados en la Deck pero sin juego en el hub. Configúralos aquí: el nombre y la ruta de guardado se rellenan solos si se detectan.";
-export const NO_PATH_FOUND = "No se detectó la carpeta de guardado: escríbela (ruta completa).";
+export const NO_PATH_FOUND = "No se encontró ninguna carpeta de guardado que exista: escríbela (ruta completa) o usa Examinar….";
 export const PATH_FOUND: Record<string, string> = {
   proton: "Ruta detectada en el prefijo de Proton del juego. Revísala y confirma.",
   cloud: "Ruta detectada en los guardados de Steam Cloud. Revísala y confirma.",
@@ -246,6 +246,8 @@ export function gameError(f: GameFailure): string {
       );
     case "path_forbidden":
       return "Esa carpeta no se puede usar (sistema, Steam o Decky). Elige la carpeta de guardado del juego.";
+    case "path_missing":
+      return "La carpeta sugerida ya no existe o ya no es una carpeta. No se ha creado el juego: elige otra con Examinar… o escribe la ruta.";
     case "unknown_game":
       return "Ese juego ya no está en la lista. Busca de nuevo los juegos de Steam.";
     default:

@@ -5,7 +5,9 @@ del prefijo de Proton y la carpeta de Steam Cloud); si no hay nada, la ruta qued
 adivina ni se crea. Errores del hub: `describe_failure` (sin claves ni URL).
 """
 
+import os
 import re
+import stat
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
@@ -14,7 +16,7 @@ import checkpoint_lutris
 import checkpoint_shortcuts
 import checkpoint_steam
 from checkpoint_hub import HubNetworkError, describe_error
-from checkpoint_sync import PathNotAllowed, validate_game_path
+from checkpoint_sync import PathNotAllowed, validate_game_path, verified_dir
 
 # Mismos caracteres que acepta el hub en una ruta (`PATH_CHARS_RE` de config/models.py): una sugerencia que el hub
 # rechazaría no se ofrece.
@@ -33,11 +35,30 @@ def is_tool(name: str) -> bool:
     return any(n == t or n.startswith(t + " ") for t in _TOOLS)
 
 
-def _isdir(p: Path) -> bool:
+def _accept(s: str) -> bool:
+    """Filtro del hub: una sugerencia con caracteres que el hub rechazaría no se ofrece."""
+    return bool(_HUB_PATH.match(s.lstrip("/")))
+
+
+def _is_real_dir(p: str) -> bool:
     try:
-        return p.is_dir()
+        return stat.S_ISDIR(os.lstat(p).st_mode)
     except OSError:
         return False
+
+
+def _nearest_existing(path: str, home: Path, protected: Sequence[Path], roots: Sequence[Any]) -> str:
+    """El ancestro existente más profundo de `path` que pasa `verified_dir` (donde abrir «Examinar…»), o ""."""
+    cur = os.path.dirname(path)
+    while cur and cur != "/":
+        ok = verified_dir(cur, home, protected, _accept, roots)
+        if ok:
+            return ok
+        nxt = os.path.dirname(cur)
+        if nxt == cur:
+            break
+        cur = nxt
+    return ""
 
 
 def find_game(home: Path, appid: int) -> Optional[Dict[str, Any]]:
@@ -60,19 +81,27 @@ def _names(name: str, installdir: Optional[str]) -> List[str]:
     return out
 
 
-def suggest_path(home: Path, appid: int, name: str) -> Dict[str, Any]:
-    """`{path, candidates, source}`: carpetas de saves que EXISTEN. `source`: proton | cloud | "" (nada detectado)."""
+def suggest_path(home: Path, appid: int, name: str, protected: Sequence[Path] = ()) -> Dict[str, Any]:
+    """`{path, candidates, source}`: carpetas de saves que EXISTEN y pasan `verified_dir` en este momento. `source`: proton |
+    cloud | "" (nada detectado). Sin candidatos, si la ruta «natural» aún no existe (prefijo de Proton o `remote` de Steam
+    Cloud), añade `browse_start`: su ancestro existente más profundo y validado, donde abrir «Examinar…»; nada se crea."""
     empty: Dict[str, Any] = {"path": "", "candidates": [], "source": ""}
     found = find_game(home, appid)
     if found is None:
         return empty
-    cands: List[tuple] = []
-    pfx = found["steamapps"] / "compatdata" / str(int(appid)) / _PFX
+    # Los prefijos se construyen sobre la ruta real de la biblioteca (`~/.steam/steam` es un enlace): `verified_dir` exige
+    # rutas sin enlaces. La tarjeta SD queda fuera del home, así que su biblioteca y la raíz de Steam son raíces permitidas.
+    steamapps = os.path.realpath(found["steamapps"])
+    root = os.path.realpath(found["root"])
+    roots = [root, steamapps]
+    compat = Path(steamapps) / "compatdata" / str(int(appid))
+    pfx = compat / _PFX
     names = _names(name, found["installdir"])
+    cands: List[tuple] = []
     for sub in _PROTON_DIRS:
         for n in names:
             cands.append((pfx / sub / n, "proton"))
-    userdata = found["root"] / "userdata"
+    userdata = Path(root) / "userdata"
     try:
         users = sorted(x for x in userdata.iterdir() if x.name.isdigit())
     except OSError:
@@ -80,14 +109,34 @@ def suggest_path(home: Path, appid: int, name: str) -> Dict[str, Any]:
     for u in users:
         cands.append((u / str(int(appid)) / "remote", "cloud"))
     out: List[tuple] = []
-    for p, src in cands:
-        s = str(p)
-        if _isdir(p) and _HUB_PATH.match(s.lstrip("/")) and all(s != o[0] for o in out):
+    for p, src in cands:  # la comprobación va aquí, justo antes de devolver
+        s = verified_dir(str(p), home, protected, _accept, roots)
+        if s and all(s != o[0] for o in out):
             out.append((s, src))
     out = out[:MAX_CANDIDATES]
-    if not out:
-        return empty
-    return {"path": out[0][0], "candidates": [o[0] for o in out], "source": out[0][1]}
+    if out:
+        return {"path": out[0][0], "candidates": [o[0] for o in out], "source": out[0][1]}
+    natural = None  # ruta esperada que aún no existe
+    if verified_dir(str(compat), home, protected, _accept, roots):
+        natural = pfx / "AppData/Roaming" / (names[0] if names else "")
+    elif users:
+        natural = users[0] / str(int(appid)) / "remote"
+    if natural is not None:
+        start = _nearest_existing(str(natural), home, protected, roots)
+        if start:
+            return {**empty, "browse_start": start}
+    return empty
+
+
+def _recheck(found: Dict[str, Any], home: Path, protected: Sequence[Path]) -> Dict[str, Any]:
+    """Última comprobación de una sugerencia de Lutris, justo antes de devolverla: cada candidato (y `browse_start`) se vuelve a
+    verificar, porque entre el recorrido y la respuesta una carpeta puede haber desaparecido. `path` = el primer candidato que
+    queda. Si `browse_start` ya no vale, se sube al ancestro existente."""
+    cands = [c for c in found["candidates"] if verified_dir(c, home, protected, _accept)]
+    start = found.get("browse_start", "")
+    if start and not verified_dir(start, home, protected, _accept):
+        start = _nearest_existing(start, home, protected, ())
+    return {**found, "path": cands[0] if cands else "", "candidates": cands, "browse_start": start}
 
 
 def suggest_shortcut(
@@ -100,25 +149,23 @@ def suggest_shortcut(
     """Como `suggest_path`, para un atajo de Steam (juego que no es de Steam): si lanza un juego de Lutris
     (`lutris:rungameid/N` en sus `LaunchOptions`) devuelve `source` = "lutris", `candidates` (carpetas que existen en su
     prefijo, ver `checkpoint_lutris.find_saves`), `path` = la primera ("" si no hay: nada se inventa; el prefijo entero ya no
-    se sugiere) y `browse_start` = dónde abrir «Examinar…» (`<prefijo>/drive_c/users`, o el prefijo). Cualquier otro atajo
-    (emuladores, Epic...) queda sin sugerencia. Solo lectura."""
+    se sugiere) y `browse_start` = dónde abrir «Examinar…» (`<prefijo>/drive_c/users`, o el prefijo). Todo se vuelve a
+    verificar (`verified_dir`) justo antes de devolverlo. Cualquier otro atajo (emuladores, Epic...) queda sin sugerencia.
+    Solo lectura."""
     empty: Dict[str, Any] = {"path": "", "candidates": [], "source": ""}
     for root in checkpoint_steam.find_steam_roots(Path(home)):
         opts = checkpoint_shortcuts.find_launch_options(root, appid)
         if opts is None:
             continue
-        found = checkpoint_lutris.find_saves(
-            home, opts, protected, log, accept=lambda s: bool(_HUB_PATH.match(s.lstrip("/"))), name=name
-        )
+        found = checkpoint_lutris.find_saves(home, opts, protected, log, accept=_accept, name=name)
         if not found["prefix"]:
             return empty
         cands = found["candidates"]
-        return {
-            "path": cands[0] if cands else "",
-            "candidates": cands,
-            "source": "lutris",
-            "browse_start": found["browse_start"],
-        }
+        return _recheck(
+            {"path": cands[0] if cands else "", "candidates": cands, "source": "lutris", "browse_start": found["browse_start"]},
+            Path(home),
+            protected,
+        )
     return empty
 
 
@@ -160,11 +207,15 @@ class GameTools:
         self._client = hc.HubClient(hub, key)
         self._home, self._protected, self._log = Path(home), list(protected), log
 
-    def create(self, appid: int, name: str, path: str) -> Dict[str, Any]:
+    def create(self, appid: int, name: str, path: str, must_exist: bool = False) -> Dict[str, Any]:
+        """`must_exist`: la ruta se sugirió como carpeta existente; si ya no lo es, se rechaza (`path_missing`) sin llamar al hub."""
         try:
-            validate_game_path(path, self._home, self._protected)  # la misma regla que usará la sincronización
+            real = validate_game_path(path, self._home, self._protected)  # la misma regla que usará la sincronización
         except PathNotAllowed:
             return {"ok": False, "error": "path_forbidden", "error_params": {}, "error_detail": None}
+        if must_exist and not _is_real_dir(str(real)):
+            self._log("crear juego: la carpeta sugerida ya no existe o ya no es una carpeta")
+            return {"ok": False, "error": "path_missing", "error_params": {}, "error_detail": None}
         try:
             game = self._client.create_game(appid, name, path)
         except (hc.HubApiError, HubNetworkError) as e:
