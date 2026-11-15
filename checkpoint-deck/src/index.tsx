@@ -37,7 +37,6 @@ import {
   SHOW_UNCONFIGURED_LABEL,
   TOGGLE_HELP,
   UNCONFIGURED_HELP,
-  UPDATE_SHA_LABEL,
   UPDATE_STEPS,
   UpdateInfo,
   describeCompat,
@@ -49,7 +48,6 @@ import {
   pickerArgs,
   pluginUrl,
   resolveConfirm,
-  shortSha,
   syncError,
   unconfiguredView,
   wait,
@@ -256,7 +254,7 @@ const URL_ERRORS: Record<UrlError, string> = {
   empty: "Escribe la dirección del hub.",
   scheme: "La dirección debe empezar por http:// o https://",
   credentials: "La dirección no puede llevar usuario ni contraseña.",
-  path: "Escribe solo el servidor y el puerto, sin ruta (por ejemplo http://192.168.1.10:8080).",
+  path: "Escribe solo el servidor y el puerto, sin ruta (por ejemplo http://192.168.1.10:8088).",
   invalid: "La dirección no es válida.",
 };
 
@@ -393,13 +391,6 @@ function Updates() {
               {COPY_BUTTON}
             </ButtonItem>
           </PanelSectionRow>
-          {info.sha256 && (
-            <PanelSectionRow>
-              <div style={WRAP}>
-                {UPDATE_SHA_LABEL}: {shortSha(info.sha256)}
-              </div>
-            </PanelSectionRow>
-          )}
           <PanelSectionRow>
             <div style={WRAP}>{UPDATE_STEPS[2]}</div>
           </PanelSectionRow>
@@ -811,7 +802,10 @@ function AutoPanel() {
   return (
     <PanelSection title="Avisos">
       <PanelSectionRow>
-        <Field label={lastNoticeText(last)} focusable />
+        <Field label="Último aviso" focusable />
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <div style={WRAP}>{lastNoticeText(last)}</div>
       </PanelSectionRow>
     </PanelSection>
   );
@@ -918,7 +912,7 @@ function Content() {
         <PanelSectionRow>
           <TextField
             label="Dirección del hub"
-            description="Por ejemplo http://192.168.1.10:8080"
+            description="Por ejemplo http://192.168.1.10:8088"
             value={url}
             disabled={waiting}
             onChange={(e) => setUrl(e.target.value)}

@@ -1,5 +1,11 @@
 # Registro de cambios del plugin
 
+## Sin publicar
+
+- El panel de actualización ya no muestra la SHA-256 abreviada (`check_update` deja de devolver `sha256`).
+- El puerto de ejemplo de la dirección del hub es 8088.
+- El último aviso del panel Avisos se muestra completo, en varias líneas, en lugar de cortarse con elipsis (pendiente de probar en la Deck).
+
 ## 1.0.0 - 2026-11-15
 
 Primera versión estable (antes `0.2.9`). `checkpointProtocol: 1`. Con semver, `1.0.0` es mayor que `0.2.9`: el hub la ofrece a quien tenga una `0.2.x`.

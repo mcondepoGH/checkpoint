@@ -56,7 +56,6 @@ export interface UpdateInfo {
   current?: string | null;
   latest?: string | null;
   hub_url?: string;
-  sha256?: string;
   reason?: string | null;
   error?: string;
 }
@@ -117,17 +116,12 @@ export function pluginUrl(hub: string): string {
   return `${hub.replace(/\/+$/, "")}/api/deck/plugin`;
 }
 
-export function shortSha(sha?: string | null): string {
-  return sha ? `${sha.slice(0, 16)}…` : "";
-}
-
 export const UPDATE_TITLE = (latest?: string | null) => `Actualización disponible: ${latest ?? "?"}`;
 export const UPDATE_STEPS = [
   "1) Ajustes de Decky > Desarrollador > Instalar plugin desde URL.",
   "2) Pega esta dirección:",
   "3) Reinicia Decky si no se recarga solo.",
 ];
-export const UPDATE_SHA_LABEL = "SHA-256 (para comparar)";
 export const COPY_BUTTON = "Copiar dirección";
 export const COPY_OK = "Dirección copiada";
 export const COPY_FAIL = "No se pudo copiar: selecciona y escribe la dirección";
