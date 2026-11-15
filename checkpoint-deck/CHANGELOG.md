@@ -1,6 +1,6 @@
 # Registro de cambios del plugin
 
-## Sin publicar
+## 1.0.0 - 2026-11-15
 
 Primera versión estable (antes `0.2.9`). `checkpointProtocol: 1`. Con semver, `1.0.0` es mayor que `0.2.9`: el hub la ofrece a quien tenga una `0.2.x`.
 

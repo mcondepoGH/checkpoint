@@ -1,6 +1,6 @@
 # Cambios
 
-## Sin publicar
+## 2.0.0 (2026-11-15)
 
 2.0.0: primera versión con plugin de Steam Deck y dispositivos http de primera clase (los cambios de API son aditivos y compatibles con plugins y clientes anteriores).
 
