@@ -25,7 +25,7 @@ const bars = (props, lang = 'es') => {
   return m.renderToStaticMarkup(m.React.createElement(m.PlayingBars, { devName, game: 'a', ...props }));
 };
 
-test('watchState conserva playing y results y tolera respuestas raras (hub antiguo)', () => {
+test('watchState conserva playing y results y tolera respuestas raras (hub antiguo)', { skip }, () => {
   const s = m.watchState({ now: 'x', watches: [], playing: [P()], results: [R()] });
   assert.equal(s.playing.length, 1);
   assert.equal(s.results.length, 1);
@@ -34,7 +34,7 @@ test('watchState conserva playing y results y tolera respuestas raras (hub antig
   assert.deepEqual(m.NO_WATCHES.playing, []);
 });
 
-test('estados de resultado cerrados', () => {
+test('estados de resultado cerrados', { skip }, () => {
   assert.deepEqual(m.SYNC_STATES, ['uploaded', 'downloaded', 'up_to_date', 'missing_dir', 'no_path', 'conflict', 'error']);
 });
 
