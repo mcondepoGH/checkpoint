@@ -1,8 +1,30 @@
 # Registro de cambios del plugin
 
-## 1.1.0-rc.6
+## 1.1.0 - 2026-11-15
 
-Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.6` es mayor que `1.1.0-rc.5`, `1.1.0-rc.4`, `1.1.0-rc.3`, `1.1.0-rc.2`, `1.1.0-rc.1` y `1.0.0` (el hub la ofrece a quien tenga cualquiera de ellas) y menor que la futura `1.1.0`. Incluye todo lo de la `1.1.0-rc.5`.
+`checkpointProtocol: 1`. Con semver, `1.1.0` es mayor que `1.0.0` y que las pruebas `1.1.0-rc.1` a `1.1.0-rc.6` (el hub la ofrece a quien tenga cualquiera de ellas). Reúne todo lo de esas pruebas.
+
+### Novedades
+
+- **Atajos de Steam (juegos que no son de Steam, p. ej. Lutris) en la biblioteca.** «Buscar juegos de Steam» lee también `userdata/<id>/config/shortcuts.vdf` (VDF binario, todos los usuarios de Steam de la Deck). Los atajos salen en «Sin configurar en el hub» marcados «Atajo» y se pueden crear en el hub; el número de un atajo puede pasar de `2**31-1` (techo propio `2**32-1`; el de los juegos de Steam no cambia). El hub ya acepta esos números (sin techo, solo > 0; con test).
+- Un `shortcuts.vdf` ausente, corrupto o enorme se omite sin romper la biblioteca y sin rutas ni steamid en el log.
+- **Log de diagnóstico del evento de Steam.** Cada evento de `SteamClient.GameSessions` deja, antes del filtro que descarta los que no son de un juego con `unAppID` entero > 0 y `bRunning` booleano, una línea `auto: evento crudo unAppID=<a> tipo=<t> bRunning=<r>` en el log de Decky (método `diag_game_event`). Solo esos tres campos, saneados y de 64 caracteres como máximo; no depende de la vinculación ni del hub; los repetidos seguidos no se repiten y hay un tope de 20 líneas distintas por minuto. Sirve para saber qué número manda Steam al abrir un atajo. No cambia la lógica de abrir y cerrar.
+- El panel de actualización ya no muestra la SHA-256 abreviada (`check_update` deja de devolver `sha256`).
+- El puerto de ejemplo de la dirección del hub es 8088.
+- El último aviso del panel Avisos se muestra completo, en varias líneas, en lugar de cortarse con elipsis (pendiente de probar en la Deck).
+- **Carpeta sugerida para los atajos de Lutris.** (Sustituido en esta misma versión: se sugería el prefijo de Wine ENTERO, demasiado amplio; ahora se ofrecen candidatos de carpeta de guardado dentro del prefijo.) Al configurar un atajo cuyas opciones de lanzamiento son `lutris:rungameid/N`, el plugin busca en Lutris (solo lectura) la fila `N` de `pga.db` y el `.yml` del juego, y rellena «Carpeta de guardado» con el prefijo de Lutris (`game.prefix`; si no existe, `directory` de la base). «Examinar…» sigue como alternativa y el formulario recuerda lo escrito. Nuevo módulo `checkpoint_lutris.py`: abre `pga.db` con `mode=ro` (no escribe ni deja `-journal`), lee el `.yml` con un analizador mínimo (sin PyYAML ni dependencias) y valida la ruta con la misma regla que la sincronización y dentro del home; ficheros ausentes, corruptos o bloqueados dan «sin sugerencia» sin error y sin rutas ni usuarios en el log. Busca en Lutris Flatpak (`~/.var/app/net.lutris.Lutris/data/lutris`, verificado en una Deck real) y en Lutris nativo (`~/.local/share/lutris`, `.yml` en `games/` o `~/.config/lutris/games/`; no verificado). Los demás atajos (emuladores, Epic...) siguen sin sugerencia. `suggest_game` devuelve `source: "lutris"` en este caso; se lee además `LaunchOptions` de `shortcuts.vdf` (solo en local, no se envía al hub).
+- El texto de ayuda de los atajos y la línea bajo la carpeta ya no dicen que la carpeta no se detecta cuando viene de Lutris.
+- **Candidatos de carpeta de guardado para los atajos de Lutris, en lugar del prefijo entero.** El prefijo de Wine completo (lo que se sugería al principio) era demasiado amplio. Ahora, tras localizar el prefijo, el plugin busca dentro de `drive_c/users/<usuario>/` (todos los usuarios no de sistema; excluye `Public`) carpetas que existen en `Documents/My Games/*`, `Documents/*`, `Saved Games/*`, `AppData/Local/*`, `AppData/LocalLow/*/*` y `AppData/Roaming/*`, y dentro de cada una subcarpetas `SaveGames`, `Saves`, `Save` o `savedata` (sin distinguir mayúsculas, hasta 6 niveles), que se prefieren a la carpeta del juego. Criterios: solo carpetas con al menos un fichero; se filtra el ruido de Wine y Windows (`Microsoft`, `Wine`, `Temp`, `Packages`, `Programs`, `Windows`, `INetCache`, `Crashpad`, `Cache`, `Logs`...); orden: primero los que se parecen por nombre al juego (Jaccard >= 0,5 sobre tokens normalizados del nombre, el slug y el nombre del atajo, sin «reimagined», «edition»...), luego los modificados más recientemente; máximo 8, sin duplicados ni anidados (se queda el más específico salvo que el contenedor tenga más ficheros propios). Todo en solo lectura, sin seguir enlaces simbólicos y con topes de carpetas, entradas, profundidad y tiempo. El primer candidato se rellena en «Carpeta de guardado» y «Probar otra ruta detectada» recorre los demás. Caso real que lo motivó: Dragon Quest VII Reimagined guarda en `<prefijo>/drive_c/users/deck/Documents/My Games/DRAGON QUEST VII/Steam/<steamid64>/release/Saved/SaveGames`, cuyo nombre no coincide con el slug.
+- **Sin candidatos, nada inventado.** La carpeta queda vacía con el texto «No se encontró ninguna carpeta de partidas en el prefijo; usa Examinar…» y «Examinar…» abre en `<prefijo>/drive_c/users` (o en el prefijo si no existe, o en el comportamiento de antes). `suggest_game` devuelve para estos atajos `source: "lutris"`, `candidates` y `browse_start`.
+- Los demás atajos y los juegos de Steam no cambian.
+- **Solo se sugiere lo que existe, comprobado en el momento de sugerir.** Una comprobación común, `verified_dir` (`checkpoint_sync.py`), se aplica a TODA carpeta sugerida (candidatos de Lutris, `drive_c/users`, prefijo, Proton y Steam Cloud de los juegos de Steam): existe, es carpeta (no fichero), se puede listar, está normalizada y sin enlaces simbólicos, está dentro del home o de la biblioteca de Steam (tarjeta SD), pasa la validación de la sincronización (sin carpetas protegidas) y el filtro de caracteres del hub. Falla cerrado: cualquier excepción o permiso denegado significa que no se sugiere. Antes, las rutas de Steam solo comprobaban que fueran carpeta y los candidatos de Lutris no comprobaban que se pudieran listar; los de Lutris se vuelven a verificar justo antes de devolverlos, por si una carpeta desapareció durante el recorrido.
+- **Se comprueba otra vez al guardar.** Si la carpeta sugerida ya no existe (o ya no es una carpeta) al pulsar «Guardar en el hub», sale «La carpeta sugerida ya no existe o ya no es una carpeta. No se ha creado el juego…» y no se llama al hub: no queda un juego a medias. (Una ruta escrita a mano que no existía se rechaza igual: ver «Cambios».)
+- **«Examinar…» más cerca en Steam.** Si no hay carpeta que sugerir pero existe parte de la ruta esperada (el prefijo de Proton o `userdata/<id>/<appid>`), «Examinar…» abre en su ancestro existente más profundo y validado. La ruta que aún no existe no se sugiere ni se crea.
+- El texto «No se detectó la carpeta de guardado» pasa a «No se encontró ninguna carpeta de guardado que exista…».
+
+### Arreglo
+
+- Arreglo: el botón Examinar ya no pierde la carpeta elegida al volver del selector (el formulario se recuerda al remontar el panel; no verificado en una Deck real). El formulario «Configurar» guarda un borrador por juego fuera del componente (`src/drafts.ts`) y el selector de Decky escribe en él la carpeta elegida; se borra al cancelar o guardar y se descartan los de juegos que dejan de estar en «Sin configurar». Ya fallaba en la `1.0.0`.
 
 ### Cambios
 
@@ -11,81 +33,13 @@ Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con sem
 
 ### Sin verificar
 
-- El flujo en una Deck real con esta versión.
-- Los tipos de TypeScript y la compilación (`tsc`, `rollup`) no se han ejecutado con este cambio.
-
-## 1.1.0-rc.5
-
-Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.5` es mayor que `1.1.0-rc.4`, `1.1.0-rc.3`, `1.1.0-rc.2`, `1.1.0-rc.1` y `1.0.0` (el hub la ofrece a quien tenga cualquiera de ellas) y menor que la futura `1.1.0`. Incluye todo lo de la `1.1.0-rc.4`.
-
-### Novedades
-
-- **Solo se sugiere lo que existe, comprobado en el momento de sugerir.** Una comprobación común, `verified_dir` (`checkpoint_sync.py`), se aplica a TODA carpeta sugerida (candidatos de Lutris, `drive_c/users`, prefijo, Proton y Steam Cloud de los juegos de Steam): existe, es carpeta (no fichero), se puede listar, está normalizada y sin enlaces simbólicos, está dentro del home o de la biblioteca de Steam (tarjeta SD), pasa la validación de la sincronización (sin carpetas protegidas) y el filtro de caracteres del hub. Falla cerrado: cualquier excepción o permiso denegado significa que no se sugiere. Antes, las rutas de Steam solo comprobaban que fueran carpeta y los candidatos de Lutris no comprobaban que se pudieran listar; los de Lutris se vuelven a verificar justo antes de devolverlos, por si una carpeta desapareció durante el recorrido.
-- **Se comprueba otra vez al guardar.** Si la carpeta sugerida ya no existe (o ya no es una carpeta) al pulsar «Guardar en el hub», sale «La carpeta sugerida ya no existe o ya no es una carpeta. No se ha creado el juego…» y no se llama al hub: no queda un juego a medias. (En rc.5 una ruta escrita a mano que no existía todavía se aceptaba; desde la `1.1.0-rc.6` se rechaza.)
-- **«Examinar…» más cerca en Steam.** Si no hay carpeta que sugerir pero existe parte de la ruta esperada (el prefijo de Proton o `userdata/<id>/<appid>`), «Examinar…» abre en su ancestro existente más profundo y validado. La ruta que aún no existe no se sugiere ni se crea.
-- El texto «No se detectó la carpeta de guardado» pasa a «No se encontró ninguna carpeta de guardado que exista…».
-
-### Sin verificar
-
-- El flujo en una Deck real con esta versión. No hay tope de tiempo propio en la comprobación de una sola carpeta (son llamadas locales; un montaje colgado podría bloquearla, aunque el recorrido de Lutris sí tiene tope).
-- Los tipos de TypeScript y la compilación (`tsc`, `rollup`) no se han ejecutado con este cambio.
-
-## 1.1.0-rc.4
-
-Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.4` es mayor que `1.1.0-rc.3`, `1.1.0-rc.2`, `1.1.0-rc.1` y `1.0.0` (el hub la ofrece a quien tenga cualquiera de ellas) y menor que la futura `1.1.0`. Incluye todo lo de la `1.1.0-rc.3`.
-
-### Novedades
-
-- **Candidatos de carpeta de guardado para los atajos de Lutris, en lugar del prefijo entero.** El prefijo de Wine completo (lo que sugería la rc.3) era demasiado amplio. Ahora, tras localizar el prefijo, el plugin busca dentro de `drive_c/users/<usuario>/` (todos los usuarios no de sistema; excluye `Public`) carpetas que existen en `Documents/My Games/*`, `Documents/*`, `Saved Games/*`, `AppData/Local/*`, `AppData/LocalLow/*/*` y `AppData/Roaming/*`, y dentro de cada una subcarpetas `SaveGames`, `Saves`, `Save` o `savedata` (sin distinguir mayúsculas, hasta 6 niveles), que se prefieren a la carpeta del juego. Criterios: solo carpetas con al menos un fichero; se filtra el ruido de Wine y Windows (`Microsoft`, `Wine`, `Temp`, `Packages`, `Programs`, `Windows`, `INetCache`, `Crashpad`, `Cache`, `Logs`...); orden: primero los que se parecen por nombre al juego (Jaccard >= 0,5 sobre tokens normalizados del nombre, el slug y el nombre del atajo, sin «reimagined», «edition»...), luego los modificados más recientemente; máximo 8, sin duplicados ni anidados (se queda el más específico salvo que el contenedor tenga más ficheros propios). Todo en solo lectura, sin seguir enlaces simbólicos y con topes de carpetas, entradas, profundidad y tiempo. El primer candidato se rellena en «Carpeta de guardado» y «Probar otra ruta detectada» recorre los demás. Caso real que lo motivó: Dragon Quest VII Reimagined guarda en `<prefijo>/drive_c/users/deck/Documents/My Games/DRAGON QUEST VII/Steam/<steamid64>/release/Saved/SaveGames`, cuyo nombre no coincide con el slug.
-- **Sin candidatos, nada inventado.** La carpeta queda vacía con el texto «No se encontró ninguna carpeta de partidas en el prefijo; usa Examinar…» y «Examinar…» abre en `<prefijo>/drive_c/users` (o en el prefijo si no existe, o en el comportamiento de antes). `suggest_game` devuelve para estos atajos `source: "lutris"`, `candidates` y `browse_start`.
-- Los demás atajos y los juegos de Steam no cambian.
-
-### Sin verificar
-
-- El flujo completo en una Deck real con esta versión y Lutris nativo (`~/.local/share/lutris`, no verificado en una Deck real). Los candidatos se probaron con prefijos sintéticos modelados sobre el de Dragon Quest VII.
-- Los tipos de TypeScript y la compilación (`tsc`, `rollup`) no se han ejecutado con este cambio.
-
-## 1.1.0-rc.3
-
-Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.3` es mayor que `1.1.0-rc.2`, que `1.1.0-rc.1` y que `1.0.0` (el hub la ofrece a quien tenga cualquiera de ellas) y menor que la futura `1.1.0`. Incluye todo lo de la `1.1.0-rc.2`.
-
-### Novedades
-
-- **Carpeta sugerida para los atajos de Lutris.** (Superado en la `1.1.0-rc.4`: la rc.3 sugería el prefijo de Wine ENTERO, demasiado amplio; la rc.4 ofrece candidatos de carpeta de guardado dentro del prefijo.) Al configurar un atajo cuyas opciones de lanzamiento son `lutris:rungameid/N`, el plugin busca en Lutris (solo lectura) la fila `N` de `pga.db` y el `.yml` del juego, y rellena «Carpeta de guardado» con el prefijo de Lutris (`game.prefix`; si no existe, `directory` de la base). «Examinar…» sigue como alternativa y el formulario recuerda lo escrito. Nuevo módulo `checkpoint_lutris.py`: abre `pga.db` con `mode=ro` (no escribe ni deja `-journal`), lee el `.yml` con un analizador mínimo (sin PyYAML ni dependencias) y valida la ruta con la misma regla que la sincronización y dentro del home; ficheros ausentes, corruptos o bloqueados dan «sin sugerencia» sin error y sin rutas ni usuarios en el log. Busca en Lutris Flatpak (`~/.var/app/net.lutris.Lutris/data/lutris`, verificado en una Deck real) y en Lutris nativo (`~/.local/share/lutris`, `.yml` en `games/` o `~/.config/lutris/games/`; no verificado). Los demás atajos (emuladores, Epic...) siguen sin sugerencia. `suggest_game` devuelve `source: "lutris"` en este caso; se lee además `LaunchOptions` de `shortcuts.vdf` (solo en local, no se envía al hub).
-- El texto de ayuda de los atajos y la línea bajo la carpeta ya no dicen que la carpeta no se detecta cuando viene de Lutris.
-
-### Sin verificar
-
-- El flujo completo en una Deck real con esta versión (la cadena `LaunchOptions` -> `pga.db` -> `.yml` se comprobó a mano sobre los ficheros de una Deck con Lutris Flatpak) y Lutris nativo.
-- Que el prefijo sea una buena carpeta de guardado: no lo es; la rc.4 lo sustituye por candidatos.
-- Los tipos de TypeScript y la compilación (`tsc`, `rollup`) no se han ejecutado con este cambio.
-
-## 1.1.0-rc.2
-
-Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.2` es mayor que `1.1.0-rc.1` y que `1.0.0` (el hub la ofrece a quien tenga cualquiera de las dos) y menor que la futura `1.1.0`. Incluye todo lo de la `1.1.0-rc.1`.
-
-### Arreglo
-
-- Arreglo: el botón Examinar ya no pierde la carpeta elegida al volver del selector (el formulario se recuerda al remontar el panel; no verificado en una Deck real). El formulario «Configurar» guarda un borrador por juego fuera del componente (`src/drafts.ts`) y el selector de Decky escribe en él la carpeta elegida; se borra al cancelar o guardar y se descartan los de juegos que dejan de estar en «Sin configurar». Ya fallaba en la `1.0.0`.
-
-## 1.1.0-rc.1
-
-Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.1` es mayor que `1.0.0` (el hub la ofrece a quien tenga la `1.0.0`) y menor que la futura `1.1.0`.
-
-### Novedades
-
-- **Atajos de Steam (juegos que no son de Steam, p. ej. Lutris) en la biblioteca.** «Buscar juegos de Steam» lee también `userdata/<id>/config/shortcuts.vdf` (VDF binario, todos los usuarios de Steam de la Deck). Los atajos salen en «Sin configurar en el hub» marcados «Atajo» y se pueden crear en el hub; el número de un atajo puede pasar de `2**31-1` (techo propio `2**32-1`; el de los juegos de Steam no cambia). El hub ya acepta esos números (sin techo, solo > 0; con test).
-- Un `shortcuts.vdf` ausente, corrupto o enorme se omite sin romper la biblioteca y sin rutas ni steamid en el log.
-
-- **Log de diagnóstico del evento de Steam.** Cada evento de `SteamClient.GameSessions` deja, antes del filtro que descarta los que no son de un juego con `unAppID` entero > 0 y `bRunning` booleano, una línea `auto: evento crudo unAppID=<a> tipo=<t> bRunning=<r>` en el log de Decky (método `diag_game_event`). Solo esos tres campos, saneados y de 64 caracteres como máximo; no depende de la vinculación ni del hub; los repetidos seguidos no se repiten y hay un tope de 20 líneas distintas por minuto. Sirve para saber qué número manda Steam al abrir un atajo. No cambia la lógica de abrir y cerrar.
-- El panel de actualización ya no muestra la SHA-256 abreviada (`check_update` deja de devolver `sha256`).
-- El puerto de ejemplo de la dirección del hub es 8088.
-- El último aviso del panel Avisos se muestra completo, en varias líneas, en lugar de cortarse con elipsis (pendiente de probar en la Deck).
-
-### Sin verificar
-
 - Que el `appid` de `shortcuts.vdf` sea el `unAppID` del evento de `SteamClient.GameSessions` al abrir un atajo: por eso abrir y cerrar un atajo todavía no sincroniza. Los tests usan ficheros sintéticos, no capturas de una Deck.
 - La derivación del número de un atajo sin `appid` (`crc32(Exe + nombre)` con el bit alto): implementada pero desactivada.
+- El flujo completo en una Deck real con esta versión (la cadena `LaunchOptions` -> `pga.db` -> `.yml` se comprobó a mano sobre los ficheros de una Deck con Lutris Flatpak) y Lutris nativo.
+- Que el prefijo sea una buena carpeta de guardado: no lo es; los candidatos de carpeta lo sustituyen.
+- El flujo completo en una Deck real con esta versión y Lutris nativo (`~/.local/share/lutris`, no verificado en una Deck real). Los candidatos se probaron con prefijos sintéticos modelados sobre el de Dragon Quest VII.
+- El flujo en una Deck real con esta versión. No hay tope de tiempo propio en la comprobación de una sola carpeta (son llamadas locales; un montaje colgado podría bloquearla, aunque el recorrido de Lutris sí tiene tope).
+- Los tipos de TypeScript y la compilación (`tsc`, `rollup`) no se han ejecutado con estos cambios.
 
 ## 1.0.0 - 2026-11-15
 
