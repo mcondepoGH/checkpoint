@@ -1,5 +1,12 @@
 # Cambios
 
+## Sin publicar
+
+### Cambios
+
+- Datos sin dispositivo asignado: nueva acción «Reubicar…» en los juegos fuera de la configuración. Se elige un juego existente y se confirma en un diálogo (origen, destino, versiones y tamaño). El destino conserva sus partidas actuales; las versiones del huérfano y su hub actual se suman a su historial como versiones (si una fecha ya existe en el destino, llega con sufijo `-n`; nunca se pisa nada) y el resto va a la papelera (30 días). Si un movimiento falla, se deshace. Nuevo `POST /api/orphans/relocate` (`{id, token, target}`) y `games` en `GET /api/orphans`; errores `err.orphans.target_unknown`, `not_game` y `relocate_failed`.
+- Documentación del plugin: abrir y cerrar un atajo de Steam sí sincroniza (el `appid` de `shortcuts.vdf` es el `unAppID` del evento; comprobado en una Deck real con un juego de Lutris). Se corrigen el README y el CHANGELOG del plugin, que decían lo contrario.
+
 ## 2.1.0 (2026-11-15)
 
 ### Cambios
