@@ -124,13 +124,21 @@ def test_manual_sync_is_refused_while_the_game_runs(fake_decky, scripthub, tmp_p
                 return s
             await asyncio.sleep(0.02)
 
+    async def seen(suffix):
+        for _ in range(500):
+            if any(r.path.split("?")[0].endswith(suffix) for r in hub.requests):
+                return
+            await asyncio.sleep(0.02)
+        raise AssertionError(f"el hub no recibió {suffix}")
+
     async def go():
         await p._main()
         await p.game_event(10, True)  # solo anota «abierto»; el evento se procesa aparte
+        await seen("/opened")  # la sync del evento tiene el lock del juego hasta avisar al hub; antes sería «busy»
         await p.sync_game("g1")
         s1 = await settle()
         await p.game_event(10, False)
-        await asyncio.sleep(0.3)
+        await seen("/closed")  # idem con la sync del cierre
         await p.sync_game("g1")
         s2 = await settle()
         await p._unload()

@@ -11,6 +11,8 @@ import pytest
 
 from test_integration_hub import PW, real_hub  # noqa: F401  (fixture del hub real; omite el módulo si no hay hub)
 
+from app.services import hookfiles  # noqa: E402  (el backend ya está en sys.path por test_integration_hub)
+
 import checkpoint_client as hc
 import checkpoint_sync as se
 from checkpoint_hub import HubNetworkError
@@ -235,7 +237,25 @@ def test_interrupted_upload_is_resumed(world, monkeypatch):
         return orig(self, method, path, headers, data)
 
     monkeypatch.setattr(hc.HubClient, "_stream", spy)
-    r = world.engine().sync_game(GAME)
+
+    # El cliente reintenta al instante (sleep falso), pero el hub tarda en darse cuenta del corte: hasta que su manejador
+    # del primer PUT termina, la parte sigue reservada (`part_lock`) y el reintento recibe 409 `upload_busy`. En vez del
+    # backoff real, el sleep espera a que el hub acabe de atender ese primer PUT (señal del propio hub, sin tiempos).
+    first_put_done = threading.Event()
+    real_receive = hookfiles.receive_file
+
+    async def receive_spy(*a, **kw):
+        try:
+            return await real_receive(*a, **kw)
+        finally:
+            first_put_done.set()
+
+    monkeypatch.setattr(hookfiles, "receive_file", receive_spy)
+
+    def wait_hub_releases_part(_s):
+        assert first_put_done.wait(10), "el hub no terminó de atender el PUT cortado"
+
+    r = world.engine(sleep=wait_hub_releases_part).sync_game(GAME)
     assert r["state"] == "uploaded", r
     assert hub_tree(world) == {"big.bin": data}
     assert len(state["puts"]) >= 2 and "offset=0" in state["puts"][0] and "offset=0" not in state["puts"][-1]
