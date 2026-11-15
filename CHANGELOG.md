@@ -1,5 +1,13 @@
 # Cambios
 
+## Sin publicar
+
+### Cambios
+
+- Configuración: la tarjeta «Plugin de Steam Deck» pasa de Biblioteca a la pestaña Lanzadores (abajo del todo) y deja de mostrar la suma SHA-256 y la explicación de `sha256sum`; la suma sigue en `GET /api/deck/plugin.sha256` e `info`.
+- La etiqueta de los dispositivos http pasa de «Sin SSH (http)» a «Plugin».
+- Plugin de Steam Deck: el panel de actualización ya no muestra la SHA-256; el puerto de ejemplo es 8088; el último aviso se ve completo (sin cortar con elipsis; por probar en la Deck).
+
 ## 2.0.0 (2026-11-15)
 
 2.0.0: primera versión con plugin de Steam Deck y dispositivos http de primera clase (los cambios de API son aditivos y compatibles con plugins y clientes anteriores).

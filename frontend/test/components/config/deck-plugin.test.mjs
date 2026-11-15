@@ -7,8 +7,8 @@ const { mod, skip } = await bundle(
   `import React from 'react';
   import { renderToStaticMarkup } from 'react-dom/server';
   import { DeckPluginView } from '#src/components/config/DeckPlugin.jsx';
-  import { normalizeInfo, DOWNLOAD_URL, SHA_URL } from '#src/lib/deck.js';
-  export { React, renderToStaticMarkup, DeckPluginView, normalizeInfo, DOWNLOAD_URL, SHA_URL };`,
+  import { normalizeInfo, DOWNLOAD_URL } from '#src/lib/deck.js';
+  export { React, renderToStaticMarkup, DeckPluginView, normalizeInfo, DOWNLOAD_URL };`,
   { tag: 'ckpt-deck' },
 );
 
@@ -33,12 +33,12 @@ test('normalizeInfo: disponible con versión, suma y tamaño', { skip }, () => {
   assert.equal(mod.normalizeInfo({ available: true, sha256: SHA, version: 5 }).version, null);
 });
 
-test('disponible: enlace de descarga, suma y versión', { skip }, () => {
+test('disponible: enlace de descarga y versión', { skip }, () => {
   const h = view({ available: true, sha256: SHA, version: '1.2.3', size: 40000 });
   assert.ok(has(h, `href="${mod.DOWNLOAD_URL}"`) && has(h, 'download'));
   assert.ok(has(h, 'Descargar plugin'));
-  assert.ok(has(h, SHA) && has(h, '1.2.3'));
-  assert.ok(has(h, 'sha256sum'));
+  assert.ok(has(h, '1.2.3'));
+  assert.ok(!has(h, SHA) && !has(h, 'sha256sum') && !has(h, 'deck-plugin-sha'));
   assert.ok(!/<button[^>]*disabled/.test(h));
 });
 

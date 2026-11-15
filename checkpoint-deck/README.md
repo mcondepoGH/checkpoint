@@ -30,7 +30,7 @@ Pasos para Arch u otro Linux de escritorio con Steam. Fuentes oficiales: [Decky 
 ## Uso
 
 1. En la web del hub, ten a mano Configuración → pestaña «Biblioteca de juegos»: el bloque «Solicitudes de vinculación» (encima de la lista de Dispositivos) muestra las solicitudes pendientes.
-2. En el panel de Checkpoint, si quieres, cambia el «Nombre de este dispositivo» (por defecto «Steam Deck»; máximo 64 caracteres, sin «/» ni «\»). Si tienes varias Decks, usa un nombre distinto en cada una: con el mismo nombre el hub las trataría como el mismo dispositivo y la clave de una dejaría sin acceso a la otra. Si lo cambias estando vinculado, el hub no lo renombra solo: se cambia desde el hub y la clave se conserva. Escribe la dirección del hub, solo servidor y puerto (por ejemplo `http://192.168.1.10:8080`), sin usuario, contraseña ni ruta.
+2. En el panel de Checkpoint, si quieres, cambia el «Nombre de este dispositivo» (por defecto «Steam Deck»; máximo 64 caracteres, sin «/» ni «\»). Si tienes varias Decks, usa un nombre distinto en cada una: con el mismo nombre el hub las trataría como el mismo dispositivo y la clave de una dejaría sin acceso a la otra. Si lo cambias estando vinculado, el hub no lo renombra solo: se cambia desde el hub y la clave se conserva. Escribe la dirección del hub, solo servidor y puerto (por ejemplo `http://192.168.1.10:8088`), sin usuario, contraseña ni ruta.
 3. Pulsa «Vincular con el hub». La Deck muestra un código de 6 dígitos y cuánto falta para que caduque (10 minutos).
 4. En ese bloque del hub, comprueba que el código es el mismo y pulsa «Aceptar». La Deck recoge sola la clave y muestra «Vinculado a ...».
 5. «Probar conexión» pregunta al hub con la clave y responde «Conectado como ...».
@@ -119,7 +119,7 @@ El panel captura los errores globales, las promesas rechazadas y las llamadas al
 
 ## Descargar el plugin desde el hub
 
-Si el hub lleva el zip (la imagen Docker lo construye sola), en **Configuración > Biblioteca > Dispositivos** hay un botón **Descargar plugin** con la versión y la suma SHA-256. Por API, sin credenciales y de solo lectura: `GET /api/deck/plugin` (zip), `GET /api/deck/plugin.sha256` (para `sha256sum -c`) y `GET /api/deck/plugin/info`. Comprueba la suma antes de instalarlo.
+Si el hub lleva el zip (la imagen Docker lo construye sola), en **Configuración > Lanzadores** (abajo del todo) hay un botón **Descargar plugin** con la versión y el tamaño. Por API, sin credenciales y de solo lectura: `GET /api/deck/plugin` (zip), `GET /api/deck/plugin.sha256` (para `sha256sum -c`) y `GET /api/deck/plugin/info`. Si quieres comprobar la suma antes de instalarlo, usa `plugin.sha256`.
 
 ## Versión y actualizaciones
 
@@ -127,7 +127,7 @@ El plugin tiene versión propia (`version` de `package.json`, semver) y declara 
 
 - **Compatibilidad.** «Probar conexión» compara el protocolo del plugin con el del hub (`protocol` y `min_plugin_protocol` de `GET /api/hook/ping`). Si el plugin es más viejo que el mínimo del hub, avisa y **no sincroniza** (ni a mano ni al abrir y cerrar juegos) hasta que lo actualices. Si el hub es de una versión vieja y no anuncia protocolo, solo avisa (no bloquea).
 - **Aviso de versión nueva.** «Buscar actualizaciones» consulta `GET /api/deck/plugin/info` del hub (público, sin clave) y avisa si hay una versión estrictamente mayor. Solo lectura: no descarga ni instala nada. Orden de versiones: semver; una pre-release (`0.2.0-rc.1`) es menor que su release (`0.2.0`) y los metadatos `+build` no cuentan.
-- **Actualizar es solo por URL de Decky.** El plugin no se instala ni se actualiza a sí mismo (no hay botón «Actualizar» ni descarga del zip dentro del plugin). Con versión nueva, el panel muestra «Actualización disponible: X (instalada: Y)» y tres pasos: 1) Ajustes de Decky > Desarrollador > Instalar plugin desde URL; 2) pegar `<hub>/api/deck/plugin` (el botón «Copiar dirección» la copia al portapapeles; si falla, el panel lo dice y la dirección sigue visible para escribirla) (con la SHA-256 abreviada para comparar con `GET /api/deck/plugin.sha256`); 3) reiniciar Decky si no se recarga solo. Si el hub es viejo (no anuncia protocolo), el panel solo avisa de ello.
+- **Actualizar es solo por URL de Decky.** El plugin no se instala ni se actualiza a sí mismo (no hay botón «Actualizar» ni descarga del zip dentro del plugin). Con versión nueva, el panel muestra «Actualización disponible: X (instalada: Y)» y tres pasos: 1) Ajustes de Decky > Desarrollador > Instalar plugin desde URL; 2) pegar `<hub>/api/deck/plugin` (el botón «Copiar dirección» la copia al portapapeles; si falla, el panel lo dice y la dirección sigue visible para escribirla); 3) reiniciar Decky si no se recarga solo. Si el hub es viejo (no anuncia protocolo), el panel solo avisa de ello.
 - **Sin verificar:** el comportamiento exacto con otras versiones de Decky (por ejemplo, si el plugin se recarga solo tras instalar).
 - **Integridad.** La SHA-256 que se muestra es la del propio hub, solo para comparar a mano: protege de descargas cortadas o corruptas, no de un hub comprometido.
 - Al publicar una versión nueva del plugin sube `version` en `package.json`; sube `checkpointProtocol` (y `PROTOCOL`/`MIN_PLUGIN_PROTOCOL` del hub) solo con un cambio incompatible del contrato.

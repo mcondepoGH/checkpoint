@@ -8,6 +8,9 @@
 - Un `shortcuts.vdf` ausente, corrupto o enorme se omite sin romper la biblioteca y sin rutas ni steamid en el log.
 
 - **Log de diagnóstico del evento de Steam.** Cada evento de `SteamClient.GameSessions` deja, antes del filtro que descarta los que no son de un juego con `unAppID` entero > 0 y `bRunning` booleano, una línea `auto: evento crudo unAppID=<a> tipo=<t> bRunning=<r>` en el log de Decky (método `diag_game_event`). Solo esos tres campos, saneados y de 64 caracteres como máximo; no depende de la vinculación ni del hub; los repetidos seguidos no se repiten y hay un tope de 20 líneas distintas por minuto. Sirve para saber qué número manda Steam al abrir un atajo. No cambia la lógica de abrir y cerrar.
+- El panel de actualización ya no muestra la SHA-256 abreviada (`check_update` deja de devolver `sha256`).
+- El puerto de ejemplo de la dirección del hub es 8088.
+- El último aviso del panel Avisos se muestra completo, en varias líneas, en lugar de cortarse con elipsis (pendiente de probar en la Deck).
 
 ### Sin verificar
 

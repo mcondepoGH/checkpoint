@@ -5,7 +5,6 @@ import Icon from '#src/components/ui/Icon.jsx';
 import DeviceCard from '#src/components/config/DeviceCard.jsx';
 import GameCard from '#src/components/config/GameCard.jsx';
 import PairingRequests from '#src/components/config/PairingRequests.jsx';
-import DeckPlugin from '#src/components/config/DeckPlugin.jsx';
 import SteamSuggestions from '#src/components/config/SteamSuggestions.jsx';
 import PublicKey from '#src/components/keyhelp/PublicKey.jsx';
 import { Button, Input } from '#src/components/ui/index.js';
@@ -72,7 +71,6 @@ export default function Library({
           <h3>{t('settings.devices')}</h3>
           <Button onClick={() => setDraft((d) => ({ ...d, devices: [...d.devices, blankDevice()] }))}>{t('settings.addDevice')}</Button>
         </div>
-        <DeckPlugin />
         <PairingRequests active={active} dirty={bar.dirty} onReload={onReload} />
         <SteamSuggestions active={active} dirty={bar.dirty} onReload={onReload} />
         <div className="grid">

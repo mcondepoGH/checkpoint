@@ -148,7 +148,7 @@ class Plugin:
         ev = checkpoint_update.evaluate(info, cur["version"], cur["protocol"], ping.get("protocol"))
         ev["compat"] = ping.get("compat")
         if ev["state"] == "available":
-            ev.update(hub_url=hub, sha256=info.get("sha256"))  # para que la interfaz muestre la URL de Decky y la SHA
+            ev.update(hub_url=hub)  # para que la interfaz muestre la URL de Decky
         return ev
 
     async def check_update(self) -> Dict[str, Any]:

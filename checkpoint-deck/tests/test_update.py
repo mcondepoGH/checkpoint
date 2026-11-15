@@ -175,11 +175,11 @@ def test_main_test_connection_reports_compat(fake_decky, fakehub):
 
 
 def test_main_check_update_available(fake_decky, fakehub):
-    d = publish(fakehub, "0.2.0")
+    publish(fakehub, "0.2.0")
     r = run(boot(fake_decky, fakehub.url), lambda p: p.check_update())
     assert r["state"] == "available" and r["latest"] == "0.2.0" and r["current"] == "0.1.0"
     assert "can_install" not in r and "install_mode" not in r and "plain_http" not in r
-    assert r["hub_url"] == fakehub.url and r["sha256"] == hashlib.sha256(d).hexdigest()
+    assert r["hub_url"] == fakehub.url
     assert not [x for x in fakehub.requests if x[1] == "/api/deck/plugin"]  # comprobar NO descarga
     infos = [x for x in fakehub.requests if x[1] == "/api/deck/plugin/info"]
     assert infos and all("Authorization" not in x[2] for x in infos)  # la clave solo va al ping

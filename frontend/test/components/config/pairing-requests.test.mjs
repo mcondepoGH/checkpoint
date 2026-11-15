@@ -131,7 +131,7 @@ const card = (d, props = {}) =>
 
 test('tarjeta http: distintivo, ayuda, nombre editable, SO solo lectura, sin campos SSH ni «Probar conexión»', { skip }, () => {
   const h = card(dev());
-  assert.ok(has(h, 'Sin SSH (http)') && has(h, 'no hace falta SSH'));
+  assert.ok(has(h, '>Plugin<') && has(h, 'no hace falta SSH'));
   assert.ok(has(h, 'value="Steam Deck"'));
   assert.ok(has(h, 'Sistema operativo') && has(h, '<strong>Linux</strong>') && !has(h, '<select'));
   for (const s of [
@@ -152,7 +152,7 @@ test('tarjeta http: distintivo, ayuda, nombre editable, SO solo lectura, sin cam
 test('tarjeta SSH normal no cambia (sin distintivo ni bloque de clave)', { skip }, () => {
   const h = card(dev({ http: false }));
   assert.ok(has(h, 'Host / IP') && has(h, 'Probar conexión'));
-  assert.ok(!has(h, 'Sin SSH (http)') && !has(h, 'Clave del dispositivo'));
+  assert.ok(!has(h, '>Plugin<') && !has(h, 'Clave del dispositivo'));
 });
 
 const key = (initial, props = {}) =>

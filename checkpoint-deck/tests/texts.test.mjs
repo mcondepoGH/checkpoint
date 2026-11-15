@@ -64,14 +64,13 @@ test('el aviso de versión nueva distingue estados y no promete instalar ni reca
 });
 
 test('el aviso de versión nueva da los pasos de Decky y no afirma que se recargue solo', { skip }, async () => {
-  const { UPDATE_TITLE, UPDATE_STEPS, UPDATE_SHA_LABEL } = await load();
+  const { UPDATE_TITLE, UPDATE_STEPS } = await load();
   assert.equal(UPDATE_TITLE('0.2.1'), 'Actualización disponible: 0.2.1');
   assert.equal(UPDATE_STEPS.length, 3);
   assert.equal(UPDATE_STEPS[0], '1) Ajustes de Decky > Desarrollador > Instalar plugin desde URL.');
   assert.equal(UPDATE_STEPS[1], '2) Pega esta dirección:');
   assert.equal(UPDATE_STEPS[2], '3) Reinicia Decky si no se recarga solo.');
   assert.doesNotMatch(UPDATE_STEPS.join(' '), /acepta|admite|funciona con http|se recarga automáticamente/i);
-  assert.equal(UPDATE_SHA_LABEL, 'SHA-256 (para comparar)');
 });
 
 test('el panel de juegos: introducción corta y sin decir lo que no se puede hacer', { skip }, async () => {
@@ -114,16 +113,13 @@ test('ya no hay aviso de HTTP plano en los textos', { skip }, async () => {
   assert.equal(t.PLAIN_HTTP_WARNING, undefined);
 });
 
-test('la URL del plugin se deriva del hub sin doble barra y la SHA se abrevia', { skip }, async () => {
-  const { pluginUrl, shortSha } = await load();
+test('la URL del plugin se deriva del hub sin doble barra', { skip }, async () => {
+  const { pluginUrl } = await load();
   assert.equal(pluginUrl('http://hub:8000'), 'http://hub:8000/api/deck/plugin');
   assert.equal(pluginUrl('http://hub:8000/'), 'http://hub:8000/api/deck/plugin');
   assert.equal(pluginUrl('http://hub:8000///'), 'http://hub:8000/api/deck/plugin');
   assert.equal(pluginUrl('https://x.org/base/'), 'https://x.org/base/api/deck/plugin');
   assert.doesNotMatch(pluginUrl('http://h/'), /[^:]\/\//);
-  const sha = 'a'.repeat(16) + 'b'.repeat(48);
-  assert.equal(shortSha(sha), 'aaaaaaaaaaaaaaaa…');
-  assert.equal(shortSha(undefined), '');
 });
 
 test('el selector nativo de Decky recibe valores explícitos y válidos en todos los parámetros', { skip }, async () => {

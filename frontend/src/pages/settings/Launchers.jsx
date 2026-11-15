@@ -1,5 +1,6 @@
 import React from 'react';
 import Icon from '#src/components/ui/Icon.jsx';
+import DeckPlugin from '#src/components/config/DeckPlugin.jsx';
 import LauncherBlock from '#src/components/launchers/LauncherBlock.jsx';
 import { useI18n } from '#src/hooks/useI18n.js';
 
@@ -8,12 +9,15 @@ import { useI18n } from '#src/hooks/useI18n.js';
 export default function Launchers(props) {
   const { t } = useI18n();
   return (
-    <section className="card launchers-panel" aria-labelledby="launchers-title">
-      <h3 id="launchers-title" className="launcher-title">
-        <Icon name="code" />
-        {t('launcher.title')}
-      </h3>
-      <LauncherBlock {...props} active />
-    </section>
+    <>
+      <section className="card launchers-panel" aria-labelledby="launchers-title">
+        <h3 id="launchers-title" className="launcher-title">
+          <Icon name="code" />
+          {t('launcher.title')}
+        </h3>
+        <LauncherBlock {...props} active />
+      </section>
+      <DeckPlugin />
+    </>
   );
 }
