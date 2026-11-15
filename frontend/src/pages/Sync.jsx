@@ -3,11 +3,24 @@ import EmptyState from '#src/components/ui/EmptyState.jsx';
 import { labelOf } from '#src/lib/names.js';
 import { parseRun } from '#src/lib/format.js';
 import Icon from '#src/components/ui/Icon.jsx';
-import { isSoloCheckpoint } from '#src/components/config/draft.js';
+import { isHttpOnly, isSoloCheckpoint } from '#src/components/config/draft.js';
 import ConflictDialog from '#src/components/sync/ConflictDialog.jsx';
+import HttpConflicts from '#src/components/sync/HttpConflicts.jsx';
+import { httpConflictItems } from '#src/components/sync/httpConflict.js';
 import { errText, useI18n } from '#src/hooks/useI18n.js';
 import { NO_WATCHES } from '#src/hooks/useWatches.js';
-import { clock, groupByGame, watchCardClass, watchHealth, worstHealth } from '#src/components/watch/watch.js';
+import {
+  clock,
+  groupByGame,
+  httpBadge,
+  resultBadge,
+  httpRunStatus,
+  lastHttpResult,
+  watchCardClass,
+  watchHealth,
+  worstHealth,
+} from '#src/components/watch/watch.js';
+import PlayingBars from '#src/components/watch/PlayingBars.jsx';
 import { Alert, Badge, Button, Checkbox, Pill, WatchBar } from '#src/components/ui/index.js';
 import { getStatus, runSync } from '#src/lib/api/sync.js';
 
@@ -179,7 +192,15 @@ export default function Sync({ config, watch = NO_WATCHES, onGoSettings }) {
       </WatchBar>
     );
   };
-  const badge = (s) => s && <Badge status={s.result}>{RES_KEYS.includes(s.result) ? t(`sync.state.${s.result}`) : s.result}</Badge>;
+  // Una sola insignia para ambos tipos de juego: {status, key} -> <Badge>. Otro resultado se muestra tal cual.
+  const badgeOf = (b) => b && <Badge status={b.status}>{t(b.key)}</Badge>;
+  const badge = (s) => {
+    if (!s) return null;
+    const b = resultBadge(s.result) || (RES_KEYS.includes(s.result) ? { status: s.result, key: `sync.state.${s.result}` } : null);
+    return b ? badgeOf(b) : <Badge status={s.result}>{s.result}</Badge>;
+  };
+  // Juego solo http: la insignia sale del último resultado del plugin (el estado del hub es de ejecuciones manuales antiguas).
+  const httpBadgeOf = (r) => badgeOf(httpBadge(r));
   const openConflict = (g) => {
     const c = status[g]?.conflict;
     if (c) setConflict({ game: g, conflict: c });
@@ -230,14 +251,21 @@ export default function Sync({ config, watch = NO_WATCHES, onGoSettings }) {
           const s = status[g];
           const running = active && active.game === g && !active.done;
           const off = isOff(g);
+          const httpOnly = isHttpOnly(config.games[g], config.devices); // sin dispositivos clásicos: el hub no puede ejecutar la sync
+          const httpRes = httpOnly ? lastHttpResult(watch.results, g) : null;
           return (
-            <div className={`${watchCardClass(worstHealth(byGame[g], watch.now))}${off ? ' game-disabled' : ''}`} key={g}>
+            <div
+              className={`${watchCardClass(worstHealth(byGame[g], watch.now) ?? (watch.playing.some((p) => p.game === g) ? 'running' : null))}${off ? ' game-disabled' : ''}`}
+              key={g}
+            >
               <h3 title={t('sync.idTitle', { id: g })}>
                 <span className="game-name">{gameName(g)}</span>{' '}
                 {off ? (
                   <Pill title={t('sync.disabled.help')}>{t('sync.disabled.label')}</Pill>
                 ) : running ? (
                   <Badge status="running">{t('sync.state.running')}</Badge>
+                ) : httpOnly ? (
+                  httpBadgeOf(httpRes)
                 ) : (
                   badge(s)
                 )}
@@ -251,7 +279,7 @@ export default function Sync({ config, watch = NO_WATCHES, onGoSettings }) {
                   </Pill>
                 </p>
               )}
-              {(!off || s) && (
+              {(!off || s) && !httpOnly && (
                 <div
                   className={`meter ${running ? 'running' : s?.result || ''}`}
                   role="progressbar"
@@ -260,12 +288,22 @@ export default function Sync({ config, watch = NO_WATCHES, onGoSettings }) {
                   <i />
                 </div>
               )}
-              {(!off || s) && <LastRun s={s} devName={devName} />}
+              {(!off || s) && !httpOnly && <LastRun s={s} devName={devName} />}
+              {httpOnly && httpRes && <LastRun s={httpRunStatus(httpRes)} devName={devName} />}
               {off && <p className="muted game-off-note">{t('sync.disabled.help')}</p>}
-              {!off && (
+              {!off && !httpOnly && (
                 <Checkbox checked={!!dry[g]} onChange={(e) => setDry({ ...dry, [g]: e.target.checked })} label={t('common.dryRun')} />
               )}
-              {!off && s?.result === 'conflict' && !running && (
+              {!off && httpOnly && (
+                <HttpConflicts
+                  game={g}
+                  gameName={gameName(g)}
+                  items={httpConflictItems(watch, g)}
+                  devName={devName}
+                  onChanged={watch.refresh}
+                />
+              )}
+              {!off && !httpOnly && s?.result === 'conflict' && !running && (
                 <div className="conflict-flag" role="alert">
                   <span>
                     <b>{t('sync.flagLead')}</b> {t('sync.flagText')}
@@ -279,12 +317,15 @@ export default function Sync({ config, watch = NO_WATCHES, onGoSettings }) {
                     {t('common.goSettings')}
                   </Button>
                 )
+              ) : httpOnly ? (
+                <p className="muted">{t('sync.httpOnly')}</p>
               ) : (
                 <Button variant="primary" disabled={running} onClick={() => run(g)}>
                   {running ? t('sync.running') : t('sync.run')}
                 </Button>
               )}
               {byGame[g]?.map(watchBar)}
+              <PlayingBars game={g} playing={watch.playing} devName={devName} />
             </div>
           );
         })}

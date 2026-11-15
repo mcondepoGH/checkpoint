@@ -71,7 +71,7 @@ def test_contract_status_keyed_by_game_id(api):
 
 
 def test_contract_versions_limit(api):
-    assert set(api.get(f"/api/versions/{GID}/limit").json()) == {"max", "count", "override"}
+    assert set(api.get(f"/api/versions/{GID}/limit").json()) == {"max", "count", "override", "latest", "current"}
 
 
 def test_contract_history_entries(api):
@@ -88,3 +88,20 @@ def test_non_dict_body_is_400_not_500(api, path, body):
 def test_removed_endpoints_are_gone(api):
     for p in ("/api/version", "/api/config/status"):
         assert api.get(p).status_code == 404, p
+
+
+def test_contract_ping_exposes_protocol(api):
+    """`ping` anuncia el protocolo del hub: el plugin de la Deck decide con esto si es compatible (compatible hacia atrás)."""
+    from app.core import protocol
+
+    key = api.post("/api/profile/apikey").json()["key"]
+    r = TestClient(api.app).get("/api/hook/ping", headers={"Authorization": f"Bearer {key}"})
+    assert r.status_code == 200
+    assert r.json() == {
+        "ok": True,
+        "user": "admin",
+        "protocol": protocol.PROTOCOL,
+        "min_plugin_protocol": protocol.MIN_PLUGIN_PROTOCOL,
+    }
+    assert (protocol.PROTOCOL, protocol.MIN_PLUGIN_PROTOCOL) == (1, 1)
+    assert protocol.MIN_PLUGIN_PROTOCOL <= protocol.PROTOCOL

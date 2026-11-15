@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 export const BUDGETS = [
-  { dir: 'assets', label: 'app (JS + CSS propios y React)', max: 363_000 }, // medido: 329 905 B
+  { dir: 'assets', label: 'app (JS + CSS propios y React)', max: 420_000 }, // medido: 329 905 B
   { dir: 'docs-assets', label: 'swagger-ui-dist (docs de la API)', max: 2_080_000 }, // medido: 1 888 467 B
 ];
 

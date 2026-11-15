@@ -1,0 +1,7 @@
+node_modules/
+dist/
+out/
+*.zip
+__pycache__/
+.pytest_cache/
+.venv/

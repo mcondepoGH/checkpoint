@@ -165,7 +165,7 @@ def test_current_user_is_the_single_point(logged, monkeypatch):
 def test_ping_with_valid_key(logged):
     key = logged.post("/api/profile/apikey").json()["key"]
     r = ping(logged, bearer(key))
-    assert r.status_code == 200 and r.json() == {"ok": True, "user": "admin"}
+    assert r.status_code == 200 and r.json() == {"ok": True, "user": "admin", "protocol": 1, "min_plugin_protocol": 1}
     assert ping(logged, {"Authorization": f"bearer {key}"}).status_code == 200  # esquema sin distinguir mayúsculas
 
 

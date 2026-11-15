@@ -39,3 +39,71 @@
   margin: 0;
   font-size: v.$fs-hint;
 }
+
+// Detalles técnicos plegados del aviso de fallo (ErrorBoundary): texto monoespaciado y seleccionable.
+.crash-details {
+  margin-top: 0.5rem;
+  summary {
+    cursor: pointer;
+  }
+}
+.crash-details-text {
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  max-height: 14rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, monospace;
+  font-size: v.$fs-hint;
+  user-select: text;
+  -webkit-user-select: text;
+  color: var(--text);
+  background: var(--surface);
+  border-radius: 6px;
+}
+
+// Avisos discretos de fallos globales (CrashToasts): banda abajo, no bloquea la pantalla.
+.crash-toasts {
+  position: fixed;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 28rem;
+  pointer-events: none;
+}
+.crash-toast {
+  pointer-events: auto;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--warn);
+  background: var(--surface);
+  font-size: v.$fs-hint;
+  &.alert {
+    border-color: var(--danger);
+  }
+}
+.crash-toast-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+.crash-toast-close {
+  background: none;
+  border: 0;
+  color: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  cursor: pointer;
+}
+.crash-toast-text {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}

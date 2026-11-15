@@ -1,8 +1,18 @@
 @use '../../styles/variables' as v;
 
 .section-head {
-  margin-top: 1.5rem;
   h3 {
+    margin: 0;
+  }
+}
+// Sección de la pestaña Biblioteca (cabecera + contenido): un solo bloque de primer nivel; dentro, el mismo mecanismo (columna con gap).
+.cfg-section {
+  display: flex;
+  flex-direction: column;
+  gap: v.$gap;
+  min-width: 0;
+  > .grid,
+  > p {
     margin: 0;
   }
 }
@@ -31,10 +41,6 @@
     display: none;
   }
 }
-// Tarjeta que sigue a las de sincronización automática (p. ej. Versiones guardadas): misma separación que entre ellas.
-.autosync + .cfg-card {
-  margin-top: v.$gap;
-}
 
 .idnote {
   margin: 0;
@@ -47,7 +53,6 @@
 }
 
 .pubkey {
-  margin-top: v.$gap;
   summary {
     cursor: pointer;
     font-weight: 600;
@@ -136,7 +141,7 @@
   gap: 0.5rem;
   align-items: center;
   flex-wrap: wrap;
-  margin: 1.5rem calc(-1 * var(--pad-r)) calc(-1 * v.$gap) calc(-1 * var(--pad-l));
+  margin: 0 calc(-1 * var(--pad-r)) calc(-1 * v.$gap) calc(-1 * var(--pad-l)); // el margen inferior negativo compensa el relleno de la página
   padding: 0.75rem var(--pad-r) 0.75rem var(--pad-l);
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter: blur(8px);
@@ -229,7 +234,6 @@ button.ab-chip {
     flex-wrap: nowrap;
     gap: 0.35rem;
     min-height: 56px;
-    margin-top: 1rem;
     margin-bottom: -0.75rem;
     padding-top: 0.4rem;
     padding-bottom: calc(0.4rem + var(--sb));
@@ -457,7 +461,6 @@ button.ab-chip {
     }
   }
   .section-head {
-    margin-top: 1.25rem;
     .btn {
       flex: none;
     }
@@ -466,7 +469,6 @@ button.ab-chip {
 
 // Subpestaña «Lanzadores»: tarjeta con la URL del hub, las plataformas y una fila por juego con comandos listos para copiar.
 .launchers-panel {
-  margin-top: v.$gap;
   min-width: 0;
   scroll-margin-top: 1rem;
 }
@@ -577,5 +579,170 @@ button.ab-chip {
   align-items: center;
   gap: 0.5rem;
   font-size: v.$fs-body;
+  overflow-wrap: anywhere;
+}
+
+// Solicitudes de vinculación pendientes (arriba de la lista de dispositivos).
+.pairing {
+  .pairing-title {
+    margin: 0 0 0.25rem;
+  }
+  .pairing-count {
+    font-size: v.$fs-hint;
+    color: var(--muted);
+  }
+  .pairing-intro {
+    margin: 0 0 0.5rem;
+  }
+  .alert .btn {
+    margin-left: auto;
+  }
+}
+.pairing-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.pairing-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.pairing-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.pairing-name {
+  overflow-wrap: anywhere;
+}
+.pairing-code {
+  font-family: ui-monospace, monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+.pairing-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  margin: 0;
+  font-size: v.$fs-hint;
+  dt {
+    color: var(--muted);
+  }
+  dd {
+    margin: 0;
+  }
+}
+.pairing-check {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+// Sugerencias de Steam: reutiliza `.pairing*`; solo el appid y el plegable de descartes son propios.
+.steam-appid {
+  font-family: ui-monospace, monospace;
+  font-size: v.$fs-hint;
+  color: var(--muted);
+}
+.steam-dismissed {
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: v.$radius;
+  background: var(--surface-2);
+}
+.steam-dismissed-title {
+  cursor: pointer;
+  font-weight: 600;
+}
+.steam-dismissed-intro {
+  margin: 0.5rem 0;
+}
+.steam-dismissed-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.steam-dismissed-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+// Tarjeta de dispositivo http: ayuda, sistema operativo en solo lectura y bloque de clave.
+.device-http-help,
+.device-os {
+  margin: 0;
+}
+.devkey {
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: v.$radius;
+  background: var(--surface-2);
+}
+.devkey-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  padding-top: 0.5rem;
+}
+.devkey-title {
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.devkey-state {
+  font-size: v.$fs-hint;
+  font-weight: 600;
+  &.has {
+    color: var(--ok);
+  }
+  &.none {
+    color: var(--muted);
+  }
+}
+.devkey-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  .btn {
+    flex: 1 1 6rem;
+    min-width: 0;
+    padding-inline: 0.5rem;
+  }
+}
+.devkey-confirm {
+  margin: 0 0 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+// Plugin de Steam Deck: reutiliza `.pairing*` (título, intro, meta); solo la suma y el enlace como botón son propios.
+.deck-plugin {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  a.btn {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+.deck-plugin-sha {
+  font-family: ui-monospace, monospace;
+  font-size: v.$fs-hint;
   overflow-wrap: anywhere;
 }

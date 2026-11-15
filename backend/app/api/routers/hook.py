@@ -2,24 +2,29 @@
 ni Origin. Para añadir un endpoint público nuevo, cuélgalo de este router y documéntalo en `api/docs/examples.py`;
 cualquier otro router sale oculto por defecto (`deps.internal_router`)."""
 
+import json
 import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, Path, Query, Request
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 
 from ...services.context import AppContext
 from .. import docs
+from ...core import protocol
 from ...core.errors import ApiError
-from ..deps import Principal, get_ctx, hook_any, hook_device, hook_user
+from ...services.hooks import SYNC_RESULT_MAX_BYTES, parse_sync_result
+from ...sync import resolution
+from ..deps import Principal, body_json_limited, get_ctx, hook_any, hook_device, hook_user
 
 api_log = logging.getLogger(
     "checkpoint.api"
 )  # DEBUG: una línea por petición /api y detalle por endpoint (sin secretos)
 
 # Todo lo de /api/hook/* cuelga de este router. La autenticación es POR ENDPOINT (no hay dependencia global), porque
-# cada ruta acepta una clase de key distinta: `hook_user` (usuario: opened, watches), `hook_any` (ping) o
-# `hook_device` (dispositivo http: fingerprint, manifest, files, commit, closed). `test_apidocs` comprueba que
+# cada ruta acepta una clase de key distinta: `hook_user` (usuario: watches), `hook_any` (ping, opened: con `ckd_` es el aviso de
+# apertura de un http) o `hook_device` (dispositivo http: fingerprint, manifest, files, commit, closed). `test_apidocs` comprueba que
 # ninguna ruta de /api/hook queda sin autenticar.
 router = APIRouter(prefix="/api/hook", tags=[docs.TAG], responses={401: docs.R401, 429: docs.R429})
 
@@ -27,7 +32,13 @@ router = APIRouter(prefix="/api/hook", tags=[docs.TAG], responses={401: docs.R40
 @router.get("/ping", **docs.PING)
 def hook_ping(p: Principal = Depends(hook_any)):
     api_log.debug("hook ping: usuario=%s dispositivo=%s", p.user, p.device)
-    return {"ok": True, "user": p.user, **({"device": p.device} if p.device else {})}
+    return {
+        "ok": True,
+        "user": p.user,
+        **({"device": p.device} if p.device else {}),
+        "protocol": protocol.PROTOCOL,
+        "min_plugin_protocol": protocol.MIN_PLUGIN_PROTOCOL,
+    }
 
 
 @router.get("/watches", **docs.WATCHES, dependencies=[Depends(hook_user)])
@@ -39,8 +50,27 @@ def hook_watches(ctx: AppContext = Depends(get_ctx)):
     return w
 
 
-@router.post("/{game}/opened", **docs.OPENED, dependencies=[Depends(hook_user)])
+async def _sync_result(request: Request) -> Optional[dict]:
+    """Cuerpo opcional `{"result": {...}}` de `opened`/`closed` de un dispositivo http. Máx. `SYNC_RESULT_MAX_BYTES`
+    (más = 400 `err.hook.result_invalid`, sin leer el resto). Vacío, no JSON o sin `result` = None (como antes)."""
+    cl = request.headers.get("content-length", "")
+    if cl.isdigit() and int(cl) > SYNC_RESULT_MAX_BYTES:
+        raise ApiError(400, "err.hook.result_invalid")
+    raw = b""
+    async for chunk in request.stream():
+        raw += chunk
+        if len(raw) > SYNC_RESULT_MAX_BYTES:
+            raise ApiError(400, "err.hook.result_invalid")
+    try:
+        body = json.loads(raw) if raw.strip() else None
+    except ValueError:
+        body = None
+    return parse_sync_result(body)
+
+
+@router.post("/{game}/opened", **docs.OPENED)
 async def hook_opened(
+    request: Request,
     game: str = Path(description="Id o nombre del juego.", examples=["Mi Juego"]),
     device: Optional[str] = Query(
         None,
@@ -49,17 +79,26 @@ async def hook_opened(
         "más de un dispositivo.",
         examples=["PC uno"],
     ),
+    p: Principal = Depends(hook_any),
     ctx: AppContext = Depends(get_ctx),
 ):
-    """Aviso «se va a abrir el juego»: sync previo bloqueante con política de conflictos siempre `skip` (ignora la del juego y la del scheduler).
-    Tras el aviso (salvo 400/401/404/409) arma la vigilancia de cierre si el juego tiene `process` (`watching`). Un fallo de la sync no es un 5xx: 200 con `outcome` descriptivo."""
+    """Aviso «se va a abrir el juego». Key de USUARIO (`ck_`, dispositivos SSH o «Este equipo»): sync previo bloqueante con política de conflictos siempre `skip` (ignora la del juego y la del scheduler).
+    Tras el aviso (salvo 400/401/404/409) arma la vigilancia de cierre si el juego tiene `process` (`watching`). Un fallo de la sync no es un 5xx: 200 con `outcome` descriptivo.
+    Key de DISPOSITIVO (`ckd_`, http): no sincroniza ni vigila; marca «jugando» y lo deja en el historial (`hook_opened`). Cuerpo opcional `{"result": {...}}`."""
     cfg = ctx.cfg()
+    if p.device:
+        result = await _sync_result(request)
+        game, device = ctx.hooks.scope(
+            cfg, game, device, p.device
+        )  # 403 si `?device=` no es el de la key; 404 si no es suyo
+        return await run_in_threadpool(ctx.hooks.opened_device, cfg, game, device, result)
     game = ctx.game_id(game)  # el 401 ya lo dio la dependencia de key: no se revela si el juego existe
     return await ctx.hooks.opened(cfg, game, device)
 
 
 @router.post("/{game}/closed", **docs.CLOSED)
-def hook_closed(
+async def hook_closed(
+    request: Request,
     game: str = Path(description="Id o nombre del juego.", examples=["Mi Juego"]),
     device: Optional[str] = Query(
         None,
@@ -70,12 +109,13 @@ def hook_closed(
     p: Principal = Depends(hook_device),
     ctx: AppContext = Depends(get_ctx),
 ):
-    """Aviso «se cerró el juego» de un dispositivo `http`: solo deja constancia en el historial (`hook_closed`); no sincroniza."""
+    """Aviso «se cerró el juego» de un dispositivo `http`: limpia su «jugando» y deja constancia en el historial (`hook_closed`); no sincroniza. Cuerpo opcional `{"result": {...}}`."""
+    result = await _sync_result(request)
     cfg = ctx.cfg()
     game, device = ctx.hooks.scope(
         cfg, game, device, p.device
     )  # 403 si `?device=` no es el de la key; 404 si el juego no lo incluye
-    return ctx.hooks.closed(cfg, game, device)
+    return await run_in_threadpool(ctx.hooks.closed, cfg, game, device, result)
 
 
 @router.post("/{game}/fingerprint", **docs.FINGERPRINT)
@@ -212,3 +252,23 @@ async def hook_commit(
         cfg, game, device, p.device
     )  # 403 si `?device=` no es el de la key; 404 si el juego no lo incluye
     return await ctx.hooks.commit(cfg, game, device, expect, manifest)
+
+
+@router.put("/{game}/resolution", **docs.RESOLUTION)
+async def hook_resolution(
+    request: Request,
+    game: str = Path(description="Id o nombre del juego.", examples=["Mi Juego"]),
+    device: Optional[str] = Query(None, **DEVICE_Q),
+    p: Principal = Depends(hook_device),
+    ctx: AppContext = Depends(get_ctx),
+):
+    """Deja la resolución de un conflicto de datos: `{"winner": "hub"|"device", "expect": {"hub", "device"}}`."""
+    body = await body_json_limited(request, resolution.BODY_MAX_BYTES, "err.resolution.invalid")
+    body_device, winner, expect = ctx.hooks.parse_resolution_body(body)
+    cfg = ctx.cfg()
+    game, device = ctx.hooks.scope(
+        cfg, game, device, p.device
+    )  # 403 si `?device=` no es el de la key; 404 si el juego no lo incluye
+    if body_device:  # el cuerpo no puede apuntar a otro dispositivo
+        ctx.hooks.scope(cfg, game, body_device, p.device)
+    return await run_in_threadpool(ctx.hooks.set_resolution, cfg, game, device, winner, expect, "device")

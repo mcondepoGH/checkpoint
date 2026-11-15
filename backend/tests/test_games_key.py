@@ -18,7 +18,8 @@ def test_lists_games_without_status(cl):
     assert r.status_code == 200
     j = r.json()
     assert [g["id"] for g in j] == ["g1", "g2"]
-    assert all(set(g) == KEYS for g in j)
+    assert all(set(g) == KEYS for g in j)  # key de usuario (ck_): lista cerrada, sin `path` (ni `paths`)
+    assert "path" not in r.text
     assert j[0]["name"] == "Mi Juego" and j[0]["enabled"] is True and j[0]["status"] is None
 
 

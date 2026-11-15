@@ -19,7 +19,7 @@ MAX_ENTRIES = 200
 MAX_DAYS = 30
 MSG_LEN = 300
 RESULTS = {"ok", "error", "aborted", "skipped", "conflict", "partial"}
-TRIGGERS = {"scheduled", "startup", "hook", "hook_closed", "manual"}
+TRIGGERS = {"scheduled", "startup", "hook", "hook_opened", "hook_closed", "manual"}
 
 _lock = threading.Lock()
 

@@ -11,6 +11,7 @@ from .models import (
     HubManifest,
     OpenedResult,
     Ping,
+    ResolutionResult,
     UploadResult,
     WatchItem,
 )
@@ -159,8 +160,12 @@ PING = dict(
         200: _ok(
             Ping,
             "La key es válida (de usuario o de dispositivo).",
-            ("ok", "Key de usuario", {"ok": True, "user": "admin"}),
-            ("device", "Key de dispositivo", {"ok": True, "user": "admin", "device": "deck"}),
+            ("ok", "Key de usuario", {"ok": True, "user": "admin", "protocol": 1, "min_plugin_protocol": 1}),
+            (
+                "device",
+                "Key de dispositivo",
+                {"ok": True, "user": "admin", "device": "deck", "protocol": 1, "min_plugin_protocol": 1},
+            ),
         )
     },
 )
@@ -192,6 +197,49 @@ WATCHES = dict(
         )
     },
 )
+
+_RESULT_BODY = {
+    "requestBody": {
+        "required": False,
+        "description": "Opcional (solo dispositivos http): resultado de la sincronización local. Máx. 1 KiB.",
+        "content": {
+            "application/json": {
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "result": {
+                            "type": "object",
+                            "required": ["state"],
+                            "additionalProperties": False,
+                            "properties": {
+                                "state": {
+                                    "type": "string",
+                                    "enum": [
+                                        "uploaded",
+                                        "downloaded",
+                                        "up_to_date",
+                                        "missing_dir",
+                                        "no_path",
+                                        "conflict",
+                                        "error",
+                                    ],  # fmt: skip
+                                },
+                                "code": {"type": "string", "description": "Motivo de un `error` (lista cerrada)."},
+                            },
+                        }
+                    },
+                },
+                "examples": {
+                    "uploaded": {"summary": "Subió su save", "value": {"result": {"state": "uploaded"}}},
+                    "error": {
+                        "summary": "Falló",
+                        "value": {"result": {"state": "error", "code": "connection"}},
+                    },
+                },
+            }
+        },
+    }
+}
 
 _OPENED_OK = {
     "ok": True,
@@ -229,8 +277,21 @@ OPENED = dict(
         "`watch_reason: disabled`, y lo deja en el historial (disparador «Aviso del juego», omitido). Antes se "
         "resuelven juego y dispositivo (los `400`/`404` no cambian).\n\n"
         "**Juego y dispositivo.** `game` es el id o el nombre del juego. `device` (id o nombre) debe pertenecer al "
-        "juego; es obligatorio si el juego está en más de un dispositivo; si tiene uno solo se deduce y puede omitirse."
+        "juego; es obligatorio si el juego está en más de un dispositivo; si tiene uno solo se deduce y puede omitirse.\n\n"
+        "**Con key de dispositivo (`ckd_`, dispositivos `http`).** Todo lo anterior NO aplica: el hub no sincroniza, "
+        "no arma vigilancia ni toca ficheros. Solo marca el juego como «jugando» en ese dispositivo (en memoria; "
+        "caduca a las 12 h si no llega su `closed`) y deja `hook_opened` en el historial. Responde `200` "
+        "`{game, device, recorded: true, outcome: ok, playing: true, expires}` (o `outcome: skipped` con "
+        "`code: err.sync.game_disabled` si el juego está desactivado, sin marcar nada). `?device=` es opcional; si se "
+        "pasa y no es el de la key, `403`. Con key de usuario (`ck_`) un dispositivo `http` sigue dando `400` "
+        "(`err.hook.device_push_only`).\n\n"
+        '**Cuerpo opcional (solo con `ckd_`)**: `{"result": {"state": ..., "code": ...}}`, el resultado de la '
+        "sincronización local del plugin. `state`: `uploaded`, `downloaded`, `up_to_date`, `missing_dir`, `no_path`, "
+        "`conflict` o `error`; `code` (opcional) es el motivo de un `error` (lista cerrada; uno desconocido se "
+        "descarta). Máx. 1 KiB y sin más campos: si no, `400` `err.hook.result_invalid`. Sin cuerpo o sin `result` "
+        "se comporta como siempre. El resultado se guarda en el historial como `hook.sync.<estado>` y se ve en la web."
     ),
+    openapi_extra=_RESULT_BODY,
     responses={
         200: _ok(
             OpenedResult,
@@ -282,6 +343,7 @@ OPENED = dict(
             ),
         ),
         400: R400,
+        403: R403,
         404: R404,
         409: R409,
     },
@@ -301,9 +363,15 @@ FINGERPRINT = dict(
         "`action`: `upload` (el dispositivo manda: debe subir sus saves), `download` (manda el hub: debe bajarlos), "
         "`none` (iguales) o `conflict` (ambos cambiaron o no hay línea base: no se decide nada, nunca por mtime). "
         "Un lado vacío nunca gana a uno con datos.\n\n"
+        "**Conflicto y resolución:** el hub registra cada `conflict` (juego y dispositivo, con las huellas de los dos "
+        "lados) para que la web o el propio dispositivo lo resuelvan con `PUT /api/hook/{game}/resolution`. Con una "
+        "resolución vigente cuyas huellas siguen siendo las de ahora, la respuesta es `upload` o `download` con "
+        "`reason: resolution` en vez de `conflict`; si las huellas cambiaron, `conflict` con `reason: "
+        "resolution_stale` y la resolución se descarta. Registrar el conflicto o borrar lo ya resuelto toma el lock del "
+        "juego (ocupado: `409`).\n\n"
         "**Única escritura:** con `action: none` (`reason: same`, huella igual a la del hub y no vacía) fija la línea "
         "base del dispositivo y del hub (verificada contra el manifiesto real), con el lock del juego y sin reescribir "
-        "si ya es esa; con `upload`, `download` o `conflict` no escribe nada ni toma el lock. Nunca toca ficheros ni "
+        "si ya es esa (y borra el conflicto registrado y su resolución, si los había); con `upload`, `download` o `conflict` solo escribe el registro del conflicto (ver arriba), nunca la línea base. Nunca toca ficheros ni "
         "historial. Si el lock está ocupado o hay una "
         "ejecución del juego en curso responde `409` (`err.main.run_in_progress`); si el juego está desactivado, "
         "`409` (`err.sync.game_disabled`). Las rutas del manifiesto se validan: una ruta insegura da `422`.\n\n"
@@ -412,10 +480,14 @@ CLOSED = dict(
         "Un juego **desactivado** responde `200` con `outcome: skipped` y `code: err.sync.game_disabled` (queda "
         "`skipped` en el historial). Si hay una ejecución del juego en curso, `409` (`err.main.run_in_progress`) y "
         "queda `skipped` (`err.hook.busy`). La **key de dispositivo** identifica al dispositivo: "
-        "`?device=` es opcional y, si se pasa y no es el de la key, `403`."
+        "`?device=` es opcional y, si se pasa y no es el de la key, `403`. Limpia el «jugando» del dispositivo.\n\n"
+        '**Cuerpo opcional**: `{"result": {"state": ..., "code": ...}}` con el resultado de la sincronización '
+        "local al cerrar (mismos valores y límites que en `opened`: máx. 1 KiB, `400` `err.hook.result_invalid` si no "
+        "es válido). Sin cuerpo, como siempre."
     ),
     response_model=ClosedResult,
     response_model_exclude_none=True,
+    openapi_extra=_RESULT_BODY,
     responses={
         200: _ok(
             ClosedResult,
@@ -645,7 +717,9 @@ COMMIT = dict(
         "Con el lock del juego (ocupado: `409`) comprueba, en este orden: que el hub no cambió (`409` "
         "`err.hook.hub_changed`: repite `fingerprint`); que sigue mandando el dispositivo, con la política `skip` y la "
         "misma lógica que `fingerprint` (conflicto u hub más nuevo: `409` `err.hook.commit_rejected`, "
-        "`params.reason`: `both-changed`, `no-baseline`, `inconsistent` o `hub`; no se toca nada); que están todos los "
+        "`params.reason`: `both-changed`, `no-baseline`, `inconsistent`, `resolution_stale` o `hub`; no se toca nada; "
+        "un conflicto solo pasa con una resolución vigente `winner: device` cuyas huellas son las del hub y del "
+        "manifiesto de ahora); que están todos los "
         "ficheros (`422` `err.hook.upload_incomplete`, `params.missing` y `params.paths`, hasta 10); y que el "
         "conjunto da la huella del manifiesto (`422` `err.hook.set_mismatch`). Si todo cuadra: guarda el hub actual "
         "como versión, lo reemplaza, aplica el mtime del manifiesto a cada fichero, fija la línea base del "
@@ -731,12 +805,96 @@ COMMIT = dict(
     },
 )
 
+_RES_BODY_EXAMPLE = {"winner": "device", "expect": {"hub": _SHA, "device": _SHA}}
+RESOLUTION = dict(
+    summary="Resolver un conflicto de datos de un dispositivo http",
+    description=(
+        "Para dispositivos con `http: true`. Tras un `fingerprint` con `action: conflict`, el dispositivo (o la web) "
+        "decide quién gana y lo deja como **resolución pendiente**: `winner` (`hub` = el dispositivo baja los datos del "
+        "hub; `device` = el hub guarda los del dispositivo) y `expect` (`hub` y `device`: las huellas `hub.hash` y "
+        "`device_state.hash` del `fingerprint` en conflicto; `null` si ese lado estaba vacío). Solo esos campos, y "
+        "`device` opcional (si se pasa debe ser el de la key: `403`). Máx. 2 KiB.\n\n"
+        "Exige un conflicto registrado con esas mismas huellas (`409` `err.resolution.no_conflict` si no hay ninguno, "
+        "`err.resolution.stale` si las huellas son otras: repite `fingerprint`) y que el lado ganador tenga datos (`409` "
+        "`err.resolution.side_empty`). Cuerpo mal formado: `422` `err.resolution.invalid` (`400` si pasa de 2 KiB). "
+        "Con el lock del juego (ocupado: `409`). Sustituye a la que hubiera y caduca a las 24 h.\n\n"
+        "No cambia ficheros: la aplica el siguiente `fingerprint`, que devuelve `download` (`winner: hub`) o `upload` "
+        "(`winner: device`) con `reason: resolution` solo si las huellas siguen siendo las de `expect`; si no, "
+        "`conflict` con `reason: resolution_stale`. Con `upload`, el `commit` posterior guarda antes el hub actual "
+        "como versión. Al terminar (`commit` o `fingerprint` con `none`) el conflicto y la resolución se borran."
+    ),
+    response_model=ResolutionResult,
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "description": "`winner` (`hub` o `device`) y `expect` (`hub` y `device`: sha256 hexadecimal o `null`).",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["winner", "expect"],
+                        "properties": {
+                            "device": {"type": "string", "description": "Opcional: el de la key."},
+                            "winner": {"type": "string", "enum": ["hub", "device"]},
+                            "expect": {
+                                "type": "object",
+                                "required": ["hub", "device"],
+                                "properties": {
+                                    "hub": {"type": ["string", "null"], "description": "`hub.hash` del fingerprint."},
+                                    "device": {
+                                        "type": ["string", "null"],
+                                        "description": "`device_state.hash` del fingerprint.",
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    "examples": {"device": {"summary": "Gana el dispositivo", "value": _RES_BODY_EXAMPLE}},
+                }
+            },
+        }
+    },
+    responses={
+        200: _ok(
+            ResolutionResult,
+            "Resolución pendiente guardada.",
+            (
+                "ok",
+                "Gana el dispositivo",
+                {**_FILE_Q, "winner": "device", "by": "device", "expires": "2026-01-16T18:30:12Z"},
+            ),
+        ),
+        400: error_response(
+            "El cuerpo no es un objeto JSON o pasa de 2 KiB.",
+            ("body", "Cuerpo JSON incorrecto", "err.main.json_body_required", {}),
+            ("big", "Demasiado grande", "err.resolution.invalid", {}),
+        ),
+        403: R403,
+        404: R404_GAME,
+        409: error_response(
+            "Sin conflicto registrado, huellas obsoletas, lado ganador vacío, lock del juego tomado o ejecución en "
+            "curso, juego desactivado o referencia ambigua.",
+            ("none", "No hay conflicto registrado", "err.resolution.no_conflict", {}),
+            ("stale", "Las huellas ya no son las del conflicto", "err.resolution.stale", {}),
+            ("empty", "El lado ganador está vacío", "err.resolution.side_empty", {}),
+            _BUSY,
+            _DISABLED,
+            _AMBIGUOUS,
+        ),
+        422: error_response(
+            "`winner` fuera de la lista, `expect` sin la forma `{hub, device}` con sha256 o `null`, o campos de más.",
+            ("invalid", "Cuerpo no válido", "err.resolution.invalid", {}),
+        ),
+    },
+)
+
 GAMES = dict(
     summary="Listar los juegos y su estado",
     description="Con la key de **usuario**, todos los juegos de la configuración; con la de **dispositivo**, solo los "
     "que tienen ese dispositivo en su lista. Con el resultado de su última sincronización, para consultarlo "
     "desde un dispositivo sin SSH. `steam_appid` es el id de Steam del juego (entero) o `null` si no tiene; el mismo para todos los dispositivos. `status` es `null` si el juego aún no se ha sincronizado. Solo lectura: no "
-    "sincroniza nada y no devuelve rutas, dispositivos ni ajustes.",
+    "sincroniza nada y no devuelve dispositivos ni ajustes. Con clave de dispositivo incluye la ruta del guardado en ese "
+    "dispositivo (`path`: cadena, o `null` si no tiene ruta) y solo la de ese dispositivo; con la de usuario no hay `path`.",
     responses={
         200: _ok(
             list[GameItem],
@@ -758,6 +916,28 @@ GAMES = dict(
                         },
                     },
                     {"id": "g2", "name": "Otro Juego", "enabled": True, "steam_appid": None, "status": None},
+                ],
+            ),
+            (
+                "device",
+                "Con key de dispositivo (`ckd_`): cada juego lleva `path`, con ruta y sin ella",
+                [
+                    {
+                        "id": "g1",
+                        "name": "Mi Juego",
+                        "enabled": True,
+                        "steam_appid": 1245620,
+                        "status": None,
+                        "path": "/home/deck/.local/share/Mi Juego/saves",
+                    },
+                    {
+                        "id": "g2",
+                        "name": "Otro Juego",
+                        "enabled": True,
+                        "steam_appid": None,
+                        "status": None,
+                        "path": None,
+                    },
                 ],
             ),
             ("empty", "Sin juegos configurados", []),

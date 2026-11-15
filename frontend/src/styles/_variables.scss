@@ -1,5 +1,7 @@
 $radius: 14px;
 $gap: 1rem;
+$gap-title: 0.75rem; // entre el nombre del juego y su insignia en la cabecera de la tarjeta
+$gap-section: 1.5rem; // entre bloques de primer nivel de una subpestaña de Configuración
 $bp-sm: 640px;
 $bp-upd: 480px; // por debajo, el aviso de actualización sale de la cabecera y pasa al menú de perfil
 $bp-xs: 380px; // móviles estrechos (320-380 px)

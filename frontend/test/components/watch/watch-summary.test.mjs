@@ -115,7 +115,14 @@ test('perfil sin aviso: ni punto ni entrada (sin actualización, desactivada, no
 });
 
 test('watchState tolera respuestas raras', { skip }, () => {
-  assert.deepEqual(m.watchState({ now: NOW, watches: [W()] }), { now: NOW, watches: [W()] });
+  assert.deepEqual(m.watchState({ now: NOW, watches: [W()] }), {
+    now: NOW,
+    watches: [W()],
+    playing: [],
+    results: [],
+    conflicts: [],
+    resolutions: [],
+  });
   assert.deepEqual(m.watchState(null), m.NO_WATCHES);
   assert.deepEqual(m.watchState({ watches: 'x' }), m.NO_WATCHES);
 });

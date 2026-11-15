@@ -16,6 +16,8 @@
   font-family: v.$font;
   &::before {
     content: '';
+    flex: none;
+    align-self: center;
     width: 0.45rem;
     height: 0.45rem;
     border-radius: 50%;
@@ -39,7 +41,8 @@
     background: rgba(244, 63, 158, 0.1);
   }
   &.aborted,
-  &.dry-run {
+  &.dry-run,
+  &.warn {
     color: var(--warn);
     border-color: var(--warn);
     background: rgba(255, 194, 71, 0.08);

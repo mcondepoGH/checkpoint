@@ -12,3 +12,7 @@ config
 *.log
 *.bak*
 .DS_Store
+checkpoint-deck/node_modules
+checkpoint-deck/dist
+checkpoint-deck/out
+checkpoint-deck/tests

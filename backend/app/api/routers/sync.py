@@ -4,15 +4,17 @@ import json
 import logging
 import time
 
-from fastapi import Depends, Request
+from fastapi import Depends, Query, Request
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 
 from ...core.errors import ApiError
 from ...services.context import AppContext
 from ...services.runs import start_manual_sync
 from ...services.status import read_statuses
 from ...sync.scheduler import iso, utcnow
-from ..deps import get_ctx, internal_router
+from ...sync import resolution
+from ..deps import body_json_limited, get_ctx, internal_router
 
 api_log = logging.getLogger(
     "checkpoint.api"
@@ -34,12 +36,40 @@ async def start_sync(game: str, request: Request, ctx: AppContext = Depends(get_
 
 @router.get("/api/watches")
 def watches_view(ctx: AppContext = Depends(get_ctx)):
-    """Vigilancias de cierre activas para la UI (sesión): {now, watches: [{game, device, state, since, last_poll, poll}]}.
-    `now` es la hora del servidor (UTC) para que el cliente mida el latido sin depender de su reloj. Sin datos sensibles."""
+    """Vigilancias de cierre activas para la UI (sesión): {now, watches: [{game, device, state, since, last_poll, poll}],
+    playing: [{game, device, since, expires, result?}], results: [{game, device, at, trigger, state, code?}]}.
+    `playing` = «jugando ahora» de dispositivos http (avisan ellos); `results` = último resultado de sync por juego y
+    dispositivo http. `now` es la hora del servidor (UTC) para que el cliente mida el latido sin depender de su reloj. Sin datos sensibles."""
     cfg = ctx.cfg()
     w = ctx.hooks.active_watches(cfg)
-    api_log.debug("watches: %d vigilancias activas", len(w))
-    return {"now": iso(utcnow()), "watches": w}
+    playing = ctx.hooks.active_playing(cfg)
+    api_log.debug("watches: %d vigilancias activas, %d jugando (http)", len(w), len(playing))
+    return {
+        "now": iso(utcnow()),
+        "watches": w,
+        "playing": playing,
+        "results": ctx.hooks.last_sync_results(cfg),
+        **ctx.hooks.pending_resolutions(cfg),
+    }
+
+
+@router.put("/api/sync/{game}/resolution")
+async def put_resolution(game: str, request: Request, ctx: AppContext = Depends(get_ctx)):
+    """Resolución pendiente de un conflicto de datos de un dispositivo http (web): `{device, winner: hub|device,
+    expect: {hub, device}}`. El dispositivo la aplica en su próxima sync. 409 sin conflicto registrado o con `expect` obsoleto."""
+    cfg = ctx.cfg()
+    game = ctx.game_id(game)
+    body = await body_json_limited(request, resolution.BODY_MAX_BYTES, "err.resolution.invalid")
+    device, winner, expect = ctx.hooks.parse_resolution_body(body)
+    return await run_in_threadpool(ctx.hooks.set_resolution, cfg, game, device, winner, expect, "web")
+
+
+@router.delete("/api/sync/{game}/resolution")
+async def delete_resolution(game: str, device: str = Query(...), ctx: AppContext = Depends(get_ctx)):
+    """Cancela la resolución pendiente de (juego, dispositivo http). El conflicto registrado se conserva."""
+    cfg = ctx.cfg()
+    game = ctx.game_id(game)
+    return await run_in_threadpool(ctx.hooks.cancel_resolution, cfg, game, device)
 
 
 @router.get("/api/games/{game}/hook-status")

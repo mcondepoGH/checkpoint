@@ -1,6 +1,30 @@
 # Cambios
 
-## Sin publicar
+## 2.0.0 (2026-11-15)
+
+2.0.0: primera versión con plugin de Steam Deck y dispositivos http de primera clase (los cambios de API son aditivos y compatibles con plugins y clientes anteriores).
+
+### Novedades
+
+- Plugin de Steam Deck descargable desde el hub: `GET /api/deck/plugin` (zip), `/api/deck/plugin.sha256` e `info`, públicos y de solo lectura, y botón «Descargar plugin» en Configuración > Biblioteca > Dispositivos. Se instala y actualiza por URL de Decky (`<hub>/api/deck/plugin`) o con el ZIP. La imagen Docker construye el zip en la etapa `deck`.
+- Protocolo plugin-hub: `GET /api/hook/ping` añade `protocol` y `min_plugin_protocol`, e `info` añade `protocol` (el `checkpointProtocol` del plugin).
+- Dispositivos http en vivo: `opened` y `closed` con la key `ckd_` (con el resultado opcional `result` de la sync local), «Jugando» en Sincronizar y `GET /api/watches` con `playing` y `results`.
+- Resolución de conflictos de dispositivos http, desde la web («Usar los datos del hub» / «Usar los de <dispositivo>», «Resolución pendiente») y desde el plugin: `PUT /api/hook/{juego}/resolution` y `PUT`/`DELETE /api/sync/{juego}/resolution`; `GET /api/watches` añade `conflicts` y `resolutions`.
+- Juegos de Steam desde el plugin: `POST /api/steam/games` (crea el juego, o une el dispositivo a uno existente con `joined`) y `PUT /api/steam/games/{juego}/enabled`.
+- Versiones: tarjeta «Actual» con el estado del hub, y `GET /api/versions/{juego}/limit` añade `current` y `latest`; la pestaña se refresca sola.
+- Sincronizar: un juego solo http no muestra «Sincronizar» (se sincroniza desde el propio dispositivo) y enseña «Última sync», «Jugando» y el aviso de conflicto.
+- Insignias de resultado en las tarjetas de Sincronizar (OK, Conflicto, Error y aviso), con claves `sync.state.ok` y `sync.state.error`.
+- Catálogos es/en: textos del plugin, de la resolución de conflictos y errores `err.steam.*`, `err.resolution.*`, `err.hook.result_invalid`.
+
+### Cambios
+
+- Un nombre que solo coincide tras normalizar (p. ej. `Hades!` con `Hades`) ya no crea un juego duplicado: se une el dispositivo al existente (`POST /api/steam/games`).
+- `fingerprint` con conflicto toma el lock del juego para registrarlo (`409` `err.main.run_in_progress` si está ocupado).
+- Más separación entre el nombre del juego y su insignia en las tarjetas de Sincronizar.
+
+### Arreglos
+
+- Catálogos es/en: añadidas `err.steam.game_body_invalid` y `err.steam.game_invalid` (el test de códigos `err.*` fallaba).
 
 ## 1.16.0 (2026-11-13)
 

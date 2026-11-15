@@ -64,7 +64,7 @@ DEVICE_ONLY = [
     ("post", "/api/hook/g1/commit", {"json": {"expect": None, "manifest": []}}),
     ("post", "/api/hook/g1/closed", {}),
 ]
-USER_ONLY = [("get", "/api/hook/watches", {}), ("post", "/api/hook/g1/opened?device=pc", {})]
+USER_ONLY = [("get", "/api/hook/watches", {})]  # `opened` acepta las dos (con `ckd_` es el aviso de un http)
 
 
 # ---- formato y almacén ----
@@ -151,8 +151,19 @@ def test_user_endpoints_reject_device_key(cl, method, path, kw):
 
 
 def test_ping_and_games_accept_both(cl):
-    assert call(cl, cl.user, "get", "/api/hook/ping").json() == {"ok": True, "user": "admin"}
-    assert call(cl, cl.deck, "get", "/api/hook/ping").json() == {"ok": True, "user": "admin", "device": "deck"}
+    assert call(cl, cl.user, "get", "/api/hook/ping").json() == {
+        "ok": True,
+        "user": "admin",
+        "protocol": 1,
+        "min_plugin_protocol": 1,
+    }
+    assert call(cl, cl.deck, "get", "/api/hook/ping").json() == {
+        "ok": True,
+        "user": "admin",
+        "device": "deck",
+        "protocol": 1,
+        "min_plugin_protocol": 1,
+    }
     for k in (cl.user, cl.deck):
         assert call(cl, k, "get", "/api/games").status_code == 200
     assert call(cl, None, "get", "/api/hook/ping").status_code == 401
@@ -163,6 +174,45 @@ def test_games_scope(cl):
     assert ids(cl.user) == ["g1", "g2", "g3"]  # key de usuario: todos
     assert ids(cl.deck) == ["g1"]
     assert ids(cl.lap) == ["g2"]
+
+
+USER_KEYS = {"id", "name", "enabled", "steam_appid", "status"}
+
+
+def test_games_user_key_has_no_path(cl):
+    j = call(cl, cl.user, "get", "/api/games").json()
+    assert all(set(g) == USER_KEYS for g in j)  # ck_: sin `path` ni `paths`
+    assert "/d" not in str(j) and "/p" not in str(j)
+
+
+def test_games_device_key_gets_its_own_path_only(cl):
+    j = call(cl, cl.deck, "get", "/api/games").json()
+    assert [set(g) for g in j] == [USER_KEYS | {"path"}]
+    assert j[0]["path"] == "/d"  # g1 tiene deck y pc: solo la del deck
+    assert "/p" not in str(j) and "paths" not in j[0]
+    assert call(cl, cl.lap, "get", "/api/games").json()[0]["path"] == "/l2"
+
+
+def test_games_device_path_null_without_path():
+    from types import SimpleNamespace
+
+    from app.api.routers.games import device_path
+
+    g = SimpleNamespace(paths={"pc": "/p"})
+    assert device_path(g, "deck") is None  # el modelo exige ruta por dispositivo; defensivo
+    assert device_path(g, "pc") == "/p"
+    assert device_path(SimpleNamespace(paths={"deck": ""}), "deck") is None
+
+
+def test_games_device_key_paths_verbatim(cl):
+    cfg = copy.deepcopy(CFG)
+    cfg["devices"]["deck"]["os"] = "windows"
+    cfg["games"]["g1"]["paths"]["deck"] = " C:\\Users\\x\\Saves "
+    cfg["games"]["g1"]["paths"]["pc"] = "/home/u/otro"
+    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg, allow_unicode=True))
+    j = call(cl, cl.deck, "get", "/api/games").json()
+    assert j[0]["path"] == "C:/Users/x/Saves"  # el modelo ya recorta y normaliza `\` a `/`
+    assert "otro" not in str(j)
 
 
 def test_every_hook_route_requires_a_key(cl):

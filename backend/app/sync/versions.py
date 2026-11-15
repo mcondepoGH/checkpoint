@@ -53,6 +53,35 @@ def count_versions(data_dir: Path, game: str) -> int:
     return sum(1 for d in base.iterdir() if d.is_dir() and not d.is_symlink() and VERSION_RE.match(d.name))
 
 
+def latest_version(data_dir: Path, game: str) -> Optional[str]:
+    """Id de la versión más reciente de `game` (orden cronológico), o None si no hay. Barato: solo lista nombres."""
+    base = Path(data_dir) / "versions" / game
+    if not base.is_dir():
+        return None
+    names = [d.name for d in base.iterdir() if d.is_dir() and not d.is_symlink() and VERSION_RE.match(d.name)]
+    return max(names, key=_version_key) if names else None
+
+
+def current_state(data_dir: Path, game: str) -> Optional[dict]:
+    """Estado actual del hub de `game` ({id, mtime, files, size}) o None si no tiene ficheros. Solo `stat` (nada de
+    hashes ni lecturas): lo usa el `/limit` que se consulta cada ~15 s. `id` cambia con cualquier subida (mtime máximo,
+    nº de ficheros y tamaño) y sirve para saber si hay que recargar; `mtime` es la fecha de la última modificación."""
+    root = Path(data_dir) / "hub" / game
+    if not root.is_dir():
+        return None
+    mt = size = files = 0
+    for p in root.rglob("*"):
+        if p.is_symlink() or not p.is_file():
+            continue
+        st = p.stat()
+        files += 1
+        size += st.st_size
+        mt = max(mt, int(st.st_mtime))
+    if not files:
+        return None
+    return {"id": f"{mt}-{files}-{size}", "mtime": _fmt(mt), "files": files, "size": size}
+
+
 def prune_versions(
     data_dir: Path, game: str, keep: int, log=lambda m: None, protect: Optional[str] = None
 ) -> List[str]:

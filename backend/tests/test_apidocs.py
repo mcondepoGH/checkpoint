@@ -20,6 +20,7 @@ HOOK_PATHS = {
     "/api/hook/{game}/manifest",
     "/api/hook/{game}/files",
     "/api/hook/{game}/commit",
+    "/api/hook/{game}/resolution",
     "/api/games",
 }
 PAIRING_PATHS = {
@@ -29,6 +30,14 @@ PAIRING_PATHS = {
     "/api/pairing/pending/{request_id}/accept",
     "/api/pairing/pending/{request_id}/reject",
 }
+STEAM_SESSION_PATHS = {
+    "/api/steam/suggestions",
+    "/api/steam/suggestions/{suggestion_id}/accept",
+    "/api/steam/suggestions/{suggestion_id}/dismiss",
+    "/api/steam/dismissed",
+    "/api/steam/dismissed/{dismissed_id}",
+}
+STEAM_PATHS = {"/api/steam/library", "/api/steam/games", "/api/steam/games/{game}/enabled"} | STEAM_SESSION_PATHS
 ASSET_BODIES = {
     "swagger-ui-bundle.js": b"/* bundle */",
     "swagger-ui.css": b"/* css */",
@@ -81,7 +90,7 @@ def test_openapi_only_has_the_api_key_paths(client):
     r = client.get("/api/openapi.json")
     assert r.status_code == 200
     j = r.json()
-    assert set(j["paths"]) == HOOK_PATHS | PAIRING_PATHS
+    assert set(j["paths"]) == HOOK_PATHS | PAIRING_PATHS | STEAM_PATHS
     assert {(p, m) for p, v in j["paths"].items() for m in v} == {
         ("/api/hook/ping", "get"),
         ("/api/hook/watches", "get"),
@@ -92,12 +101,21 @@ def test_openapi_only_has_the_api_key_paths(client):
         ("/api/hook/{game}/files", "get"),
         ("/api/hook/{game}/files", "put"),
         ("/api/hook/{game}/commit", "post"),
+        ("/api/hook/{game}/resolution", "put"),
         ("/api/games", "get"),
         ("/api/pairing/requests", "post"),
         ("/api/pairing/requests/{request_id}", "get"),
         ("/api/pairing/pending", "get"),
         ("/api/pairing/pending/{request_id}/accept", "post"),
         ("/api/pairing/pending/{request_id}/reject", "post"),
+        ("/api/steam/library", "post"),
+        ("/api/steam/games", "post"),
+        ("/api/steam/games/{game}/enabled", "put"),
+        ("/api/steam/suggestions", "get"),
+        ("/api/steam/suggestions/{suggestion_id}/accept", "post"),
+        ("/api/steam/suggestions/{suggestion_id}/dismiss", "post"),
+        ("/api/steam/dismissed", "get"),
+        ("/api/steam/dismissed/{dismissed_id}", "delete"),
     }
     assert j["info"]["title"] == "API de Checkpoint (avisos del lanzador)"
     assert j["info"]["version"] == (Path(__file__).resolve().parents[2] / "VERSION").read_text().strip()
@@ -106,6 +124,8 @@ def test_openapi_only_has_the_api_key_paths(client):
         apidocs.GAMES_TAG,
         apidocs.PAIRING_TAG,
         apidocs.PAIRING_SESSION_TAG,
+        apidocs.STEAM_TAG,
+        apidocs.STEAM_SESSION_TAG,
     ]
     assert {p: [op["tags"] for op in v.values()] for p, v in j["paths"].items()} == {
         **{p: [[apidocs.TAG]] for p in HOOK_PATHS - {"/api/games", "/api/hook/{game}/files"}},
@@ -114,16 +134,25 @@ def test_openapi_only_has_the_api_key_paths(client):
         "/api/pairing/requests": [[apidocs.PAIRING_TAG]],
         "/api/pairing/requests/{request_id}": [[apidocs.PAIRING_TAG]],
         **{p: [[apidocs.PAIRING_SESSION_TAG]] for p in PAIRING_PATHS if p.startswith("/api/pairing/pending")},
+        "/api/steam/library": [[apidocs.STEAM_TAG]],
+        "/api/steam/games": [[apidocs.STEAM_TAG]],
+        "/api/steam/games/{game}/enabled": [[apidocs.STEAM_TAG]],
+        **{p: [[apidocs.STEAM_SESSION_TAG]] for p in STEAM_SESSION_PATHS},
     }
 
 
 SECURITY_BY_KIND = {
     "user": [{"bearerAuth": []}],
-    "device": [{"deviceKeyAuth": []}],
-    "any": [{"bearerAuth": []}, {"deviceKeyAuth": []}],
+    "device": [{"bearerAuth": []}],  # un solo Bearer; la clase de key la dice la nota «Key aceptada»
+    "any": [{"bearerAuth": []}],
     "public": [],
     "pairing_secret": [{"pairingSecretAuth": []}],
     "session": [{"sessionAuth": []}],
+}
+KEY_NOTE_START = {
+    "user": "**Key aceptada:** solo `ck_`",
+    "device": "**Key aceptada:** solo `ckd_`",
+    "any": "**Key aceptada:** `ck_` o `ckd_`",
 }
 
 
@@ -131,30 +160,34 @@ def test_key_matrix_documented_exactly():
     assert apidocs.KEY_KINDS == {
         "/api/hook/ping": "any",
         "/api/hook/watches": "user",
-        "/api/hook/{game}/opened": "user",
+        "/api/hook/{game}/opened": "any",
         "/api/hook/{game}/closed": "device",
         "/api/hook/{game}/fingerprint": "device",
         "/api/hook/{game}/manifest": "device",
         "/api/hook/{game}/files": "device",
         "/api/hook/{game}/commit": "device",
+        "/api/hook/{game}/resolution": "device",
         "/api/games": "any",
         "/api/pairing/requests": "public",
         "/api/pairing/requests/{request_id}": "pairing_secret",
         "/api/pairing/pending": "session",
         "/api/pairing/pending/{request_id}/accept": "session",
         "/api/pairing/pending/{request_id}/reject": "session",
+        "/api/steam/library": "device",
+        "/api/steam/games": "device",
+        "/api/steam/games/{game}/enabled": "device",
+        **{p: "session" for p in STEAM_SESSION_PATHS},
     }
-    assert set(apidocs.KEY_KINDS) == HOOK_PATHS | PAIRING_PATHS
+    assert set(apidocs.KEY_KINDS) == HOOK_PATHS | PAIRING_PATHS | STEAM_PATHS
 
 
 def test_openapi_security_scheme_and_errors(client):
     j = client.get("/api/openapi.json").json()
     schemes = j["components"]["securitySchemes"]
-    # dos clases de key (usuario ck_, dispositivo ckd_) y las de la vinculación (secreto de solicitud y sesión)
-    assert list(schemes) == ["bearerAuth", "deviceKeyAuth", "pairingSecretAuth", "sessionAuth"]
-    assert all(
-        schemes[k]["type"] == "http" and schemes[k]["scheme"] == "bearer" for k in ("bearerAuth", "deviceKeyAuth")
-    )
+    # un único Bearer (key de usuario ck_ o de dispositivo ckd_) y los de la vinculación (secreto de solicitud y sesión)
+    assert list(schemes) == ["bearerAuth", "pairingSecretAuth", "sessionAuth"]
+    assert "deviceKeyAuth" not in str(j)
+    assert schemes["bearerAuth"]["type"] == "http" and schemes["bearerAuth"]["scheme"] == "bearer"
     assert schemes["pairingSecretAuth"] == {
         **schemes["pairingSecretAuth"],
         "type": "apiKey",
@@ -162,16 +195,18 @@ def test_openapi_security_scheme_and_errors(client):
         "name": "X-Pairing-Secret",
     }
     assert schemes["sessionAuth"]["in"] == "cookie" and schemes["sessionAuth"]["name"] == "checkpoint_session"
-    assert "ck_" in schemes["bearerAuth"]["bearerFormat"] and "ckd_" in schemes["deviceKeyAuth"]["bearerFormat"]
+    desc = schemes["bearerAuth"]["description"]
+    assert "`ck_" in desc and "`ckd_" in desc and "Cada operación indica cuál acepta" in desc
     assert "ckd_" in j["info"]["description"] and "dos clases de key" in j["info"]["description"]
     assert "ErrorBody" in j["components"]["schemas"]
     assert "HTTPValidationError" not in j["components"]["schemas"]
     for path, v in j["paths"].items():
         for op in v.values():
             assert op["security"] == SECURITY_BY_KIND[apidocs.KEY_KINDS[path]]
-            if path in PAIRING_PATHS:
+            if path in PAIRING_PATHS or path in STEAM_SESSION_PATHS:
                 continue  # sus errores se comprueban en `test_openapi_pairing_operations`
-            assert "**Key aceptada:**" in op["description"]
+            assert KEY_NOTE_START[apidocs.KEY_KINDS[path]] in op["description"]
+            assert op["description"].count("**Key aceptada:**") == 1
             assert (
                 op["responses"].get("422", {}).get("description") != "Validation Error"
             )  # nunca el genérico de FastAPI
@@ -190,6 +225,12 @@ def test_openapi_security_scheme_and_errors(client):
     )  # con y sin appid (OpenAPI omite los null)
     item = j["components"]["schemas"]["GameItem"]["properties"]["steam_appid"]
     assert {"type": "integer"} in item["anyOf"] and {"type": "null"} in item["anyOf"] and item["description"]
+    dev = ok["examples"]["device"]["value"]  # ckd_: con y sin `path`
+    assert dev[0]["path"] and dev[1].get("path") is None  # OpenAPI omite los null
+    assert all("path" not in g for g in ex)  # ck_: sin `path`
+    path = j["components"]["schemas"]["GameItem"]["properties"]["path"]
+    assert {"type": "string"} in path["anyOf"] and {"type": "null"} in path["anyOf"] and "ckd_" in path["description"]
+    assert "ruta del guardado en ese dispositivo" in games["description"]
     assert {"GameItem", "GameSyncStatus"} <= set(j["components"]["schemas"])
     opened = j["paths"]["/api/hook/{game}/opened"]["post"]
     assert {"200", "400", "404", "409"} <= set(opened["responses"])
@@ -230,8 +271,10 @@ def test_openapi_pairing_operations(client):
 def test_openapi_closed_operation(client):
     j = client.get("/api/openapi.json").json()
     op = j["paths"]["/api/hook/{game}/closed"]["post"]
-    assert op["tags"] == [apidocs.TAG] and op["summary"] and op["security"] == [{"deviceKeyAuth": []}]
-    assert {"200", "401", "403", "404", "409", "429"} <= set(op["responses"]) and "requestBody" not in op
+    assert op["tags"] == [apidocs.TAG] and op["summary"] and op["security"] == [{"bearerAuth": []}]
+    assert {"200", "401", "403", "404", "409", "429"} <= set(op["responses"]) and op["requestBody"][
+        "required"
+    ] is False  # cuerpo opcional: resultado de la sync
     assert {p["name"]: p["in"] for p in op["parameters"]} == {"game": "path", "device": "query"}
     ok = op["responses"]["200"]["content"]["application/json"]
     assert ok["schema"]["$ref"].endswith("/ClosedResult") and set(ok["examples"]) == {"ok", "disabled"}
@@ -243,7 +286,7 @@ def test_openapi_closed_operation(client):
 def test_openapi_fingerprint_operation(client):
     j = client.get("/api/openapi.json").json()
     op = j["paths"]["/api/hook/{game}/fingerprint"]["post"]
-    assert op["tags"] == [apidocs.TAG] and op["summary"] and op["security"] == [{"deviceKeyAuth": []}]
+    assert op["tags"] == [apidocs.TAG] and op["summary"] and op["security"] == [{"bearerAuth": []}]
     assert {"200", "400", "401", "404", "409", "422", "429"} <= set(op["responses"])
     assert "Validation Error" not in str(op["responses"]["422"])
     assert {p["name"]: p["in"] for p in op["parameters"]} == {
@@ -286,7 +329,7 @@ def test_openapi_file_operations(client, key):
     codes, model = FILE_OPS[key]
     op = client.get("/api/openapi.json").json()["paths"][path][method]
     assert op["tags"] == [apidocs.TAG] and op["summary"] and op["description"]
-    assert op["security"] == [{"deviceKeyAuth": []}]
+    assert op["security"] == [{"bearerAuth": []}]
     assert (codes | {"401", "429"}) <= set(op["responses"])
     assert {p["name"] for p in op["parameters"]} >= {"game", "device"}
     assert "403" in op["responses"] and "err.apikey.device_mismatch" in str(op["responses"]["403"])
@@ -362,17 +405,26 @@ def test_every_api_route_is_public_tag_or_hidden(app):
         if not path.startswith("/api/"):
             continue
         in_public = bool(
-            {apidocs.TAG, apidocs.GAMES_TAG, apidocs.PAIRING_TAG, apidocs.PAIRING_SESSION_TAG} & set(r.tags or [])
+            {
+                apidocs.TAG,
+                apidocs.GAMES_TAG,
+                apidocs.PAIRING_TAG,
+                apidocs.PAIRING_SESSION_TAG,
+                apidocs.STEAM_TAG,
+                apidocs.STEAM_SESSION_TAG,
+            }
+            & set(r.tags or [])
         )
         assert in_public or not r.include_in_schema, (
             f"{r.methods} {path}: ni en un tag público ni include_in_schema=False"
         )
         if in_public:
             assert r.include_in_schema and (
-                path.startswith((apidocs.API_PREFIX, apidocs.PAIRING_PREFIX)) or path == apidocs.GAMES_PATH
+                path.startswith((apidocs.API_PREFIX, apidocs.PAIRING_PREFIX, apidocs.STEAM_PREFIX))
+                or path == apidocs.GAMES_PATH
             ), path
             public.add(path)
-    assert public == HOOK_PATHS | PAIRING_PATHS
+    assert public == HOOK_PATHS | PAIRING_PATHS | STEAM_PATHS
     assert (
         len([r for r in apidocs.iter_api_routes(app.routes) if r.path.startswith("/api/")]) > 30
     )  # el recorrido no se queda corto
@@ -395,3 +447,33 @@ def test_new_internal_router_endpoint_is_hidden_by_default():
             return {}
 
         assert [r.include_in_schema for r in router.routes] == [False]
+
+
+def test_openapi_steam_operations(client):
+    j = client.get("/api/openapi.json").json()
+    lib = j["paths"]["/api/steam/library"]["post"]
+    assert "**Key aceptada:** solo `ckd_`" in lib["description"] and lib["security"] == [{"bearerAuth": []}]
+    assert {"200", "400", "401", "409", "413", "422", "429"} <= set(lib["responses"])
+    body = lib["requestBody"]["content"]["application/json"]
+    assert body["examples"]["example"]["value"]["games"][0] == {"appid": 1145360, "name": "Hades"}
+    for path in STEAM_SESSION_PATHS:
+        for op in j["paths"][path].values():
+            assert op["security"] == [{"sessionAuth": []}]
+            assert "401" in op["responses"] and "403" in op["responses"] and op["summary"]
+            assert "**Credencial:** la sesión web" in op["description"]
+    acc = j["paths"]["/api/steam/suggestions/{suggestion_id}/accept"]["post"]["responses"]
+    assert {"200", "404", "409", "422"} <= set(acc)
+    assert {"404"} <= set(j["paths"]["/api/steam/dismissed/{dismissed_id}"]["delete"]["responses"])
+
+
+def test_openapi_steam_game_create_documents_the_join(client):
+    j = client.get("/api/openapi.json").json()
+    op = j["paths"]["/api/steam/games"]["post"]
+    assert "joined" in op["description"] and "`err.steam.no_free_slot`" in op["description"]
+    ok = op["responses"]["200"]["content"]["application/json"]
+    assert ok["examples"]["joined"]["value"]["joined"] is True
+    props = j["components"]["schemas"]["SteamGameCreated"]["properties"]
+    assert {"joined", "devices", "enabled"} <= set(props)
+    assert "joined" not in j["components"]["schemas"]["SteamGameCreated"].get("required", [])
+    ex = op["responses"]["422"]["content"]["application/json"]["examples"]
+    assert {"slot", "mismatch", "inuse"} <= set(ex)

@@ -17,19 +17,19 @@ from ...core.errors import ApiError
 from .pairing import COOKIE_NAME, SECURITY_PAIRING, SECURITY_SESSION
 
 TAG = "Avisos del lanzador (API key)"
-SECURITY = "bearerAuth"  # key de USUARIO (`ck_...`)
-SECURITY_DEVICE = "deviceKeyAuth"  # key de DISPOSITIVO http (`ckd_...`)
+SECURITY = "bearerAuth"  # un solo Bearer: la key de USUARIO (`ck_...`) o la de DISPOSITIVO http (`ckd_...`)
 # Qué key acepta cada ruta publicada (debe coincidir con la dependencia de `routers/hook.py` y `routers/games.py`):
 # "user" = solo `ck_`, "device" = solo `ckd_`, "any" = las dos. `patch_schema` falla con una ruta sin clasificar.
 KEY_KINDS = {
     "/api/hook/ping": "any",
     "/api/hook/watches": "user",
-    "/api/hook/{game}/opened": "user",
+    "/api/hook/{game}/opened": "any",
     "/api/hook/{game}/closed": "device",
     "/api/hook/{game}/fingerprint": "device",
     "/api/hook/{game}/manifest": "device",
     "/api/hook/{game}/files": "device",
     "/api/hook/{game}/commit": "device",
+    "/api/hook/{game}/resolution": "device",
     "/api/games": "any",
     # Vinculación de dispositivos (`routers/pairing.py`): "public" = sin credencial (único caso), "pairing_secret" =
     # secreto de la solicitud en `X-Pairing-Secret`, "session" = cookie de sesión web.
@@ -38,13 +38,22 @@ KEY_KINDS = {
     "/api/pairing/pending": "session",
     "/api/pairing/pending/{request_id}/accept": "session",
     "/api/pairing/pending/{request_id}/reject": "session",
+    # Asociación de juegos de Steam (`routers/steam.py`): la Deck con su key `ckd_`; la web con sesión.
+    "/api/steam/library": "device",
+    "/api/steam/games": "device",
+    "/api/steam/games/{game}/enabled": "device",
+    "/api/steam/suggestions": "session",
+    "/api/steam/suggestions/{suggestion_id}/accept": "session",
+    "/api/steam/suggestions/{suggestion_id}/dismiss": "session",
+    "/api/steam/dismissed": "session",
+    "/api/steam/dismissed/{dismissed_id}": "session",
 }
 KEY_NOTES = {
-    "user": "**Key aceptada:** solo la de **usuario** (`ck_...`, Mi perfil → API key). La de dispositivo (`ckd_...`) da `401`.",
-    "device": "**Key aceptada:** solo la de **dispositivo** `http` (`ckd_...`), que identifica al dispositivo y solo "
-    "ve sus juegos (`?device=` opcional: otro dispositivo, `403`; juego que no lo incluye, `404`). La de usuario "
-    "(`ck_...`) da `401`.",
-    "any": "**Key aceptada:** la de usuario (`ck_...`) o la de dispositivo (`ckd_...`).",
+    "user": "**Key aceptada:** solo `ck_` (la de **usuario**, Mi perfil → API key). Una `ckd_` da `401`.",
+    "device": "**Key aceptada:** solo `ckd_` (la de **dispositivo** `http`), que identifica al dispositivo y solo "
+    "ve sus juegos (`?device=` opcional: otro dispositivo, `403`; juego que no lo incluye, `404`). Una `ck_` "
+    "da `401`.",
+    "any": "**Key aceptada:** `ck_` o `ckd_` (la de usuario o la de dispositivo; con la de dispositivo solo ve sus juegos).",
     "public": "**Sin credencial:** es el único endpoint de Checkpoint sin key ni sesión previas. Límites por IP, tope "
     "de solicitudes pendientes y caducidad de 10 min (ver «Vinculación de dispositivos» arriba).",
     "pairing_secret": "**Credencial:** el secreto de la solicitud, en la cabecera `X-Pairing-Secret` (nunca en la URL). "
@@ -82,7 +91,8 @@ DESCRIPTION = (
     "también en `ping` y `GET /api/games` (este último solo con los juegos de ese dispositivo). Identifica al "
     "dispositivo: `?device=` es opcional y, si se pasa y no es el suyo, `403`. Un juego que no incluye el "
     "dispositivo da el mismo `404` que uno inexistente.\n\n"
-    "La cookie de sesión de la web **no** vale aquí. En «Authorize» pega solo la key (Swagger añade `Bearer`). Trata "
+    "La cookie de sesión de la web **no** vale aquí. En «Authorize» hay un único campo Bearer: pega solo la key, "
+    "`ck_...` o `ckd_...` (Swagger añade `Bearer`). Trata "
     "las keys como contraseñas: dan acceso a los saves; regenera la que se filtre.\n\n"
     '**Errores.** Todos tienen la forma `{"detail": {"code": "err.<módulo>.<causa>", "params": {...}}}`. '
     "Los códigos `err.*` no se traducen: son el contrato estable.\n\n"
@@ -95,7 +105,13 @@ DESCRIPTION = (
     "de 10 min (solo en memoria), código y secreto aleatorios criptográficos (secreto de 32 bytes, comparación en "
     "tiempo constante), el código no recoge la key, `404` uniforme con secreto erróneo (cuenta para el bloqueo por "
     "IP) y nada de secretos en logs.\n\n"
-    "**Solo se documenta la API de la API key y la vinculación.** El resto de rutas `/api/*` son internas de la web "
+    "**Asociación de juegos de Steam (`/api/steam/*`).** La Deck envía su lista de juegos de Steam "
+    "(`POST /api/steam/library`, solo key `ckd_`) y el hub escribe el `steam_appid` solo de los juegos de ese "
+    "dispositivo que lo tienen vacío y coinciden con certeza por nombre; lo dudoso queda como sugerencia que la "
+    "persona acepta o descarta en la web (`/api/steam/suggestions*`, con sesión). Nunca se pisa un appid existente. "
+    "Con la misma key la Deck puede crear un juego suyo (`POST /api/steam/games`) y activar o desactivar uno de sus "
+    "juegos (`PUT /api/steam/games/{game}/enabled`).\n\n"
+    "**Solo se documenta la API de la API key, la vinculación y la asociación de Steam.** El resto de rutas `/api/*` son internas de la web "
     "y pueden cambiar sin aviso."
 )
 TAG_DESCRIPTION = (
@@ -104,7 +120,7 @@ TAG_DESCRIPTION = (
 )
 GAMES_TAG_DESCRIPTION = (
     "Ruta `GET /api/games`: lista de juegos y su estado, con la API key de usuario (todos los juegos) o de "
-    "dispositivo (solo los suyos)."
+    "dispositivo (solo los suyos, y cada uno con la ruta del guardado en ese dispositivo)."
 )
 
 
@@ -124,17 +140,10 @@ def patch_schema(schema: dict) -> None:
     schemes[SECURITY] = {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "ck_<43 caracteres base64 urlsafe>",
-        "description": "API key de **usuario** (`ck_...`) de **Mi perfil → API key**. Pégala sin el prefijo `Bearer`. "
-        "Solo vale en las rutas que la aceptan (ver cada operación). La cookie de sesión no vale en estas rutas.",
-    }
-    schemes[SECURITY_DEVICE] = {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "ckd_<43 caracteres base64 urlsafe>",
-        "description": "API key de **dispositivo** `http` (`ckd_...`), una por dispositivo (`/api/devices/{id}/apikey`, "
-        "con sesión). Pégala sin el prefijo `Bearer`. Identifica al dispositivo y solo ve sus juegos. Solo vale en las "
-        "rutas que la aceptan (ver cada operación).",
+        "bearerFormat": "ck_<43 caracteres> o ckd_<43 caracteres> (base64 urlsafe)",
+        "description": "Pega aquí tu clave: la de usuario (`ck_...`, Mi perfil → API key) o la de dispositivo "
+        "(`ckd_...`, una por dispositivo `http`). Cada operación indica cuál acepta. Pégala sin el prefijo "
+        "`Bearer`. La cookie de sesión no vale en estas rutas.",
     }
     schemes[SECURITY_PAIRING] = {
         "type": "apiKey",
@@ -153,9 +162,9 @@ def patch_schema(schema: dict) -> None:
         "public": [],
         "pairing_secret": [{SECURITY_PAIRING: []}],
         "session": [{SECURITY_SESSION: []}],
-        "user": [{SECURITY: []}],
-        "device": [{SECURITY_DEVICE: []}],
-        "any": [{SECURITY: []}, {SECURITY_DEVICE: []}],  # una u otra
+        "user": [{SECURITY: []}],  # solo `ck_`
+        "device": [{SECURITY: []}],  # solo `ckd_`
+        "any": [{SECURITY: []}],  # `ck_` o `ckd_`: el mismo Bearer; el hub distingue por el prefijo
     }
     for path, item in schema.get("paths", {}).items():
         kind = KEY_KINDS[path]  # KeyError = ruta pública nueva sin clasificar: añádela a KEY_KINDS
