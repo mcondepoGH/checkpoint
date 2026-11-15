@@ -40,3 +40,23 @@ test('en inglés: Current', { skip }, () => {
   const h = render({ current: CUR, list: [V('2026-01-01_090000')] }, 'en');
   assert.ok(h.includes('Current') && (h.match(/Restore/g) || []).length === 1);
 });
+
+const U = (version) => ({
+  version,
+  sources: [{ source: 'gone-1a2b', name: 'gone-1a2b', unknown: true, files: 1, mtime: '2026-01-01 09:00:00' }],
+});
+
+test('origen desconocido: «dispositivo desconocido (id)» y se puede restaurar', { skip }, () => {
+  const h = render({ current: null, list: [U('2026-01-01_090000')] });
+  assert.ok(h.includes('dispositivo desconocido (gone-1a2b)'));
+  assert.equal((h.match(/Restaurar/g) || []).length, 1);
+});
+
+test('origen desconocido en inglés', { skip }, () => {
+  const h = render({ current: null, list: [U('2026-01-01_090000')] }, 'en');
+  assert.ok(h.includes('unknown device (gone-1a2b)') && h.includes('Restore'));
+});
+
+test('origen conocido no se marca como desconocido', { skip }, () => {
+  assert.ok(!render({ current: null, list: [V('2026-01-01_090000')] }).includes('desconocido'));
+});

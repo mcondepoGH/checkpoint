@@ -200,7 +200,8 @@
       "help": "Estado que tiene ahora el hub de este juego. No se restaura: ya es el actual.",
       "hub": "Hub de Checkpoint"
     },
-    "restore": "Restaurar"
+    "restore": "Restaurar",
+    "unknown": "dispositivo desconocido ({id})"
   },
   "settings": {
     "subtabs": {

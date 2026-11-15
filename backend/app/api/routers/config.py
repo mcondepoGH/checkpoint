@@ -10,7 +10,7 @@ from ...config.store import Conflict, InvalidConfig, config_events_gen, diff_con
 from ...core import bootstrap, runtime
 from ...core.errors import ApiError, error_response
 from ...services.context import AppContext
-from ...services.devices import check_device, prune_device_keys
+from ...services.devices import check_device, prune_device_keys, prune_removed_device_data
 from ..deps import body_json, get_ctx, internal_router
 
 api_log = logging.getLogger(
@@ -98,6 +98,7 @@ async def put_config(request: Request, ctx: AppContext = Depends(get_ctx)):
     base = body.get("base_version")
     if not isinstance(base, str) or not base:
         raise ApiError(428, "err.main.base_version_required")
+    before = store.snapshot().cfg
     try:
         cfg = draft(body)
         res = store.save(base, cfg)
@@ -109,6 +110,7 @@ async def put_config(request: Request, ctx: AppContext = Depends(get_ctx)):
         return conflict_response(e)
     api_log.debug("config guardada: base=%s", base)
     prune_device_keys(store, ctx.auth.user)  # fuera las keys de dispositivos borrados o que dejaron de ser `http`
+    prune_removed_device_data(before, store)  # y sus metadatos (nunca versiones ni hub)
     return {**res, "config": store.snapshot().as_dict()}
 
 
@@ -126,6 +128,7 @@ async def restore_config(request: Request, ctx: AppContext = Depends(get_ctx)):
     base = body.get("base_version")
     if not isinstance(base, str) or not base:
         raise ApiError(428, "err.main.base_version_required")
+    before = store.snapshot().cfg
     try:
         res = store.restore(base, str(body.get("name", "")))
     except FileNotFoundError:
@@ -139,6 +142,7 @@ async def restore_config(request: Request, ctx: AppContext = Depends(get_ctx)):
         return conflict_response(e)
     api_log.debug("config restaurada: backup=%r base=%s", body.get("name"), base)
     prune_device_keys(store, ctx.auth.user)  # fuera las keys de dispositivos borrados o que dejaron de ser `http`
+    prune_removed_device_data(before, store)  # y sus metadatos (nunca versiones ni hub)
     return {**res, "config": store.snapshot().as_dict()}
 
 

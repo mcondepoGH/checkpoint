@@ -32,3 +32,25 @@ def save_baseline(data_dir: Path, game: str, updates: Dict[str, Optional[str]]) 
     tmp = p.with_name(f".{p.name}.tmp")
     tmp.write_text(json.dumps({"base": base, "updated": datetime.now().isoformat(timespec="seconds")}))
     os.replace(tmp, p)
+
+
+def drop_baseline(data_dir: Path, game: str, origins) -> bool:
+    """Quita `origins` del baseline de `game`. True si cambió el fichero. Un fichero ilegible o sin esas entradas no se
+    reescribe (nunca se pierde un baseline que no se ha podido leer). Escritura atómica."""
+    p = _state_path(data_dir, game)
+    try:
+        raw = json.loads(p.read_text())
+        base = raw["base"]
+        if not isinstance(base, dict):
+            return False
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    gone = [o for o in origins if o in base]
+    if not gone:
+        return False
+    for o in gone:
+        del base[o]
+    tmp = p.with_name(f".{p.name}.tmp")
+    tmp.write_text(json.dumps({"base": base, "updated": datetime.now().isoformat(timespec="seconds")}))
+    os.replace(tmp, p)
+    return True

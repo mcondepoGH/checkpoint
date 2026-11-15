@@ -29,14 +29,19 @@ export default function VersionList({ current, list, onRestore }) {
       {list.map((v) => (
         <div className="card" key={v.version}>
           <h3>{v.version}</h3>
-          {v.sources.map((s) => (
-            <div className="row between version-src" key={s.source}>
-              <span className="version-info">
-                <b>{s.name || s.source}</b> · {t('files', { count: s.files })} · {s.mtime}
-              </span>
-              <Button onClick={() => onRestore(v.version, s.source, s.name || s.source)}>{t('versions.restore')}</Button>
-            </div>
-          ))}
+          {v.sources.map((s) => {
+            // Origen que ya no es un dispositivo de la config (borrado o con el nombre antiguo): se muestra su id y se
+            // puede restaurar igual (siempre al hub).
+            const label = s.unknown ? t('versions.unknown', { id: s.source }) : s.name || s.source;
+            return (
+              <div className="row between version-src" key={s.source}>
+                <span className="version-info">
+                  <b>{label}</b> · {t('files', { count: s.files })} · {s.mtime}
+                </span>
+                <Button onClick={() => onRestore(v.version, s.source, label)}>{t('versions.restore')}</Button>
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>

@@ -478,19 +478,27 @@ def _do_sync(
         L("sincronización completada")
 
 
+def _plain_name(name) -> bool:
+    """¿Es un nombre de carpeta simple (un solo componente, sin `..` ni separadores ni NUL)?"""
+    return isinstance(name, str) and name not in ("", ".", "..") and not any(c in name for c in "/\\\x00")
+
+
 def restore_version(cfg: Config, game: str, version: str, source: str, data_dir: Path) -> dict:
     """Copia una versión al hub con mtime=ahora; el siguiente sync la propaga.
-    La copia actual del hub se guarda antes como versión. Devuelve el cuerpo {code, params} del aviso de éxito."""
+    La copia actual del hub se guarda antes como versión. Devuelve el cuerpo {code, params} del aviso de éxito.
+    El origen puede ser `hub`, un dispositivo o un origen que ya no existe en la config (dispositivo borrado o nombre
+    antiguo): siempre se restaura AL HUB y la carpeta del origen no se toca."""
     data_dir = Path(data_dir)
     game = resolve_game(cfg, game)
     if VERSION_RE.match(version):
         source = _origin_id(cfg, game, source)
-    if not VERSION_RE.match(version) or source not in {d for d in (*cfg.games[game].devices, "hub")}:
+    if not VERSION_RE.match(version) or not _plain_name(source):
         raise SyncAbort("err.sync.version_invalid")
     gs = game
     with _game_lock(data_dir, gs):
-        src = data_dir / "versions" / gs / version / source
-        if not src.is_dir():
+        vdir = data_dir / "versions" / gs / version
+        src = vdir / source
+        if vdir.is_symlink() or src.is_symlink() or not src.is_dir():
             raise SyncAbort("err.sync.version_unknown")
         hub = data_dir / "hub" / gs
         new_version = None
@@ -509,5 +517,5 @@ def restore_version(cfg: Config, game: str, version: str, source: str, data_dir:
         _replace_dir(tmp, hub)
         shutil.rmtree(tmp)
         prune_versions(data_dir, game, cfg.versions_limit(game), protect=new_version)
-    src_name = source if source == "hub" else cfg.devices[source].name
+    src_name = cfg.devices[source].name if source in cfg.devices else source
     return error_body("err.sync.restored", version=version, source=src_name)

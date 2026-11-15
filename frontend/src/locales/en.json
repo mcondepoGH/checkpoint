@@ -200,7 +200,8 @@
       "help": "What the hub holds for this game right now. It cannot be restored: it is already the current one.",
       "hub": "Checkpoint hub"
     },
-    "restore": "Restore"
+    "restore": "Restore",
+    "unknown": "unknown device ({id})"
   },
   "settings": {
     "subtabs": {

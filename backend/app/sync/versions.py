@@ -23,7 +23,10 @@ def _version_key(name: str):
 
 
 def list_versions(data_dir: Path, game: str, names: Optional[Dict[str, str]] = None) -> List[dict]:
-    """Versiones guardadas de `game` (id). `names` ({id de origen: nombre}) añade el nombre visible a cada origen."""
+    """Versiones guardadas de `game` (id). `names` ({id de origen: nombre}) añade el nombre visible a cada origen y,
+    si se pasa, marca `unknown: True` en los orígenes que ya no son un dispositivo de la config (borrado o con el nombre
+    antiguo; `hub` nunca lo es): se siguen pudiendo restaurar al hub."""
+    marks = names is not None
     names = names or {}
     base = Path(data_dir) / "versions" / game
     out = []
@@ -34,14 +37,15 @@ def list_versions(data_dir: Path, game: str, names: Optional[Dict[str, str]] = N
                 for s in sorted(d.iterdir()):
                     if s.is_dir():
                         fp = fingerprint(s)
-                        sources.append(
-                            {
-                                "source": s.name,
-                                "name": names.get(s.name, s.name),
-                                "files": fp.files,
-                                "mtime": _fmt(fp.mtime),
-                            }
-                        )
+                        item = {
+                            "source": s.name,
+                            "name": names.get(s.name, s.name),
+                            "files": fp.files,
+                            "mtime": _fmt(fp.mtime),
+                        }
+                        if marks and s.name != "hub" and s.name not in names:
+                            item["unknown"] = True
+                        sources.append(item)
                 out.append({"version": d.name, "sources": sources})
     return out
 

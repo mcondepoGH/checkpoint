@@ -7,10 +7,11 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from ..config.models import ConfigError, Device, normalize_path, pyd_body
-from ..core import bootstrap, runtime
+from ..core import bootstrap, runtime, settings
 from ..core.errors import describe_code
 from ..core.redact import redact
 from ..users import apikey
+from ..sync.cleanup import purge_device_metadata
 from ..sync.transport import TransportError, get_transport, local_folder_status
 
 api_log = logging.getLogger("checkpoint.api")  # DEBUG: detalle por endpoint (sin secretos)
@@ -133,3 +134,19 @@ def prune_device_keys(store, user: str) -> list:
     if gone:
         api_log.debug("API keys de dispositivo: borradas las de %s", ", ".join(gone))
     return gone
+
+
+def prune_removed_device_data(old_cfg, store) -> dict:
+    """Tras guardar o restaurar la config: limpia los METADATOS (baseline, staging, resoluciones) de los dispositivos
+    que estaban en `old_cfg` y ya no están. Nunca toca versiones ni el hub. Nunca lanza (como `prune_device_keys`)."""
+    try:
+        new = store.snapshot().cfg
+        if old_cfg is None or new is None:  # config inválida antes o después: no se toca nada
+            return {}
+        removed = sorted(set(old_cfg.devices) - set(new.devices))
+        if not removed:
+            return {}
+        return purge_device_metadata(settings.DATA_DIR, removed)
+    except Exception as e:
+        api_log.warning("limpieza de dispositivos borrados: no se pudo hacer (%s)", type(e).__name__)
+        return {}
