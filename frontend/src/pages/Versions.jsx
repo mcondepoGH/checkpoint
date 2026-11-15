@@ -12,7 +12,7 @@ import { watchLatest } from '#src/lib/versionsWatch.js';
 export function OrphansNotice({ count, onGoSettings }) {
   const { t } = useI18n();
   return (
-    <Alert variant="info" compact>
+    <Alert variant="info" compact className="orphans-notice">
       <span>{t('versions.orphans', { count })}</span>
       {onGoSettings && (
         <Button variant="ghost" onClick={onGoSettings}>

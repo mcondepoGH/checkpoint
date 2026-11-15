@@ -60,12 +60,12 @@ export function OrphanList({
   return (
     <section className="pairing orphans" aria-labelledby="orphans-title">
       {(items.length > 0 || trash.length > 0) && (
-        <>
+        <div className="orphans-head">
           <h4 id="orphans-title" className="pairing-title">
             {t('orphans.title')} <span className="pairing-count">{items.length}</span>
           </h4>
           <p className="muted pairing-intro">{t('orphans.intro', { days: ttlDays })}</p>
-        </>
+        </div>
       )}
       <div role="status" aria-live="polite">
         {notice && (
@@ -108,32 +108,34 @@ export function OrphanList({
       )}
       {confirming && (
         <Modal title={t('orphans.confirmTitle')} onClose={onCancel}>
-          <p>{t('orphans.confirmIntro', { count: chosen.length, size: fmtSize(totalSize(chosen), locale) })}</p>
-          <ul className="orphans-confirm-list">
-            {chosen.map((it) => (
-              <li key={it.id}>
-                {nameOf(t, it)} · {fmtSize(it.size, locale)}
-              </li>
-            ))}
-          </ul>
-          <p>{t('orphans.confirmKeep', { days: ttlDays })}</p>
-          {onlyCopy && (
-            <Alert variant="warn" compact>
-              {t('orphans.confirmOnlyCopy')}
-            </Alert>
-          )}
-          <Checkbox
-            label={t(onlyCopy ? 'orphans.ackOnlyCopy' : 'orphans.ack', { days: ttlDays })}
-            checked={ack}
-            onChange={(e) => onAck(e.target.checked)}
-          />
-          <div className="row pairing-actions">
-            <Button variant="primary" disabled={!ack || busy} onClick={onConfirm}>
-              {busy ? t('orphans.moving') : t('orphans.confirm')}
-            </Button>
-            <Button disabled={busy} onClick={onCancel}>
-              {t('common.cancel')}
-            </Button>
+          <div className="orphans-confirm">
+            <p>{t('orphans.confirmIntro', { count: chosen.length, size: fmtSize(totalSize(chosen), locale) })}</p>
+            <ul className="orphans-confirm-list">
+              {chosen.map((it) => (
+                <li key={it.id}>
+                  {nameOf(t, it)} · {fmtSize(it.size, locale)}
+                </li>
+              ))}
+            </ul>
+            <p>{t('orphans.confirmKeep', { days: ttlDays })}</p>
+            {onlyCopy && (
+              <Alert variant="warn" compact>
+                {t('orphans.confirmOnlyCopy')}
+              </Alert>
+            )}
+            <Checkbox
+              label={t(onlyCopy ? 'orphans.ackOnlyCopy' : 'orphans.ack', { days: ttlDays })}
+              checked={ack}
+              onChange={(e) => onAck(e.target.checked)}
+            />
+            <div className="row pairing-actions">
+              <Button variant="primary" disabled={!ack || busy} onClick={onConfirm}>
+                {busy ? t('orphans.moving') : t('orphans.confirm')}
+              </Button>
+              <Button disabled={busy} onClick={onCancel}>
+                {t('common.cancel')}
+              </Button>
+            </div>
           </div>
         </Modal>
       )}

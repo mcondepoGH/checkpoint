@@ -645,9 +645,42 @@ button.ab-chip {
   overflow-wrap: anywhere;
 }
 
-// Datos sin dispositivo ni juego: reutiliza `.pairing*` y el plegable de Steam; solo la lista del diálogo es propia.
-.orphans-confirm-list {
+// Datos sin dispositivo ni juego: reutiliza `.pairing*` y el plegable de Steam. Bloque de primer nivel: columna con el gap
+// estándar entre cabecera, aviso, lista, botón y papelera (sin márgenes verticales propios; el aviso vacío no ocupa hueco).
+.orphans {
+  display: flex;
+  flex-direction: column;
+  gap: v.$gap;
+  min-width: 0;
+  > [role='status']:empty {
+    display: none;
+  }
+}
+.orphans-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  .pairing-title,
+  .pairing-intro {
+    margin: 0;
+  }
+}
+// Diálogo de confirmación: mismo gap que el resto; los párrafos y la lista pierden su margen para no sumarlo.
+.orphans-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  > p {
+    margin: 0;
+  }
+}
+// Aviso de Versiones: el aviso compacto no lleva margen; este es el estándar de `.alert`.
+.alert.orphans-notice {
   margin: 0.5rem 0;
+}
+.orphans-confirm-list {
+  margin: 0;
   padding-left: 1.25rem;
   overflow-wrap: anywhere;
 }
