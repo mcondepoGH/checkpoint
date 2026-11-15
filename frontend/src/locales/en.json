@@ -714,6 +714,17 @@
     "deck": {
       "plugin_missing": "the Steam Deck plugin is not included in this hub"
     },
+    "orphans": {
+      "body_invalid": "invalid request: give the items with their id and token",
+      "unknown": "it is no longer data without a device or game (or it does not exist): nothing was moved",
+      "changed": "it changed since it was listed: review the list again",
+      "busy": "an operation is running on that game: try again when it finishes",
+      "unsafe": "unsafe path: nothing was moved",
+      "move_failed": "could not move it to the trash",
+      "trash_unknown": "that trash entry no longer exists or is not valid",
+      "restore_conflict": "cannot restore: there is already data at the destination (nothing is overwritten)",
+      "restore_failed": "could not restore from the trash"
+    },
     "pairing": {
       "name_invalid": "invalid device name: {cause}",
       "os_invalid": "invalid operating system (options: {options})",

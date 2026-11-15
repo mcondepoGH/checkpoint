@@ -9,6 +9,7 @@ from ..core import updates
 from ..core.errors import ApiError
 from ..sync.scheduler import Scheduler
 from .games import resolve_game_id
+from . import orphans
 from .hooks import HookService
 from .pairing import PairingService
 from .runs import RunRegistry
@@ -30,6 +31,10 @@ class AppContext:
         self.scheduler.maintenance.append(self.pairing.purge)  # caducadas
         self.steam = SteamService(self.store, auth.clock)  # sugerencias de appid de Steam (memoria) y descartes (disco)
         self.scheduler.maintenance.append(self.steam.purge)  # sugerencias caducadas y descartes huérfanos
+        self.scheduler.maintenance.append(self.purge_trash)  # papelera de datos sin dispositivo ni juego: lo caducado
+
+    def purge_trash(self) -> int:
+        return orphans.purge_expired()
 
     @property
     def watcher(self):

@@ -180,3 +180,10 @@ HOOK_STAGING_TTL_S = (
 HOOK_STAGING_MAX_BYTES = int(
     _ranged_mb_env("HOOK_STAGING_MAX_MB", "2048", HOOK_STAGING_MAX_MB_MIN, HOOK_STAGING_MAX_MB_MAX) * 1024 * 1024
 )
+
+
+# Papelera de datos sin dispositivo ni juego (`data/trash/`): días que se conserva lo que se movió desde la pantalla de
+# limpieza antes de que el mantenimiento programado lo borre (30 por defecto; de 1 a 3650). Fuera de rango o no numérico
+# = error de arranque claro.
+TRASH_TTL_DAYS_MIN, TRASH_TTL_DAYS_MAX = 1, 3650
+TRASH_TTL_DAYS = int(_ranged_mb_env("TRASH_TTL_DAYS", "30", TRASH_TTL_DAYS_MIN, TRASH_TTL_DAYS_MAX, "días"))

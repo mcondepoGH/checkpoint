@@ -15,7 +15,21 @@ from .api import docs
 from .api.auth import Auth
 from .api.deps import require
 from .api.middleware import RequestDebugLog
-from .api.routers import config, deck, devices, games, hook, pairing, profile, session, spa, steam, sync, versions
+from .api.routers import (
+    config,
+    deck,
+    devices,
+    games,
+    hook,
+    orphans,
+    pairing,
+    profile,
+    session,
+    spa,
+    steam,
+    sync,
+    versions,
+)
 from .api.routers import scheduler as scheduler_router
 from .api.routers import updates as updates_router
 from .core import bootstrap, updates
@@ -76,6 +90,7 @@ def create_app(auth: Optional[Auth] = None) -> FastAPI:
         updates_router.router,
         sync.router,
         versions.router,
+        orphans.router,
         hook.router,
         games.router,
         deck.router,

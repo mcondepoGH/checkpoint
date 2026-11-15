@@ -714,6 +714,17 @@
     "deck": {
       "plugin_missing": "el plugin de Steam Deck no está incluido en este hub"
     },
+    "orphans": {
+      "body_invalid": "petición no válida: indica los elementos con su id y su token",
+      "unknown": "ya no es un dato sin dispositivo ni juego (o no existe): no se ha movido",
+      "changed": "ha cambiado desde que se listó: vuelve a revisar la lista",
+      "busy": "hay una operación en curso en ese juego: inténtalo de nuevo cuando acabe",
+      "unsafe": "ruta no segura: no se ha movido",
+      "move_failed": "no se pudo mover a la papelera",
+      "trash_unknown": "esa entrada de la papelera ya no existe o no es válida",
+      "restore_conflict": "no se puede restaurar: ya hay datos en el destino (no se pisa nada)",
+      "restore_failed": "no se pudo restaurar desde la papelera"
+    },
     "pairing": {
       "name_invalid": "nombre de dispositivo no válido: {cause}",
       "os_invalid": "sistema operativo no válido (opciones: {options})",
