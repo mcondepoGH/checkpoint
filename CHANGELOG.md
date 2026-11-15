@@ -1,17 +1,10 @@
 # Cambios
 
-## Sin publicar
-
-### Cambios
-
-- Datos sin dispositivo asignado: nueva acción «Reubicar…» en los juegos fuera de la configuración. Se elige un juego existente y se confirma en un diálogo (origen, destino, versiones y tamaño). El destino conserva sus partidas actuales; las versiones del huérfano y su hub actual se suman a su historial como versiones (si una fecha ya existe en el destino, llega con sufijo `-n`; nunca se pisa nada) y el resto va a la papelera (30 días). Si un movimiento falla, se deshace. Nuevo `POST /api/orphans/relocate` (`{id, token, target}`) y `games` en `GET /api/orphans`; errores `err.orphans.target_unknown`, `not_game` y `relocate_failed`.
-- Documentación del plugin: abrir y cerrar un atajo de Steam sí sincroniza (el `appid` de `shortcuts.vdf` es el `unAppID` del evento; comprobado en una Deck real con un juego de Lutris). Se corrigen el README y el CHANGELOG del plugin, que decían lo contrario.
-
 ## 2.1.0 (2026-11-15)
 
 ### Cambios
 
-- Datos sin dispositivo asignado: Configuración > General lista lo que el hub guarda de dispositivos y juegos borrados (versiones de un origen desconocido y juegos fuera de la configuración, con tamaño, versiones y fechas, y «única copia» si el hub es la única) y permite moverlo a una papelera (`data/trash/`, con `manifest.json`) con doble confirmación; la papelera se vacía sola a los 30 días (`CHECKPOINT_TRASH_TTL_DAYS`) y se puede restaurar desde la misma pantalla. Versiones avisa, con enlace, si hay datos así. API: `GET /api/orphans`, `POST /api/orphans/trash`, `GET /api/orphans/trash` y `POST /api/orphans/trash/restore`; errores `err.orphans.*`.
+- Datos sin dispositivo asignado: Configuración > General lista lo que el hub guarda de dispositivos y juegos borrados (versiones de un origen desconocido y juegos fuera de la configuración, con tamaño, versiones y fechas, y «única copia» si el hub es la única) y permite moverlo a una papelera (`data/trash/`, con `manifest.json`) con doble confirmación; la papelera se vacía sola a los 30 días (`CHECKPOINT_TRASH_TTL_DAYS`) y se puede restaurar desde la misma pantalla. Versiones avisa, con enlace, si hay datos así. API: `GET /api/orphans`, `POST /api/orphans/trash`, `GET /api/orphans/trash` y `POST /api/orphans/trash/restore`; errores `err.orphans.*`. Los juegos fuera de la configuración también se pueden reubicar en un juego existente («Reubicar…»: se elige el destino y se confirma con origen, destino, versiones y tamaño; el destino conserva sus partidas actuales, las versiones del huérfano y su hub actual se suman a su historial —si la fecha ya existe llega con sufijo `-n`, nunca se pisa nada— y el resto va a la papelera; si un movimiento falla, se deshace): `POST /api/orphans/relocate` (`{id, token, target}`), `games` en `GET /api/orphans` y errores `err.orphans.target_unknown`, `not_game` y `relocate_failed`.
 - Versiones de un dispositivo que ya no existe (o con un nombre antiguo): salen como «dispositivo desconocido (id)» (`unknown: true` en `GET /api/versions/{juego}`) y se pueden restaurar al hub; antes la restauración daba `err.sync.version_invalid`.
 - Al guardar o restaurar la configuración sin un dispositivo se limpian solo sus metadatos (línea base, staging y resoluciones); nunca las versiones ni el hub.
 - Configuración: la tarjeta «Plugin de Steam Deck» pasa de Biblioteca a la pestaña Lanzadores (abajo del todo) y deja de mostrar la suma SHA-256 y la explicación de `sha256sum`; la suma sigue en `GET /api/deck/plugin.sha256` e `info`.
