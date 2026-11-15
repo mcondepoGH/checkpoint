@@ -5,7 +5,7 @@ import logging
 from ..config.models import Config
 from ..core import settings
 from ..core.errors import ApiError, describe_code
-from ..sync.engine import SyncAbort, count_versions, list_versions, restore_version
+from ..sync.engine import SyncAbort, count_versions, current_state, latest_version, list_versions, restore_version
 
 api_log = logging.getLogger("checkpoint.api")  # DEBUG: detalle por endpoint (sin secretos)
 
@@ -22,6 +22,8 @@ def limit_of(cfg: Config, game: str) -> dict:
         "max": cfg.versions_limit(game),
         "count": count_versions(settings.DATA_DIR, game),
         "override": cfg.games[game].keep_versions is not None,
+        "latest": latest_version(settings.DATA_DIR, game),  # cambia con cada versión nueva aunque `count` no (rotación)
+        "current": current_state(settings.DATA_DIR, game),  # estado actual del hub (solo stat) o None si no hay datos
     }
     api_log.debug("versions limit: juego=%s %s", game, out)
     return out

@@ -159,8 +159,61 @@ def test_versions_limit_endpoint(client, tmp_path):
     (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg))
     (tmp_path / "data" / "versions" / "g" / "2026-01-01_100000" / "a").mkdir(parents=True)
     r = client.get("/api/versions/g/limit")
-    assert r.status_code == 200 and r.json() == {"max": 7, "count": 1, "override": False}
+    assert r.status_code == 200 and r.json() == {
+        "max": 7,
+        "count": 1,
+        "override": False,
+        "latest": "2026-01-01_100000",
+        "current": None,  # el hub no tiene datos de este juego
+    }
+    # `latest` es la más reciente por orden cronológico (con sufijo -n numérico), aunque count no cambie al rotar
+    for v in ("2026-01-01_100000-2", "2026-01-01_100000-10", "2025-12-31_235959", "no-version"):
+        (tmp_path / "data" / "versions" / "g" / v / "a").mkdir(parents=True)
+    assert client.get("/api/versions/g/limit").json()["latest"] == "2026-01-01_100000-10"
     assert client.get("/api/versions/nope/limit").status_code == 404
+
+
+def test_versions_limit_latest_is_null_without_versions(client, tmp_path):
+    login(client)
+    cfg = dict(CFG, games={"g": {"name": "Juego g", "devices": ["a", "b"], "paths": {"a": "/x/y", "b": "C:/z"}}})
+    import yaml
+
+    (tmp_path / "config").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg))
+    assert client.get("/api/versions/g/limit").json()["latest"] is None
+
+
+def test_versions_limit_current_is_the_hub_state(client, tmp_path):
+    """`current` = estado actual del hub (solo stat, sin hashes): id barato, fecha, ficheros y tamaño; None si está vacío."""
+    import os
+    import yaml
+
+    login(client)
+    cfg = dict(CFG, games={"g": {"name": "Juego g", "devices": ["a", "b"], "paths": {"a": "/x/y", "b": "C:/z"}}})
+    (tmp_path / "config").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg))
+    hub = tmp_path / "data" / "hub" / "g"
+    hub.mkdir(parents=True)
+    assert client.get("/api/versions/g/limit").json()["current"] is None  # carpeta vacía = sin datos
+    (hub / "sub").mkdir()
+    (hub / "a.sav").write_bytes(b"12345")
+    (hub / "sub" / "b.sav").write_bytes(b"678")
+    os.utime(hub / "a.sav", (1_700_000_000, 1_700_000_000))
+    os.utime(hub / "sub" / "b.sav", (1_700_000_100, 1_700_000_100))
+    cur = client.get("/api/versions/g/limit").json()["current"]
+    assert set(cur) == {"id", "mtime", "files", "size"}
+    assert cur["files"] == 2 and cur["size"] == 8 and cur["mtime"] == _fmt_local(1_700_000_100)
+    first_id = cur["id"]
+    os.utime(hub / "a.sav", (1_700_000_500, 1_700_000_500))  # cambia el contenido del hub: cambia el id
+    assert client.get("/api/versions/g/limit").json()["current"]["id"] != first_id
+    # el listado de versiones sigue siendo una lista (compatibilidad): `current` no va ahí
+    assert client.get("/api/versions/g").json() == []
+
+
+def _fmt_local(ts):
+    from datetime import datetime
+
+    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def test_spa_cache_headers(client, tmp_path):
@@ -173,3 +226,31 @@ def test_spa_cache_headers(client, tmp_path):
     r = client.get("/assets/app-abc123.js")
     assert "immutable" in r.headers["cache-control"] and "max-age=31536000" in r.headers["cache-control"]
     assert client.get("/favicon.svg").headers["cache-control"] == "no-cache"
+
+
+def test_deck_plugin_info_exposes_checkpoint_protocol(client, tmp_path, monkeypatch):
+    """`info` del zip lleva `protocol` (el `checkpointProtocol` del package.json del plugin) o null si no lo declara."""
+    import io
+    import json
+    import zipfile
+
+    from app.services import deckplugin
+
+    def zip_with(pkg):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("Checkpoint/package.json", json.dumps(pkg))
+        return buf.getvalue()
+
+    z = tmp_path / "deck" / "Checkpoint.zip"
+    z.parent.mkdir()
+    monkeypatch.setattr(settings, "DECK_ZIP", z)
+    z.write_bytes(zip_with({"version": "0.1.0", "checkpointProtocol": 1}))
+    j = client.get("/api/deck/plugin/info").json()
+    assert j["version"] == "0.1.0" and j["protocol"] == 1
+    deckplugin._cache.clear()
+    z.write_bytes(zip_with({"version": "0.1.0", "checkpointProtocol": "x"}))
+    assert client.get("/api/deck/plugin/info").json()["protocol"] is None
+    deckplugin._cache.clear()
+    z.write_bytes(zip_with({"version": "0.1.0"}))
+    assert client.get("/api/deck/plugin/info").json()["protocol"] is None

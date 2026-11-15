@@ -8,7 +8,7 @@ import shutil
 import threading
 import time
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import AsyncIterator, Callable, List, Optional, Tuple, Union
 
@@ -21,6 +21,7 @@ from ..core.errors import ApiError
 from ..sync import engine as sync_engine
 from ..sync import locking
 from ..sync.baseline import load_baseline, save_baseline
+from ..sync import resolution
 from ..sync.decide import decide
 from ..sync.engine import finish_hub_update, write_winner_to_hub
 from ..sync.fingerprint import (
@@ -40,6 +41,41 @@ from .runs import RunRegistry, game_busy
 
 api_log = logging.getLogger("checkpoint.api")  # DEBUG: detalle por endpoint (sin secretos)
 hook_log = logging.getLogger("checkpoint.hook")
+
+# Resultado de la sync local del plugin (cuerpo opcional de `opened`/`closed` de un dispositivo http). Lista cerrada: sin
+# rutas ni nombres de fichero ni texto libre. `code` fuera de la lista se descarta (el estado se conserva).
+SYNC_STATES = ("uploaded", "downloaded", "up_to_date", "missing_dir", "no_path", "conflict", "error")
+SYNC_CODES = frozenset(
+    "bad_manifest bad_response busy cancelled commit_rejected connection empty_dir file_changed file_too_large "
+    "game_running hub_busy hub_changed hub_empty hub_error inconsistent io_error no_space path_forbidden "
+    "rate_limited set_mismatch staging_full unauthorized unknown_game upload_incomplete verify_failed".split()
+)
+SYNC_RESULT_MAX_BYTES = 1024  # cuerpo máx. de `opened`/`closed` (más = 400 `err.hook.result_invalid`)
+SYNC_CODE_PREFIX = "hook.sync."  # code del historial: `hook.sync.<estado>` (la UI lo traduce)
+_SYNC_ENTRY_RESULT = {"conflict": "conflict", "error": "error", "no_path": "skipped", "missing_dir": "skipped"}
+
+
+def _iso(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def parse_sync_result(body) -> Optional[dict]:
+    """`{"result": {"state", "code"?}}` -> `{"state", "code"?}`. Sin `result` (cuerpo vacío, no JSON o desconocido) =
+    None (comportamiento de siempre). Con `result` mal formado, 400 `err.hook.result_invalid`: estado fuera de la lista
+    cerrada, campos no previstos o tipos incorrectos."""
+    if not isinstance(body, dict) or "result" not in body:
+        return None
+    r = body["result"]
+    if not isinstance(r, dict) or set(r) - {"state", "code"} or r.get("state") not in SYNC_STATES:
+        raise ApiError(400, "err.hook.result_invalid")
+    out = {"state": r["state"]}
+    if "code" in r:
+        if not (r["code"] is None or isinstance(r["code"], str)):
+            raise ApiError(400, "err.hook.result_invalid")
+        if r["code"] in SYNC_CODES:
+            out["code"] = r["code"]
+    return out
+
 
 MANIFEST_MAX_FILES = 50_000  # ficheros máx. de un manifiesto (más = 422 `err.hook.manifest_too_large`)
 
@@ -104,6 +140,8 @@ class HookService:
     def __init__(self, scheduler, runs: RunRegistry, auto_cfg: Callable[[], Config]):
         self.scheduler, self.runs, self.auto_cfg = scheduler, runs, auto_cfg
         self.watcher = Watcher(self.watch_probe, self.close_checkpoint, note=self.watch_note)
+        self._playing: dict = {}  # (juego, dispositivo http) -> {since, expires, result?}: en memoria, caduca solo
+        self._playing_lock = threading.Lock()
         self._last_purge = 0.0  # time.time() de la última purga del staging (para la purga oportunista de `upload`)
 
     # ---- ejecución del checkpoint del hook ----
@@ -197,8 +235,9 @@ class HookService:
         code: Optional[str],
         params: Optional[dict] = None,
         name: Optional[str] = None,
+        trigger: str = "hook_closed",
     ):
-        """Deja en el historial (trigger `hook_closed`) por qué NO hubo checkpoint de cierre: `skipped` (vigilancia
+        """Deja en el historial (trigger `hook_closed`; `hook_opened` en el aviso de apertura de un http) por qué NO hubo checkpoint de cierre: `skipped` (vigilancia
         descartada u omitido sin reintento) o `error` (el checkpoint falló). Solo código estable y parámetros no
         sensibles; solo registra, no cambia el comportamiento. El registro nunca rompe el vigilante."""
         scheduler = self.scheduler
@@ -211,20 +250,22 @@ class HookService:
                 d["name"] = name
             history.append(
                 history.make_entry(
-                    scheduler.clock(), 0.0, "hook_closed", result, {game: d}, "", code, params or {}, device=device
+                    scheduler.clock(), 0.0, trigger, result, {game: d}, "", code, params or {}, device=device
                 ),
                 now=scheduler.clock(),
             )
             saved = True
         except Exception as e:
             hook_log.warning(
-                "hook hook_closed juego=%s dispositivo=%s: no se pudo guardar en el historial (%s)",
+                "hook %s juego=%s dispositivo=%s: no se pudo guardar en el historial (%s)",
+                trigger,
                 game,
                 device,
                 type(e).__name__,
             )
         hook_log.debug(
-            "hook hook_closed juego=%s dispositivo=%s: entrada de historial resultado=%s code=%s historial_guardado=%s",
+            "hook %s juego=%s dispositivo=%s: entrada de historial resultado=%s code=%s historial_guardado=%s",
+            trigger,
             name or game,
             device,
             result,
@@ -374,8 +415,15 @@ class HookService:
             out.update(action="download" if d["winner"] == "hub" else "upload")  # gana el hub = baja; él = sube
             if out["action"] == "download" and hub_entries is not None:
                 out["hub_manifest"] = hub_entries
+            await run_in_threadpool(self._forget_conflict, game, dev)  # ya no hay conflicto: nada pendiente
         else:
-            out.update(action="conflict", reason=d["reason"])
+            forced, reason = self._conflict_step(game, dev, d["reason"], hub_fp.hash, dev_fp.hash)
+            if forced:  # resolución vigente y huellas como cuando se pidió: se aplica en vez de dar el conflicto
+                out.update(action="download" if forced == "hub" else "upload", reason="resolution", resolution=forced)
+                if forced == "hub" and hub_entries is not None:
+                    out["hub_manifest"] = hub_entries
+            else:
+                out.update(action="conflict", reason=reason)
         api_log.debug(
             "hook fingerprint: juego=%s dispositivo=%s hub=%d ficheros dispositivo=%d ficheros acción=%s",
             g.name,
@@ -393,10 +441,125 @@ class HookService:
         with self._lock(game):
             if fingerprint(data_dir / "hub" / game).hash != digest:
                 return  # un commit cambió el hub tras calcular `digest`: no se fija nada, decidirá el siguiente fingerprint
+            resolution.clear(data_dir, game, dev)  # iguales: el conflicto (si lo había) y su resolución ya no valen
             raw = load_baseline(data_dir, game)
             if raw.get(dev) == digest and raw.get("hub") == digest:
                 return
             save_baseline(data_dir, game, {dev: digest, "hub": digest})
+
+    # ---- conflictos de datos de dispositivos http y su resolución pendiente ----
+    def _forget_conflict(self, game: str, dev: str) -> None:
+        """Borra el conflicto y la resolución de `dev` si los hay (con el lock del juego solo si hay algo que borrar)."""
+        data_dir = Path(settings.DATA_DIR)
+        cur = resolution.load(data_dir, game)
+        if dev in cur["conflicts"] or dev in cur["resolutions"]:
+            with self._lock(game):
+                resolution.clear(data_dir, game, dev)
+
+    def _conflict_step(self, game: str, dev: str, reason: str, hub_hash, dev_hash) -> Tuple[Optional[str], str]:
+        """`fingerprint` dio conflicto. (ganador forzado | None, motivo a devolver). Con resolución vigente y huellas
+        iguales a su `expect`: (`hub`|`device`, ...) y no escribe nada. Si no: descarta la resolución obsoleta o
+        caducada (`resolution_stale` solo si estaba vigente) y registra el conflicto con las huellas de ahora. Lock del juego."""
+        data_dir, now = Path(settings.DATA_DIR), self._now()
+        res = resolution.load(data_dir, game)["resolutions"].get(dev)
+        live = resolution.valid_resolution(res, now, settings.HOOK_RESOLUTION_TTL)
+        if live and res["expect"] == {"hub": hub_hash, "device": dev_hash}:
+            return res["winner"], reason
+        if live:
+            reason = "resolution_stale"
+        with self._lock(game):
+            if res is not None:
+                resolution.clear(data_dir, game, dev, conflict=False)
+            resolution.record_conflict(data_dir, game, dev, reason, hub_hash, dev_hash, now)
+        return None, reason
+
+    def pending_resolutions(self, cfg: Config) -> dict:
+        """Para la web: {conflicts: [{game, device, reason, hub, device_hash, at}], resolutions: [{game, device,
+        winner, by, at, expires}]} de juegos activos y dispositivos http suyos. Resoluciones caducadas, no. Solo ids
+        (hashes) y horas: sin rutas ni nombres de fichero."""
+        data_dir, now = Path(settings.DATA_DIR), self._now()
+        conflicts, resolutions = [], []
+        for game, g in sorted(cfg.games.items()):
+            if not g.enabled:
+                continue
+            cur = resolution.load(data_dir, game)
+            for dev in sorted(g.devices):
+                d = cfg.devices.get(dev)
+                if d is None or not d.http:
+                    continue
+                c, r = cur["conflicts"].get(dev), cur["resolutions"].get(dev)
+                if c:
+                    conflicts.append(
+                        {
+                            "game": game,
+                            "device": dev,
+                            "reason": c["reason"],
+                            "hub": c["hub"],
+                            "device_hash": c["device"],
+                            "at": c["at"],
+                        }
+                    )
+                if r and resolution.valid_resolution(r, now, settings.HOOK_RESOLUTION_TTL):
+                    resolutions.append(
+                        {
+                            "game": game,
+                            "device": dev,
+                            "winner": r["winner"],
+                            "by": r["by"],
+                            "at": r["at"],
+                            "expires": resolution.expires(r, settings.HOOK_RESOLUTION_TTL),
+                        }
+                    )
+        return {"conflicts": conflicts, "resolutions": resolutions}
+
+    @staticmethod
+    def parse_resolution_body(body: dict) -> Tuple[Optional[str], str, dict]:
+        """`{device?, winner, expect: {hub, device}}` -> (referencia al dispositivo | None, winner, expect). Lista
+        cerrada de `winner`, `expect` con exactamente `hub` y `device` (sha256 hexadecimal en minúsculas o `null`) y
+        ningún campo más: si no, 422 `err.resolution.invalid`."""
+        bad = ApiError(422, "err.resolution.invalid")
+        ex = body.get("expect")
+        dev = body.get("device")
+        if set(body) - {"device", "winner", "expect"} or body.get("winner") not in resolution.WINNERS:
+            raise bad
+        if not isinstance(ex, dict) or set(ex) != {"hub", "device"}:
+            raise bad
+        if any(not (v is None or (isinstance(v, str) and SHA256_RE.match(v))) for v in ex.values()):
+            raise bad
+        if dev is not None and not (isinstance(dev, str) and 0 < len(dev) <= 128):
+            raise bad
+        return dev, body["winner"], {"hub": ex["hub"], "device": ex["device"]}
+
+    def set_resolution(self, cfg: Config, game: str, device: Optional[str], winner: str, expect: dict, by: str) -> dict:
+        """Deja la resolución pendiente de (juego, dispositivo http): exige un conflicto registrado cuyas huellas sean
+        `expect` (409 `err.resolution.no_conflict` / `err.resolution.stale`) y que el lado ganador tenga datos (409
+        `err.resolution.side_empty`). Con el lock del juego. Sustituye a la que hubiera."""
+        g, dev = self._http_guard(cfg, game, device)
+        data_dir = Path(settings.DATA_DIR)
+        with self._lock(game):
+            c = resolution.load(data_dir, game)["conflicts"].get(dev)
+            if c is None:
+                raise ApiError(409, "err.resolution.no_conflict")
+            if {"hub": c["hub"], "device": c["device"]} != expect:
+                raise ApiError(409, "err.resolution.stale")
+            if expect[winner] is None:
+                raise ApiError(409, "err.resolution.side_empty")
+            r = resolution.set_resolution(data_dir, game, dev, winner, expect, by, self._now())
+        api_log.debug("hook resolution: juego=%s dispositivo=%s gana=%s por=%s", g.name, dev, winner, by)
+        return {
+            "game": game,
+            "device": dev,
+            "winner": winner,
+            "by": by,
+            "expires": resolution.expires(r, settings.HOOK_RESOLUTION_TTL),
+        }
+
+    def cancel_resolution(self, cfg: Config, game: str, device: Optional[str]) -> dict:
+        """Cancela la resolución pendiente (el conflicto registrado se queda). `cancelled` = si había alguna."""
+        _g, dev = self._http_guard(cfg, game, device)
+        with self._lock(game):
+            had = resolution.clear(Path(settings.DATA_DIR), game, dev, conflict=False)
+        return {"game": game, "device": dev, "cancelled": had}
 
     # ---- subida y bajada de saves de dispositivos `http` ----
     def _http_guard(self, cfg: Config, game: str, device: Optional[str]) -> Tuple[object, str]:
@@ -608,11 +771,22 @@ class HookService:
             d = decide(fps, {k: raw[k] for k in fps if k in raw})
             if d["kind"] == "same":
                 finish_hub_update(data_dir, game, cfg.versions_limit(game), None, {dev: mfp.hash, "hub": mfp.hash})
+                resolution.clear(data_dir, game, dev)
                 hookfiles.clear_stage(data_dir, game, dev)
                 return {"game": game, "device": dev, "outcome": "unchanged", "hash": mfp.hash, **_counts(mfp)}
-            if d["kind"] == "conflict" or d["winner"] != dev:
-                reason = d["reason"] if d["kind"] == "conflict" else "hub"
-                raise ApiError(409, "err.hook.commit_rejected", reason=reason)
+            if d["kind"] == "conflict":
+                # Solo una resolución vigente «gana el dispositivo» cuyas huellas sean las de ahora lo desbloquea.
+                res = resolution.load(data_dir, game)["resolutions"].get(dev)
+                if resolution.valid_resolution(res, self._now(), settings.HOOK_RESOLUTION_TTL) and (
+                    res["winner"] == "device"
+                ):
+                    if res["expect"] != {"hub": hub_fp.hash, "device": mfp.hash}:
+                        resolution.clear(data_dir, game, dev, conflict=False)
+                        raise ApiError(409, "err.hook.commit_rejected", reason="resolution_stale")
+                else:
+                    raise ApiError(409, "err.hook.commit_rejected", reason=d["reason"])
+            elif d["winner"] != dev:
+                raise ApiError(409, "err.hook.commit_rejected", reason="hub")
             # Stage reservado durante verificación + escritura al hub: un PUT concurrente del mismo dispositivo
             # no puede cambiar `tree/` entre medias (409 `err.hook.upload_busy`). Siempre juego primero, luego stage.
             with hookfiles.stage_lock(stage):
@@ -625,11 +799,114 @@ class HookService:
                 hookfiles.apply_mtimes(tree, wanted)
                 version = write_winner_to_hub(data_dir, game, tree, {"hub": hub} if not hub_fp.empty else {})
                 finish_hub_update(data_dir, game, cfg.versions_limit(game), version, {dev: mfp.hash, "hub": mfp.hash})
+                resolution.clear(data_dir, game, dev)
                 hookfiles.clear_stage(data_dir, game, dev)
         return {"game": game, "device": dev, "outcome": "ok", "hash": mfp.hash, **_counts(mfp), "version": version}
 
+    # ---- «jugando ahora» de dispositivos http (en memoria) y resultado de su sync local ----
+    def record_sync(self, game: str, dev: str, result: Optional[dict], name: str, trigger: str) -> None:
+        """Entrada de historial de un aviso `opened`/`closed` de un http. Con resultado del plugin, queda como
+        `code` `hook.sync.<estado>` (+ `reason`, el motivo o `unknown`, si es un error); sin él, `ok` sin más."""
+        if not result:
+            return self.record_event(game, dev, "ok", None, name=name, trigger=trigger)
+        params = {"reason": result.get("code") or "unknown"} if result["state"] == "error" else {}
+        self.record_event(
+            game,
+            dev,
+            _SYNC_ENTRY_RESULT.get(result["state"], "ok"),
+            SYNC_CODE_PREFIX + result["state"],
+            params,
+            name,
+            trigger,
+        )
+
+    def _now(self) -> datetime:
+        return self.scheduler.clock()
+
+    def mark_playing(self, game: str, dev: str, result: Optional[dict]) -> datetime:
+        now = self._now()
+        expires = now + timedelta(seconds=settings.HOOK_PLAYING_TTL)
+        item = {"since": now, "expires": expires, **({"result": result} if result else {})}
+        with self._playing_lock:
+            self._playing[(game, dev)] = item
+        return expires
+
+    def clear_playing(self, game: str, dev: str) -> None:
+        with self._playing_lock:
+            self._playing.pop((game, dev), None)
+
+    def active_playing(self, cfg: Config) -> list:
+        """«Jugando ahora» de dispositivos http: [{game, device, since, expires, result?}]. Caducados, de juegos
+        borrados o desactivados y de dispositivos que ya no son http se descartan. Sin rutas ni claves."""
+        now = self._now()
+        with self._playing_lock:
+            for k in [k for k, v in self._playing.items() if v["expires"] <= now]:
+                del self._playing[k]
+            items = sorted(self._playing.items())
+        out = []
+        for (game, dev), v in items:
+            g, d = cfg.games.get(game), cfg.devices.get(dev)
+            if g is None or not g.enabled or d is None or not d.http or dev not in g.devices:
+                continue
+            out.append(
+                {
+                    "game": game,
+                    "device": dev,
+                    "since": _iso(v["since"]),
+                    "expires": _iso(v["expires"]),
+                    **({"result": v["result"]} if "result" in v else {}),
+                }
+            )
+        return out
+
+    def last_sync_results(self, cfg: Config) -> list:
+        """Último resultado de sync por (juego, dispositivo http), del historial (`hook_opened`/`hook_closed` con
+        resultado): [{game, device, at, trigger, state, code?}]."""
+        seen, out = set(), []
+        for e in history.read():  # más reciente primero
+            if e.get("trigger") not in ("hook_opened", "hook_closed") or not e.get("device"):
+                continue
+            for game, d in e["games"].items():
+                c = d.get("code") if isinstance(d, dict) else None
+                key = (game, e["device"])
+                if key in seen or not (isinstance(c, str) and c.startswith(SYNC_CODE_PREFIX)):
+                    continue
+                dev = cfg.devices.get(e["device"])
+                if game not in cfg.games or dev is None or not dev.http:
+                    continue
+                seen.add(key)
+                reason = (d.get("params") or {}).get("reason")
+                out.append(
+                    {
+                        "game": game,
+                        "device": e["device"],
+                        "at": e["started"],
+                        "trigger": e["trigger"],
+                        "state": c[len(SYNC_CODE_PREFIX) :],
+                        **({"code": reason} if isinstance(reason, str) else {}),
+                    }
+                )
+        return sorted(out, key=lambda x: (x["game"], x["device"]))
+
+    # ---- `POST /api/hook/{game}/opened` con key de dispositivo ----
+    def opened_device(self, cfg: Config, game: str, device: Optional[str], result: Optional[dict] = None) -> dict:
+        """Aviso «voy a abrir el juego» de un dispositivo `http` (ya sincronizó él). NO sincroniza ni vigila: marca
+        «jugando» hasta su `closed` o hasta `HOOK_PLAYING_TTL` y deja `hook_opened` en el historial."""
+        g = cfg.games[game]
+        dev = self.resolve_device(cfg, g, device, http=True)
+        out = {"game": game, "device": dev, "recorded": True}
+        if not g.enabled:
+            api_log.debug("hook opened(http): juego=%s dispositivo=%s desactivado, se omite", g.name, dev)
+            code = "err.sync.game_disabled"
+            self.record_event(game, dev, "skipped", code, name=g.name, trigger="hook_opened")
+            return {**out, "outcome": "skipped", "code": code, "params": {}}
+        expires = self.mark_playing(game, dev, result)
+        self.record_sync(game, dev, result, g.name, "hook_opened")
+        api_log.debug("hook opened(http): juego=%s dispositivo=%s jugando hasta %s", g.name, dev, expires)
+        return {**out, "outcome": "ok", "playing": True, "expires": _iso(expires)}
+
     # ---- `POST /api/hook/{game}/closed` ----
-    def closed(self, cfg: Config, game: str, device: Optional[str]) -> dict:
+    def closed(self, cfg: Config, game: str, device: Optional[str], result: Optional[dict] = None) -> dict:
         """Aviso «ya se cerró el juego» de un dispositivo `http` (el hub no puede sondear su proceso). Solo registra el
         cierre en el historial (`hook_closed`): no hay pull ni push ni sync clásica; el dispositivo hará después
         `fingerprint` y subirá o bajará por su cuenta. Juego desactivado: 200 `outcome: skipped` (queda `skipped`
@@ -637,6 +914,7 @@ class HookService:
         es `http` es 400 `err.hook.device_not_http` (a esos los vigila el hub)."""
         g = cfg.games[game]
         dev = self.resolve_device(cfg, g, device, http=True)
+        self.clear_playing(game, dev)  # cierre = ya no juega, pase lo que pase con el resto
         out = {"game": game, "device": dev, "recorded": True}
         if not g.enabled:
             api_log.debug("hook closed: juego=%s dispositivo=%s desactivado, se omite", g.name, dev)
@@ -647,7 +925,7 @@ class HookService:
             api_log.debug("hook closed: juego=%s dispositivo=%s ejecución en curso (409)", g.name, dev)
             self.record_event(game, dev, "skipped", "err.hook.busy", name=g.name)
             raise ApiError(409, "err.main.run_in_progress")
-        self.record_event(game, dev, "ok", None, name=g.name)
+        self.record_sync(game, dev, result, g.name, "hook_closed")
         api_log.debug("hook closed: juego=%s dispositivo=%s cierre registrado", g.name, dev)
         return {**out, "outcome": "ok"}
 

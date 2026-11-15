@@ -162,12 +162,15 @@ def test_non_same_writes_nothing(client):
     for hub, dev in (("base", "nuevo"), ("nuevo", "base"), ("hub nuevo", "dev nuevo")):  # upload, download, conflict
         e.write_hub(hub)
         e.baseline()
-        before = tree(e.tmp / "data")
+        quiet = lambda: [t for t in tree(e.tmp / "data") if not t.startswith(("resolutions", "locks"))]  # noqa: E731
+        before = quiet()
         bl = load_baseline(e.data, "g1")
         mtime = (e.hub / "s.sav").stat().st_mtime
         assert fp(client, [entry("s.sav", dev)]).status_code == 200
-        assert tree(e.tmp / "data") == before and (e.hub / "s.sav").stat().st_mtime == mtime
+        # única escritura nueva: el registro del conflicto (`resolutions/`); hub, línea base y versiones, intactos
+        assert quiet() == before and (e.hub / "s.sav").stat().st_mtime == mtime
         assert load_baseline(e.data, "g1") == bl
+        assert (e.data / "resolutions" / "g1.json").exists() == (hub == "hub nuevo")
 
 
 def test_same_writes_device_baseline(client):

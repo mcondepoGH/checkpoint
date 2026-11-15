@@ -12,6 +12,7 @@ from .games import resolve_game_id
 from .hooks import HookService
 from .pairing import PairingService
 from .runs import RunRegistry
+from .steam import SteamService
 
 
 class AppContext:
@@ -27,6 +28,8 @@ class AppContext:
             self.store, self.cfg, auth.user, auth.clock
         )  # solicitudes de vinculación (memoria)
         self.scheduler.maintenance.append(self.pairing.purge)  # caducadas
+        self.steam = SteamService(self.store, auth.clock)  # sugerencias de appid de Steam (memoria) y descartes (disco)
+        self.scheduler.maintenance.append(self.steam.purge)  # sugerencias caducadas y descartes huérfanos
 
     @property
     def watcher(self):

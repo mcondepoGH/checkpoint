@@ -7,6 +7,12 @@ from pathlib import Path
 from .runtime import platform_name, running_in_docker
 
 SSH_TIMEOUT = 8  # s de conexión SSH
+HOOK_PLAYING_TTL = (
+    12 * 3600
+)  # s que un «jugando» de un dispositivo http sigue visible sin su `closed` (el plugin olvida un «abierto» a las 12 h)
+HOOK_RESOLUTION_TTL = (
+    24 * 3600
+)  # s que una resolución de conflicto pendiente (http) sigue vigente si el dispositivo no la aplica
 HOOK_WAIT = 55  # s máx. que `POST /api/hook/{game}/opened` espera a la sync (el cliente suele usar curl -m 60)
 
 
@@ -64,6 +70,17 @@ DATA_DIR = Path(_DATA)
 SSH_KEY = _KEY
 KNOWN_HOSTS = _KNOWN
 STATIC_DIR = Path(_STATIC)
+
+
+def _deck_zip_default() -> Path:
+    """Zip del plugin de Steam Deck. Docker: /app/deck/Checkpoint.zip (lo construye el Dockerfile). Nativo: el que deja
+    `pnpm run zip` en checkpoint-deck/out/ del repositorio (si no existe, la descarga responde 404)."""
+    if running_in_docker():
+        return Path("/app/deck/Checkpoint.zip")
+    return Path(__file__).resolve().parents[3] / "checkpoint-deck" / "out" / "Checkpoint.zip"
+
+
+DECK_ZIP = _deck_zip_default()
 
 
 def _float_env(suffix, default):

@@ -19,6 +19,7 @@ from .examples import (
     R409,
     R422,
     R429,
+    RESOLUTION,
     WATCHES,
     error_response,
 )
@@ -39,6 +40,21 @@ from .pairing import (
     SECURITY_PAIRING,
     SECURITY_SESSION,
 )
+from .steam import (
+    STEAM_ACCEPT,
+    STEAM_DISMISS,
+    STEAM_DISMISSED,
+    STEAM_FORGET,
+    STEAM_GAME_CREATE,
+    STEAM_GAME_ENABLED,
+    STEAM_LIBRARY,
+    STEAM_PREFIX,
+    STEAM_SESSION_TAG,
+    STEAM_SESSION_TAG_DESCRIPTION,
+    STEAM_SUGGESTIONS,
+    STEAM_TAG,
+    STEAM_TAG_DESCRIPTION,
+)
 from .install import (
     API_PREFIX,
     GAMES_PATH,
@@ -51,7 +67,6 @@ from .install import (
     DOCS_URL,
     OPENAPI_URL,
     SECURITY,
-    SECURITY_DEVICE,
     KEY_KINDS,
     TAG,
     TAG_DESCRIPTION,
@@ -62,6 +77,19 @@ from .install import (
 )
 
 __all__ = [
+    "STEAM_ACCEPT",
+    "STEAM_DISMISS",
+    "STEAM_DISMISSED",
+    "STEAM_FORGET",
+    "STEAM_GAME_CREATE",
+    "STEAM_GAME_ENABLED",
+    "STEAM_LIBRARY",
+    "STEAM_PREFIX",
+    "STEAM_SESSION_TAG",
+    "STEAM_SESSION_TAG_DESCRIPTION",
+    "STEAM_SUGGESTIONS",
+    "STEAM_TAG",
+    "STEAM_TAG_DESCRIPTION",
     "PAIRING_ACCEPT",
     "PAIRING_CREATE",
     "PAIRING_LIST",
@@ -94,6 +122,7 @@ __all__ = [
     "R409",
     "R422",
     "R429",
+    "RESOLUTION",
     "WATCHES",
     "error_response",
     "API_PREFIX",
@@ -107,7 +136,6 @@ __all__ = [
     "DOCS_URL",
     "OPENAPI_URL",
     "SECURITY",
-    "SECURITY_DEVICE",
     "KEY_KINDS",
     "TAG",
     "TAG_DESCRIPTION",

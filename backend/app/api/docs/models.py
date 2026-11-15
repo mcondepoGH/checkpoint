@@ -24,6 +24,14 @@ class Ping(BaseModel):
     device: Optional[str] = Field(
         None, description="Id del dispositivo `http` dueño de la key. Solo aparece con una key de dispositivo."
     )
+    protocol: int = Field(
+        description="Versión (entera) del protocolo plugin de Steam Deck <-> hub que habla este hub.", examples=[1]
+    )
+    min_plugin_protocol: int = Field(
+        description="Protocolo más viejo de plugin que este hub sigue atendiendo: un plugin con `checkpointProtocol` "
+        "menor debe actualizarse.",
+        examples=[1],
+    )
 
 
 class WatchItem(BaseModel):
@@ -88,6 +96,13 @@ class GameItem(BaseModel):
     status: Optional[GameSyncStatus] = Field(
         None, description="Última sincronización del juego, o `null` si aún no hay ninguna."
     )
+    path: Optional[str] = Field(
+        None,
+        description="SOLO con key de dispositivo (`ckd_`): ruta del guardado en ese dispositivo, tal cual está en la "
+        "configuración (con `/`), o `null` si no tiene ruta (no sincronizar). Nunca rutas de otros dispositivos. Con "
+        "key de usuario (`ck_`) el campo no aparece.",
+        examples=["/home/deck/.local/share/Mi Juego/saves"],
+    )
 
 
 class FingerprintSide(BaseModel):
@@ -120,8 +135,13 @@ class FingerprintResult(BaseModel):
     )
     reason: Optional[str] = Field(
         None,
-        description="Solo con `none` (`same`) y `conflict` (`both-changed`, `no-baseline` o `inconsistent`); "
-        "`null` con `upload` y `download`.",
+        description="Con `none`: `same`. Con `conflict`: `both-changed`, `no-baseline`, `inconsistent` o "
+        "`resolution_stale` (había una resolución pendiente y las huellas cambiaron: se descartó). Con `upload` o "
+        "`download` por una resolución pendiente: `resolution` (y `resolution` dice quién ganó). `null` en el resto.",
+    )
+    resolution: Optional[str] = Field(
+        None,
+        description="Solo con `reason: resolution`: `hub` (baja) o `device` (sube). Ausente en cualquier otro caso.",
     )
     hub: FingerprintSide = Field(description="Huella actual del hub para este juego.")
     device_state: FingerprintSide = Field(description="Huella calculada del manifiesto recibido.")
@@ -130,6 +150,14 @@ class FingerprintResult(BaseModel):
         description="Solo con `?manifest=1` y `action: download`: el manifiesto del hub (como `GET /manifest`), de la "
         "misma lectura del hub que `hub` y la decisión. Ausente en cualquier otro caso.",
     )
+
+
+class ResolutionResult(BaseModel):
+    game: str = Field(description="Id interno del juego.")
+    device: str = Field(description="Id interno del dispositivo `http`.")
+    winner: str = Field(description="Quién gana: `hub` (el dispositivo baja) o `device` (el dispositivo sube).")
+    by: str = Field(description="`device` (esta key) o `web` (la web del hub).")
+    expires: str = Field(description="Hora UTC en que caduca la resolución si el dispositivo no la aplica.")
 
 
 class ClosedResult(BaseModel):

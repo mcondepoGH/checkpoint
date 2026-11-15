@@ -1,5 +1,6 @@
 """Dependencias comunes de los routers: contexto de la app, sesión por cookie, Origin/CSRF, API key (Bearer) y cuerpo JSON."""
 
+import json
 import logging
 from typing import NamedTuple, Optional
 
@@ -50,6 +51,25 @@ async def body_json(request: Request) -> dict:
         body = await request.json()
     except Exception:
         raise ApiError(400, "err.main.json_body_required") from None
+    if not isinstance(body, dict):
+        raise ApiError(400, "err.main.json_body_required")
+    return body
+
+
+async def body_json_limited(request: Request, max_bytes: int, code: str) -> dict:
+    """Como `body_json`, con tope de bytes (sin leer más de la cuenta): pasarse es 400 `code`."""
+    cl = request.headers.get("content-length", "")
+    if cl.isdigit() and int(cl) > max_bytes:
+        raise ApiError(400, code)
+    raw = b""
+    async for chunk in request.stream():
+        raw += chunk
+        if len(raw) > max_bytes:
+            raise ApiError(400, code)
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        body = None
     if not isinstance(body, dict):
         raise ApiError(400, "err.main.json_body_required")
     return body
