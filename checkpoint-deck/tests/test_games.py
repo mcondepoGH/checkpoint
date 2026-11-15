@@ -193,3 +193,74 @@ def test_set_enabled_ok_and_errors(scripthub, home):
     hub = scripthub(lambda r: (404, {"detail": {"code": "err.steam.game_unknown", "params": {}}}, {}))
     assert tools(hub.url, home).set_enabled("g", False)["error"] == "unknown_game"
     assert tools("http://127.0.0.1:1", home).set_enabled("g", True)["error"] == "connection"
+
+
+# ---- suggest_shortcut (atajos de Lutris)
+def _shortcut_vdf(entries):
+    import struct
+
+    def s(k, v):
+        return b"\x01" + k.encode() + b"\x00" + v.encode() + b"\x00"
+
+    body = b""
+    for i, (appid, name, exe, opts) in enumerate(entries):
+        e = b"\x02appid\x00" + struct.pack("<I", appid) + s("AppName", name) + s("Exe", exe) + s("LaunchOptions", opts)
+        body += b"\x00" + str(i).encode() + b"\x00" + e + b"\x08"
+    return b"\x00shortcuts\x00" + body + b"\x08\x08"
+
+
+def _lutris_deck(home: Path, entries):
+    import sqlite3
+
+    (steam(home) / "steamapps").mkdir(parents=True, exist_ok=True)  # así se reconoce la raíz de Steam
+    cfg = steam(home) / "userdata/111/config"
+    cfg.mkdir(parents=True)
+    (cfg / "shortcuts.vdf").write_bytes(_shortcut_vdf(entries))
+    pfx = home / "Games" / "dq7"
+    pfx.mkdir(parents=True)
+    data = home / ".var/app/net.lutris.Lutris/data/lutris"
+    (data / "games").mkdir(parents=True)
+    con = sqlite3.connect(data / "pga.db")
+    con.execute("CREATE TABLE games (id INTEGER PRIMARY KEY, name TEXT, directory TEXT, configpath TEXT)")
+    con.execute("INSERT INTO games VALUES (1, 'DQ7', ?, 'dq7-1')", (str(pfx),))
+    con.commit()
+    con.close()
+    (data / "games" / "dq7-1.yml").write_text(f"game:\n  exe: /x/DQ7R.exe\n  prefix: {pfx}\nname: DQ7\n")
+    return pfx
+
+
+LUTRIS_SC = (2389644016, "DQ7", '"/usr/bin/flatpak"', "run net.lutris.Lutris lutris:rungameid/1")
+EMU_SC = (3000000002, "PS2", '"/home/deck/bin/pcsx2-qt.sh"', "")
+
+
+def test_suggest_shortcut_for_a_lutris_shortcut_gives_its_prefix(home):
+    pfx = _lutris_deck(home, [EMU_SC, LUTRIS_SC])
+    out = cg.suggest_shortcut(home, 2389644016)
+    assert out == {"path": str(pfx), "candidates": [str(pfx)], "source": "lutris"}
+
+
+def test_suggest_shortcut_for_an_emulator_shortcut_is_empty(home):
+    _lutris_deck(home, [EMU_SC, LUTRIS_SC])
+    assert cg.suggest_shortcut(home, 3000000002) == {"path": "", "candidates": [], "source": ""}
+
+
+def test_suggest_shortcut_unknown_appid_or_no_steam_is_empty(home, tmp_path):
+    _lutris_deck(home, [LUTRIS_SC])
+    empty = {"path": "", "candidates": [], "source": ""}
+    assert cg.suggest_shortcut(home, 12345) == empty
+    assert cg.suggest_shortcut(tmp_path / "otro", 2389644016) == empty
+
+
+def test_suggest_shortcut_drops_a_path_the_hub_would_reject(home):
+    pfx = _lutris_deck(home, [LUTRIS_SC])
+    bad = home / "Games" / "dq7 &x"
+    pfx.rename(bad)
+    import sqlite3
+
+    data = home / ".var/app/net.lutris.Lutris/data/lutris"
+    (data / "games" / "dq7-1.yml").write_text(f"game:\n  prefix: {bad}\n")
+    con = sqlite3.connect(data / "pga.db")
+    con.execute("UPDATE games SET directory = ?", (str(bad),))
+    con.commit()
+    con.close()
+    assert cg.suggest_shortcut(home, 2389644016)["path"] == ""

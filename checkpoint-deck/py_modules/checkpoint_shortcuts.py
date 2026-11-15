@@ -1,12 +1,13 @@
 """Atajos de Steam de la Deck (juegos que no son de Steam añadidos a mano, p. ej. Lutris): lee `shortcuts.vdf`.
 
 Solo biblioteca estándar. El fichero es VDF BINARIO (formato público de Steam): diccionarios (tipo 0), cadenas (1),
-enteros de 32 bits (2) y fin de diccionario (8). De cada atajo se conserva `appid`, `AppName`, `Exe` y `StartDir`; solo
-el appid y el nombre salen de la Deck (hacia el hub). Todo error de un fichero (ausente, ilegible, corrupto) lo descarta
-sin romper el resto y sin poner ruta ni steamid en el log.
+enteros de 32 bits (2) y fin de diccionario (8). De cada atajo se conserva `appid`, `AppName`, `Exe`, `StartDir` y
+`LaunchOptions` (esta última solo se lee en local, para sugerir la carpeta de los atajos de Lutris: `checkpoint_lutris`);
+solo el appid y el nombre salen de la Deck (hacia el hub). Todo error de un fichero (ausente, ilegible, corrupto) lo
+descarta sin romper el resto y sin poner ruta ni steamid en el log.
 
-NO VERIFICADO en una Deck real: que el `appid` del fichero sea el mismo número que Steam entrega en el evento
-`SteamClient.GameSessions` al abrir el atajo. Los tests usan ficheros sintéticos, no capturas.
+VERIFICADO en una Deck real (2026-11-15, solo lectura): el `appid` del fichero es el mismo número que Steam entrega como
+`unAppID` en el evento `SteamClient.GameSessions`. Los tests usan ficheros sintéticos, no capturas.
 """
 
 import os
@@ -35,6 +36,7 @@ class Shortcut(NamedTuple):
     name: str
     exe: str
     start_dir: str
+    launch_options: str = ""
 
 
 # tipos de valor del VDF binario -> bytes fijos que ocupan (los que no se interpretan se saltan)
@@ -98,13 +100,14 @@ def parse_shortcuts(data: bytes) -> List[Shortcut]:
         if not isinstance(e, dict):
             continue
         appid = e.get("appid")
-        name, exe, sdir = e.get("appname"), e.get("exe"), e.get("startdir")
+        name, exe, sdir, lopts = e.get("appname"), e.get("exe"), e.get("startdir"), e.get("launchoptions")
         out.append(
             Shortcut(
                 appid if isinstance(appid, int) else None,
                 name if isinstance(name, str) else "",
                 exe if isinstance(exe, str) else "",
                 sdir if isinstance(sdir, str) else "",
+                lopts if isinstance(lopts, str) else "",
             )
         )
     return out
@@ -162,3 +165,25 @@ def scan_shortcuts(
             if 0 < appid <= MAX_APPID:
                 seen.setdefault(appid, name)
     return list(seen.items())
+
+
+def find_launch_options(root: Path, appid: int) -> Optional[str]:
+    """`LaunchOptions` del atajo con ese `appid` en cualquiera de los usuarios de una raíz de Steam (None si no hay
+    atajo con ese número; "" si no trae opciones). Solo lectura; un fichero ilegible o corrupto se salta."""
+    userdata = Path(root) / "userdata"
+    try:
+        users = sorted(x for x in os.listdir(userdata) if x.isascii() and x.isdigit())
+    except OSError:
+        return None
+    for u in users:
+        raw = _read(userdata / u / "config" / "shortcuts.vdf")
+        if raw is None:
+            continue
+        try:
+            items = parse_shortcuts(raw)
+        except ShortcutsError:
+            continue
+        for sh in items:
+            if sh.appid == appid:
+                return sh.launch_options
+    return None

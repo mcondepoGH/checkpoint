@@ -162,3 +162,24 @@ def test_scan_limit(tmp_path):
 def test_scan_non_numeric_user_folders_ignored(tmp_path):
     root = put(tmp_path, "abc", vdf(entry(0, 3000000001, "A")))
     assert sc.scan_shortcuts(root) == []
+
+
+# ---- LaunchOptions (para sugerir carpeta en los atajos de Lutris)
+def test_parse_keeps_launch_options():
+    out = sc.parse_shortcuts(vdf(entry(0, appid=3000000001, name="L", extra=s("LaunchOptions", "run net.lutris.Lutris lutris:rungameid/1"))))
+    assert out[0].launch_options == "run net.lutris.Lutris lutris:rungameid/1"
+    assert sc.parse_shortcuts(vdf(entry(0, appid=3000000001)))[0].launch_options == ""
+
+
+def test_find_launch_options_looks_up_by_appid_in_every_user(tmp_path):
+    root = put(tmp_path, "111", vdf(entry(0, appid=3000000001, name="A", extra=s("LaunchOptions", "lutris:rungameid/1"))))
+    put(tmp_path, "222", vdf(entry(0, appid=3000000002, name="B", extra=s("LaunchOptions", "otra"))))
+    assert sc.find_launch_options(root, 3000000001) == "lutris:rungameid/1"
+    assert sc.find_launch_options(root, 3000000002) == "otra"
+    assert sc.find_launch_options(root, 3000000009) is None
+
+
+def test_find_launch_options_ignores_broken_files(tmp_path):
+    root = put(tmp_path, "111", b"\x00basura")
+    assert sc.find_launch_options(root, 3000000001) is None
+    assert sc.find_launch_options(tmp_path / "nada", 1) is None

@@ -152,7 +152,7 @@ interface Suggestion extends GameFailure {
   path?: string;
   home?: string; // home de la Deck: donde abre el selector si no hay ruta
   candidates?: string[];
-  source?: "proton" | "cloud" | "";
+  source?: "proton" | "cloud" | "lutris" | "";
 }
 interface Configured extends GameFailure {
   game?: { id: string; name: string; appid: number; joined?: boolean };

@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 import checkpoint_client as hc
+import checkpoint_lutris
+import checkpoint_shortcuts
 import checkpoint_steam
 from checkpoint_hub import HubNetworkError, describe_error
 from checkpoint_sync import PathNotAllowed, validate_game_path
@@ -86,6 +88,24 @@ def suggest_path(home: Path, appid: int, name: str) -> Dict[str, Any]:
     if not out:
         return empty
     return {"path": out[0][0], "candidates": [o[0] for o in out], "source": out[0][1]}
+
+
+def suggest_shortcut(
+    home: Path, appid: int, protected: Sequence[Path] = (), log: Callable[[str], None] = lambda _m: None
+) -> Dict[str, Any]:
+    """Como `suggest_path`, para un atajo de Steam (juego que no es de Steam): si lanza un juego de Lutris
+    (`lutris:rungameid/N` en sus `LaunchOptions`), sugiere el prefijo de Lutris (`source` = "lutris"); cualquier otro atajo
+    (emuladores, Epic...) queda sin sugerencia. Solo lectura."""
+    empty: Dict[str, Any] = {"path": "", "candidates": [], "source": ""}
+    for root in checkpoint_steam.find_steam_roots(Path(home)):
+        opts = checkpoint_shortcuts.find_launch_options(root, appid)
+        if opts is None:
+            continue
+        path = checkpoint_lutris.suggest_prefix(
+            home, opts, protected, log, accept=lambda s: bool(_HUB_PATH.match(s.lstrip("/")))
+        )
+        return {"path": path, "candidates": [path], "source": "lutris"} if path else empty
+    return empty
 
 
 def describe_failure(e: Exception) -> Dict[str, Any]:

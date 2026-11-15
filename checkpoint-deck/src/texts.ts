@@ -144,6 +144,7 @@ export const NO_PATH_FOUND = "No se detectó la carpeta de guardado: escríbela 
 export const PATH_FOUND: Record<string, string> = {
   proton: "Ruta detectada en el prefijo de Proton del juego. Revísala y confirma.",
   cloud: "Ruta detectada en los guardados de Steam Cloud. Revísala y confirma.",
+  lutris: "Carpeta sugerida: el prefijo de Lutris del juego (puede no ser la de los guardados). Revísala o cámbiala con Examinar.",
 };
 
 export interface GameFailure {
@@ -284,7 +285,7 @@ export function unconfiguredView(show: boolean, count: number): { showList: bool
 // ---- atajos de Steam (juegos que no son de Steam, p. ej. Lutris) en «Sin configurar en el hub» ----
 export const SHORTCUT_LABEL = "Atajo";
 export const SHORTCUT_HELP =
-  "Los marcados como «Atajo» son juegos que no son de Steam (p. ej. Lutris) añadidos a Steam. Su carpeta de guardado no se detecta: escríbela.";
+  "Los marcados como «Atajo» son juegos que no son de Steam (p. ej. Lutris) añadidos a Steam. Si el atajo lanza un juego de Lutris, se sugiere la carpeta de su prefijo (revísala: puede no ser la de los guardados). En los demás atajos la carpeta no se detecta: escríbela o usa «Examinar…».";
 // Línea de descripción de un juego sin configurar: un atajo lo dice; su número no es un id de la tienda de Steam
 export function unconfiguredDescription(appid: number, source?: string): string {
   return source === "shortcut" ? `${SHORTCUT_LABEL} · N.º de Steam: ${appid}` : `N.º de Steam: ${appid}`;

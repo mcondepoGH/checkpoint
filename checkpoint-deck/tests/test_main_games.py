@@ -310,3 +310,46 @@ def test_shortcut_shows_as_unconfigured_with_origin_and_can_be_created_in_the_hu
     assert {"appid": 3_000_000_001, "name": "Lutris Juego", "source": "shortcut"} in s["unconfigured"]
     assert all("source" not in u for u in s["unconfigured"] if u["appid"] != 3_000_000_001)
     assert sent[0]["ok"] is True and sent[0]["name"] == "Lutris Juego" and sent[0]["path"] == ""  # sin ruta detectada: la pide la interfaz
+
+
+def test_suggest_game_gives_the_lutris_prefix_for_a_lutris_shortcut_and_nothing_for_other_shortcuts(fake_decky, scripthub, tmp_path, monkeypatch):
+    """Atajos sintéticos: uno de Lutris (Flatpak, pga.db y .yml sintéticos en el home falso) y uno de emulador."""
+    import sqlite3
+    import struct
+
+    st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    home = tmp_path / "deckhome"
+    cfg = home / ".local/share/Steam/userdata/111/config"
+    cfg.mkdir(parents=True)
+
+    def entry(i, appid, name, exe, opts):
+        e = b"\x02appid\x00" + struct.pack("<I", appid) + b"\x01AppName\x00" + name.encode() + b"\x00"
+        e += b"\x01Exe\x00" + exe.encode() + b"\x00" + b"\x01LaunchOptions\x00" + opts.encode() + b"\x00"
+        return b"\x00" + str(i).encode() + b"\x00" + e + b"\x08"
+
+    raw = b"\x00shortcuts\x00" + entry(0, 3_000_000_001, "Lutris Juego", '"/usr/bin/flatpak"', "run net.lutris.Lutris lutris:rungameid/1")
+    raw += entry(1, 3_000_000_002, "Emulador", '"/home/deck/bin/cemu.sh"', "") + b"\x08\x08"
+    (cfg / "shortcuts.vdf").write_bytes(raw)
+    pfx = home / "Games" / "juego"
+    pfx.mkdir(parents=True)
+    data = home / ".var/app/net.lutris.Lutris/data/lutris"
+    (data / "games").mkdir(parents=True)
+    con = sqlite3.connect(data / "pga.db")
+    con.execute("CREATE TABLE games (id INTEGER PRIMARY KEY, name TEXT, directory TEXT, configpath TEXT)")
+    con.execute("INSERT INTO games VALUES (1, 'J', ?, 'j-1')", (str(pfx),))
+    con.commit()
+    con.close()
+    (data / "games" / "j-1.yml").write_text(f"game:\n  prefix: {pfx}\n")
+
+    async def go():
+        await p._main()
+        await p.refresh_library()
+        await settled(p)
+        out = (await p.suggest_game(3_000_000_001), await p.suggest_game(3_000_000_002), await p.suggest_game(1245620))
+        await p._unload()
+        return out
+
+    lutris, emu, steam_game = asyncio.run(go())
+    assert lutris["ok"] and lutris["path"] == str(pfx) and lutris["source"] == "lutris" and lutris["candidates"] == [str(pfx)]
+    assert emu["ok"] and emu["path"] == "" and emu["source"] == "" and emu["home"] == str(home)
+    assert steam_game["source"] != "lutris" and steam_game["path"] == ""
