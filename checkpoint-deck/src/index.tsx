@@ -175,6 +175,7 @@ const pickerStart = callable<[path: string], { ok: boolean; path: string }>("pic
 const configureGame = callable<[appid: number, name: string, path: string], Configured>("configure_game");
 const setGameEnabled = callable<[game: string, enabled: boolean], Toggled>("set_game_enabled");
 const gameEvent = callable<[appid: number, running: boolean], { ok: boolean }>("game_event");
+const diagGameEvent = callable<[unAppID: string, tipo: string, bRunning: string], { ok: boolean }>("diag_game_event");
 const takeNotices = callable<[], Notice[]>("take_notices");
 const getPrefs = callable<[], { ok: boolean; show_unconfigured: boolean }>("get_prefs");
 const setPref = callable<[key: string, value: boolean], { ok: boolean; show_unconfigured?: boolean }>("set_pref");
@@ -1041,6 +1042,10 @@ function startAuto(): void {
         gameEvent(appid, running).catch(capture("aviso de abrir o cerrar un juego"));
       },
       problem("detección de juegos"),
+      (a, t, r) => {
+        // diagnóstico: si falla (p. ej. backend antiguo) se ignora, para no inundar «Fallos detectados»
+        diagGameEvent(a, t, r).catch(() => undefined);
+      },
     ),
     startNoticePump(
       takeNotices,

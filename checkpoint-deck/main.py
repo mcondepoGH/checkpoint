@@ -6,6 +6,7 @@ carpeta al `sys.path`), para probarla sin Decky.
 """
 
 import asyncio
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -34,6 +35,9 @@ from checkpoint_version import plugin_dir, read_version
 
 PREFS_FILE = "prefs.json"  # preferencias de la interfaz, aparte de settings.json (que lleva la clave `ckd_`)
 PREF_DEFAULTS: Dict[str, bool] = {"show_unconfigured": True}  # única preferencia: mostrar «Sin configurar en el hub»
+DIAG_MAX_LEN = 64  # largo máximo de cada campo del evento crudo en el log de diagnóstico
+DIAG_WINDOW = 60.0  # segundos de la ventana que limita el log de eventos crudos
+DIAG_MAX_PER_WINDOW = 20  # líneas de eventos crudos distintos permitidas por ventana
 
 
 class Plugin:
@@ -198,6 +202,27 @@ class Plugin:
         for n in out:
             self._log(f"auto: aviso entregado {n.get('code')}")  # solo el código: sin rutas ni claves
         return out
+
+    async def diag_game_event(self, appid: Any, kind: Any, running: Any) -> Dict[str, Any]:
+        """Diagnóstico: evento crudo de `SteamClient.GameSessions` (antes del filtro de la interfaz), solo `unAppID`,
+        su tipo y `bRunning` como texto saneado y recortado. No depende de la vinculación ni del hub y nunca lanza.
+        Un evento igual al anterior no se repite y hay un tope de líneas por minuto, para no inundar el log."""
+        try:
+            fields = ["".join(c if c.isprintable() else "?" for c in str(v))[:DIAG_MAX_LEN] for v in (appid, kind, running)]
+            if tuple(fields) == getattr(self, "_diag_last", None):
+                return {"ok": True}
+            self._diag_last = tuple(fields)
+            now = time.monotonic()
+            if now - getattr(self, "_diag_start", -DIAG_WINDOW) >= DIAG_WINDOW:
+                self._diag_start, self._diag_count = now, 0
+            if self._diag_count >= DIAG_MAX_PER_WINDOW:
+                return {"ok": True}
+            self._diag_count += 1
+            a, t, r = fields
+            self._log(f"auto: evento crudo unAppID={a} tipo={t} bRunning={r}")
+        except Exception:  # el diagnóstico nunca debe romper nada
+            pass
+        return {"ok": True}
 
     @staticmethod
     def _prefs() -> Dict[str, bool]:

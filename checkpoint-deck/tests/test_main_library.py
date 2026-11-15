@@ -126,3 +126,73 @@ def test_report_error_logs_redacted_ui_failure(fake_decky, tmp_path, monkeypatch
         assert asyncio.run(go()) == {"ok": True}
     assert "Checkpoint (interfaz): TypeError" in caplog.text
     assert KEY not in caplog.text and "76561198000000000" not in caplog.text
+
+
+def _diag_lines(caplog):
+    return [r.getMessage() for r in caplog.records if "evento crudo" in r.getMessage()]
+
+
+def test_diag_game_event_logs_exact_line_without_pairing(fake_decky, tmp_path, monkeypatch, caplog):
+    p = make_plugin(fake_decky, "http://127.0.0.1:1", tmp_path, monkeypatch, with_key=False)
+
+    async def go():
+        await p._main()
+        return [await p.diag_game_event("0", "number", "true"), await p.diag_game_event("abc", "string", "undefined")]
+
+    with caplog.at_level(logging.DEBUG):
+        assert asyncio.run(go()) == [{"ok": True}, {"ok": True}]
+    assert _diag_lines(caplog) == [
+        "auto: evento crudo unAppID=0 tipo=number bRunning=true",
+        "auto: evento crudo unAppID=abc tipo=string bRunning=undefined",
+    ]
+
+
+def test_diag_game_event_sanitizes_and_truncates(fake_decky, tmp_path, monkeypatch, caplog):
+    p = make_plugin(fake_decky, "http://127.0.0.1:1", tmp_path, monkeypatch)
+
+    async def go():
+        await p._main()
+        await p.diag_game_event("1\n2\x1b[0m" + "x" * 500, "t", f"con {KEY}")
+
+    with caplog.at_level(logging.DEBUG):
+        asyncio.run(go())
+    (line,) = _diag_lines(caplog)
+    assert "\n" not in line and "\x1b" not in line and KEY not in line
+    assert line.startswith("auto: evento crudo unAppID=1?2?[0m" + "x" * 57 + " tipo=t")  # 64 caracteres exactos
+    assert len(line) < 64 * 3 + 60
+
+
+def test_diag_game_event_dedupes_and_limits_rate(fake_decky, tmp_path, monkeypatch, caplog):
+    import main
+
+    p = make_plugin(fake_decky, "http://127.0.0.1:1", tmp_path, monkeypatch)
+    clock = [1000.0]
+    monkeypatch.setattr(main.time, "monotonic", lambda: clock[0])
+
+    async def go():
+        await p._main()
+        for _ in range(5):  # repetidos seguidos: una sola línea
+            await p.diag_game_event("7", "number", "true")
+        for i in range(100):  # distintos: tope por ventana
+            await p.diag_game_event(str(100 + i), "number", "true")
+        clock[0] += main.DIAG_WINDOW  # ventana nueva: vuelve a registrar
+        await p.diag_game_event("999", "number", "false")
+
+    with caplog.at_level(logging.DEBUG):
+        asyncio.run(go())
+    lines = _diag_lines(caplog)
+    assert lines.count("auto: evento crudo unAppID=7 tipo=number bRunning=true") == 1
+    assert len(lines) == main.DIAG_MAX_PER_WINDOW + 1
+    assert lines[-1] == "auto: evento crudo unAppID=999 tipo=number bRunning=false"
+
+
+def test_diag_game_event_never_raises(fake_decky, tmp_path, monkeypatch):
+    p = make_plugin(fake_decky, "http://127.0.0.1:1", tmp_path, monkeypatch)
+
+    class Bad:
+        def __str__(self):
+            raise RuntimeError("boom")
+
+    # sin _main (sin pairing) y con un valor que no se deja convertir a texto
+    assert asyncio.run(p.diag_game_event("1", "number", "true")) == {"ok": True}
+    assert asyncio.run(p.diag_game_event(Bad(), None, None)) == {"ok": True}

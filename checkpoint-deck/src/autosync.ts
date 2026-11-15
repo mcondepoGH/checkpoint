@@ -1,5 +1,5 @@
 // Avisos automáticos de abrir y cerrar juegos (Tramo 5). Dos piezas sin dependencias de Decky, para probarlas con Node:
-// - `startGameWatch`: escucha a Steam (`SteamClient.GameSessions.RegisterForAppLifetimeNotifications`, API INTERNA sin
+// - `startGameWatch` (con `onRaw` opcional para diagnosticar los eventos que el filtro descarta): escucha a Steam (`SteamClient.GameSessions.RegisterForAppLifetimeNotifications`, API INTERNA sin
 //   contrato estable: una actualización de Steam puede romperla; los toasts confirman que funciona en una Deck real) y avisa al backend con (appid, abierto).
 // - `startNoticePump` + `noticeText`: recoge los avisos que deja el backend (`take_notices`) y los convierte en toasts.
 import { LastNotice, TOAST_MAX, toastLine } from "./texts";
@@ -20,6 +20,7 @@ export function startGameWatch(
   steam: SteamLike | undefined,
   send: (appid: number, running: boolean) => void,
   onProblem: (e: Error) => void,
+  onRaw?: (unAppID: string, tipo: string, bRunning: string) => void,
 ): () => void {
   const register = steam?.GameSessions?.RegisterForAppLifetimeNotifications;
   if (typeof register !== "function") {
@@ -31,6 +32,12 @@ export function startGameWatch(
   try {
     reg = register.call(steam!.GameSessions, (raw: unknown) => {
       const n = raw as { unAppID?: unknown; bRunning?: unknown } | null | undefined;
+      // Diagnóstico: el evento crudo (solo estos tres campos, como texto) antes del filtro; nunca debe lanzar
+      try {
+        onRaw?.(String(n?.unAppID), typeof n?.unAppID, String(n?.bRunning));
+      } catch {
+        /* el diagnóstico no puede romper la detección */
+      }
       const appid = n?.unAppID;
       // appid 0 = juego que no es de Steam (sin soportar en el MVP); lo demás mal formado se ignora
       if (typeof appid !== "number" || !Number.isInteger(appid) || appid <= 0 || typeof n?.bRunning !== "boolean") return;

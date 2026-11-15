@@ -84,6 +84,8 @@ Con la Deck vinculada y un juego asociado en el hub (con su número de Steam y s
 - Detalles de los toasts (cada 2 s, aunque el panel esté cerrado): un toast por apertura y uno por cierre (el evento repetido seguido de Steam se descarta, así que no se duplican). Estados con aviso: `uploaded`, `downloaded`, `up_to_date`, `no_path`, `missing_dir`, `conflict` y los errores; `disabled` no avisa.
 - **Sección «Avisos» del panel** (para saber por qué no salió un toast): «Último aviso» dice cuándo y qué se entregó la última vez (desde que cargó la interfaz). Cada decisión del auto-sync (también las que no avisan, con su motivo) deja una línea `auto: …` en el log de Decky; sin rutas ni claves. Cada aviso entregado deja también `auto: aviso entregado <código>` en el log de Decky.
 
+- **Diagnóstico del evento de Steam:** antes de filtrar, cada evento de `SteamClient.GameSessions` deja `auto: evento crudo unAppID=<valor> tipo=<typeof> bRunning=<valor>` en el log de Decky (`diag_game_event` en `main.py`), también los que luego se descartan (`unAppID` 0, negativo, no entero, `bRunning` no booleano), para ver qué manda Steam al abrir un atajo. Solo esos tres campos como texto, saneados y de 64 caracteres como máximo; funciona sin vincular; un evento igual al anterior no se repite y hay un tope de 20 líneas distintas por minuto. El log está en `~/homebrew/logs/Checkpoint/` (ruta no verificada, ver «Comprobar que aparece»); se ve ahí o con `journalctl -u plugin_loader` (no verificado).
+
 Limitación conocida: la detección usa `SteamClient`, una API interna de Steam sin contrato estable; una actualización de Steam puede romperla (el panel muestra un aviso de fallo si no está disponible).
 
 ## Qué significan los avisos

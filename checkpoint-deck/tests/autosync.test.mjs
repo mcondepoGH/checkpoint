@@ -249,3 +249,37 @@ test('el bombeo entrega y recuerda los avisos nuevos como último aviso', { skip
   assert.deepEqual(shown, [{ title: 'Checkpoint', body: 'Uno: al día', level: 'info' }]);
   assert.deepEqual(getLastNotice(), { time: '09:05', text: 'Uno: al día' });
 });
+
+test('onRaw recibe el evento crudo antes del filtro y el filtro descarta igual', { skip }, async () => {
+  const { startGameWatch } = await load();
+  const s = fakeSteam();
+  const sent = [];
+  const raw = [];
+  startGameWatch(s.client, (a, r) => sent.push([a, r]), () => assert.fail('sin problemas'), (a, t, r) => raw.push([a, t, r]));
+  s.cb({ unAppID: 0, bRunning: true });
+  s.cb({ unAppID: -3, bRunning: true });
+  s.cb({ unAppID: 1.5, bRunning: true });
+  s.cb({ unAppID: '7', bRunning: true });
+  s.cb({ unAppID: 8, bRunning: 'yes' });
+  s.cb({ unAppID: 730, bRunning: true });
+  s.cb(null);
+  assert.deepEqual(raw, [
+    ['0', 'number', 'true'],
+    ['-3', 'number', 'true'],
+    ['1.5', 'number', 'true'],
+    ['7', 'string', 'true'],
+    ['8', 'number', 'yes'],
+    ['730', 'number', 'true'],
+    ['undefined', 'undefined', 'undefined'],
+  ]);
+  assert.deepEqual(sent, [[730, true]]);
+});
+
+test('si onRaw lanza, no se rompe el escuchador ni el envío', { skip }, async () => {
+  const { startGameWatch } = await load();
+  const s = fakeSteam();
+  const sent = [];
+  startGameWatch(s.client, (a, r) => sent.push([a, r]), () => assert.fail('sin problemas'), () => { throw new Error('diag'); });
+  s.cb({ unAppID: 5, bRunning: true });
+  assert.deepEqual(sent, [[5, true]]);
+});
