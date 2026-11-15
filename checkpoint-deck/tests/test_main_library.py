@@ -10,7 +10,7 @@ from pathlib import Path
 from checkpoint_hub import save_settings
 
 FIX = Path(__file__).parent / "fixtures" / "steam"
-KEY = "ckd_clave-de-prueba-9876"
+KEY = "ckd_" + "k" * 40
 
 
 def make_plugin(fake_decky, hub_url, tmp_path, monkeypatch, with_key=True):

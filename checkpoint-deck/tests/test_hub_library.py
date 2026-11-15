@@ -6,7 +6,7 @@ import pytest
 
 import checkpoint_client as hc
 
-KEY = "ckd_secretisima123"
+KEY = "ckd_" + "k" * 40
 SUMMARY = {"associated": [{"appid": 220, "game": "hl2"}], "suggested": 1, "unchanged": 2, "ignored": 3}
 
 

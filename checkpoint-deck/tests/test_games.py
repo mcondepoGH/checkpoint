@@ -8,7 +8,7 @@ import pytest
 import checkpoint_client as hc
 import checkpoint_games as cg
 
-KEY = "ckd_clave-de-prueba-9876"
+KEY = "ckd_" + "k" * 40
 
 
 def acf(root: Path, appid: int, name: str, installdir: str, lib: str = "") -> None:

@@ -10,7 +10,7 @@ import pytest
 import checkpoint_client as hc
 from checkpoint_hub import HubNetworkError
 
-KEY = "ckd_secretisima123"
+KEY = "ckd_" + "k" * 40
 NOSLEEP = []
 
 

@@ -13,7 +13,7 @@ import pytest
 import checkpoint_update as upd
 from checkpoint_hub import check_connection, save_settings
 
-KEY = "ckd_clave-de-prueba-9876"
+KEY = "ckd_" + "k" * 40
 
 
 # ---------------------------------------------------------------- utilidades
