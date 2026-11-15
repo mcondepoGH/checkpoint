@@ -1,6 +1,8 @@
 # Registro de cambios del plugin
 
-## Sin publicar
+## 1.1.0-rc.1
+
+Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.1` es mayor que `1.0.0` (el hub la ofrece a quien tenga la `1.0.0`) y menor que la futura `1.1.0`.
 
 ### Novedades
 
