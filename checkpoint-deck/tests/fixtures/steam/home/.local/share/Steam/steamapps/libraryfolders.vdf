@@ -1,0 +1,26 @@
+// Fixture sintética: lo que escribe Steam, con rutas que el test sustituye
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"@HOME@/.local/share/Steam"
+		"label"		""
+		"apps"
+		{
+			"220"		"1234"
+		}
+	}
+	"1"
+	{
+		"path"		"@ROOT@/card"
+		"label"		"SD"
+	}
+	"2"
+	{
+		"path"		"@ROOT@/empty"
+	}
+	"3"
+	{
+		"path"		"@ROOT@/no-existe"
+	}
+}

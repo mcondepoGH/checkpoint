@@ -1,0 +1,11 @@
+{
+  "name": "Checkpoint",
+  "author": "mcondepo",
+  "flags": [],
+  "api_version": 1,
+  "publish": {
+    "tags": ["saves", "sync"],
+    "description": "Vincula la Steam Deck con tu hub de Checkpoint para sincronizar partidas guardadas.",
+    "image": "https://raw.githubusercontent.com/mcondepoGH/checkpoint/main/docs/logo.svg"
+  }
+}
