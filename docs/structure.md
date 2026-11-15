@@ -14,17 +14,19 @@ backend/app/
 │   ├── middleware.py    log de depuración de cada petición
 │   ├── docs/            OpenAPI y Swagger de la API key (install, models, examples, pairing, steam)
 │   └── routers/         un router por área: hook, games, session, profile, devices (API key por dispositivo http, con sesión), config, sync,
-│                        versions, scheduler, updates, pairing (vinculación por solicitud y código: la parte pública es el ÚNICO endpoint con escritura sin key ni sesión), deck (descarga PÚBLICA y de solo lectura del zip del plugin: `GET /api/deck/plugin`, `/api/deck/plugin.sha256` y `/api/deck/plugin/info`; sin parámetros, ruta fija `settings.DECK_ZIP`), steam (asociación de `steam_appid` desde la Deck: `POST /api/steam/library` solo `ckd_`, y sugerencias/descartes con sesión) y spa (catch-all, siempre el último)
+│                        versions, orphans (datos sin dispositivo ni juego: `GET /api/orphans`, `POST /api/orphans/trash`, `GET /api/orphans/trash` y `POST /api/orphans/trash/restore`, solo con sesión), scheduler, updates, pairing (vinculación por solicitud y código: la parte pública es el ÚNICO endpoint con escritura sin key ni sesión), deck (descarga PÚBLICA y de solo lectura del zip del plugin: `GET /api/deck/plugin`, `/api/deck/plugin.sha256` y `/api/deck/plugin/info`; sin parámetros, ruta fija `settings.DECK_ZIP`), steam (asociación de `steam_appid` desde la Deck: `POST /api/steam/library` solo `ckd_`, y sugerencias/descartes con sesión) y spa (catch-all, siempre el último)
 ├── services/            lógica de negocio sin FastAPI
 │   ├── context.py       AppContext: objetos compartidos de la app (auth, scheduler, watcher...)
-│   └── runs, pairing, deckplugin (lee el zip UNA vez, calcula SHA-256 y versión de `Checkpoint/package.json`; caché por mtime y tamaño; se sirven los mismos bytes que se hashearon), hooks (aviso `opened`, cierre y, para dispositivos http, `fingerprint`, `closed`, `manifest`, subida `files` y `commit`, purga y tope del staging), steam (normalización y coincidencia de nombres, sugerencias en memoria y descartes en `data/state/_steam/dismissed.json`; `purge` en `scheduler.maintenance`), hookfiles (staging reanudable, `part_lock` por fichero y `stage_lock` del dispositivo durante el commit, tope y lectura por rangos de las subidas/bajadas http), devices, games, status, versions
+│   └── runs, pairing, deckplugin (lee el zip UNA vez, calcula SHA-256 y versión de `Checkpoint/package.json`; caché por mtime y tamaño; se sirven los mismos bytes que se hashearon), hooks (aviso `opened`, cierre y, para dispositivos http, `fingerprint`, `closed`, `manifest`, subida `files` y `commit`, purga y tope del staging), steam (normalización y coincidencia de nombres, sugerencias en memoria y descartes en `data/state/_steam/dismissed.json`; `purge` en `scheduler.maintenance`), orphans (detección de datos de un origen desconocido o de un juego fuera de la config, con `token` por elemento; mover a la papelera revalidando con la config actual y bajo el lock del juego; listar, restaurar y vaciar lo caducado: `purge_expired` en `scheduler.maintenance`), hookfiles (staging reanudable, `part_lock` por fichero y `stage_lock` del dispositivo durante el commit, tope y lectura por rangos de las subidas/bajadas http), devices, games, status, versions
 ├── sync/                motor de sincronización
 │   ├── engine.py        run_sync, restore_version, resolve_game; `write_winner_to_hub` y `finish_hub_update` (aplicar un ganador al hub, compartido con el commit HTTP)
 │   ├── safepath.py      `resolve_inside`: ruta relativa segura dentro de una raíz (sin `..`, ni enlaces simbólicos); obligatoria al leer o escribir con rutas de un dispositivo http
 │   ├── decide.py        decisión pura de quién manda y resolución de conflictos
 │   ├── fingerprint.py   huella de un directorio o de un manifiesto (`fingerprint_from_manifest`)
 │   ├── versions.py      versiones guardadas, `current_state` (estado del hub solo con `stat`, para `current` de `/limit`) y reemplazo casi atómico de directorios
-│   ├── baseline.py      huella de cada participante tras la última sync completa
+│   ├── baseline.py      huella de cada participante tras la última sync completa (`drop_baseline` quita un origen)
+│   ├── cleanup.py       `purge_device_metadata`: al borrar un dispositivo, limpia SOLO sus metadatos (baseline, staging, resoluciones), con el lock del juego; nunca versiones ni hub
+│   ├── trash.py         papelera `data/trash/<fecha>/` con `manifest.json` (rutas relativas), caducidad (`settings.TRASH_TTL_DAYS`), mover y restaurar sin pisar ni seguir enlaces
 │   ├── resolution.py    conflictos de datos de dispositivos http y su resolución pendiente (`data/resolutions/<juego>.json`)
 │   ├── errors.py        SyncAbort
 │   ├── locking.py       lock por juego
@@ -81,17 +83,17 @@ frontend/src/
 │   ├── updates/             UpdateBadge, UpdateDialog, UpdateCheck
 │   ├── watch/               WatchSummary, watch.js
 │   ├── config/              DeviceCard (con rama para dispositivos http), DeviceKey (clave de un dispositivo http), PairingRequests (solicitudes de
-│   │                        vinculación pendientes), SteamSuggestions (sugerencias y descartes de appid de Steam), DeckPlugin (botón «Descargar plugin», versión y tamaño; se deshabilita si el hub no lleva el zip), GameCard, IdNote, SaveDialog, YamlDialog, BackupsDialog,
+│   │                        vinculación pendientes), SteamSuggestions (sugerencias y descartes de appid de Steam), Orphans (datos sin dispositivo ni juego en Configuración > General: lista, papelera y restaurar; `OrphanList` solo pinta), DeckPlugin (botón «Descargar plugin», versión y tamaño; se deshabilita si el hub no lleva el zip), GameCard, IdNote, SaveDialog, YamlDialog, BackupsDialog,
 │   │                        DiffView, draft.js, useConfigDraft.js, _config.scss
 │   ├── autosync/            AutoSync, AutoSyncLog, runLog.js, _autosync.scss
 │   ├── launchers/           LauncherBlock (una fila por juego), launchers.js
 │   ├── keyhelp/             PublicKey, keyhelpSteps.js
 │   ├── sync/                ConflictDialog, HttpConflicts (aviso de conflicto/resolución de un juego solo http), httpConflict.js
-│   └── versions/            VersionList (tarjeta «Actual» del hub, sin Restaurar, y versiones anteriores)
+│   └── versions/            VersionList (tarjeta «Actual» del hub, sin Restaurar, y versiones anteriores; un origen que ya no es un dispositivo sale como «dispositivo desconocido (id)»)
 ├── hooks/                   useI18n, useWatches, usePairing (consulta cada 5 s las solicitudes pendientes), useSteam (ídem con las sugerencias de Steam), useTheme
 ├── lib/                     lógica sin React: api.js (cliente y ApiError), api/<recurso>.js, i18n, errors,
 │                            format, clipboard, tabs, names, pwa, updates, apikey,
-│                            pairing, steam (lógica pura de sugerencias), devicekey (lógica pura de solicitudes y de la clave de dispositivo), crash (detalles saneados de un fallo), crashtext (textos de respaldo sin contexto de i18n), crashwatch (captura global de fallos), poll (consulta con pestaña visible), versionsWatch (vigila la versión más reciente y el «Actual» del hub de un juego), api/pairing.js, api/steam.js, deck (URLs y normalización de la información del plugin), api/deck.js
+│                            pairing, orphans (lógica pura de la selección y del aviso de la papelera), steam (lógica pura de sugerencias), devicekey (lógica pura de solicitudes y de la clave de dispositivo), crash (detalles saneados de un fallo), crashtext (textos de respaldo sin contexto de i18n), crashwatch (captura global de fallos), poll (consulta con pestaña visible), versionsWatch (vigila la versión más reciente y el «Actual» del hub de un juego), api/pairing.js, api/steam.js, api/orphans.js, deck (URLs y normalización de la información del plugin), api/deck.js
 ├── locales/                 es.json, en.json e index.js
 ├── assets/                  imágenes
 └── styles/                  _variables, _themes, _base, _layout, _components y main.scss

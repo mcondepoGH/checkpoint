@@ -62,6 +62,7 @@ Variables (todas con prefijo `CHECKPOINT_`, salvo `TZ`). El `docker-compose.yml`
 | `CHECKPOINT_SESSION_HOURS` | `12` | Horas de validez de la sesión |
 | `CHECKPOINT_COOKIE_SECURE` / `CHECKPOINT_TRUST_PROXY` | `0` | Pon `1` tras un proxy inverso con HTTPS |
 | `CHECKPOINT_HOOK_STAGING_TTL_H` | `24` | Horas sin escrituras tras las que se purga el staging de subidas (`data/staging/<juego>/<dispositivo>/`) al arrancar y cada hora; nunca el de un juego con el lock tomado o una ejecución en curso. Entre `1` y `720`; fuera de rango o no numérico, el arranque falla con un error claro |
+| `CHECKPOINT_TRASH_TTL_DAYS` | `30` | Días que se conserva en la papelera (`data/trash/`) lo que se mueve desde «Datos sin dispositivo asignado» antes de que el mantenimiento programado lo borre del todo. Entre `1` y `3650`; fuera de rango o no numérico, el arranque falla con un error claro |
 | `CHECKPOINT_HOOK_STAGING_MAX_MB` | `2048` | Tope (MiB) del staging de cada juego (todos sus dispositivos) en la subida de saves por la API; al superarlo, `413` `err.hook.staging_full`. Entre `1` y `1048576`; fuera de rango o no numérico, el arranque falla con un error claro |
 | `CHECKPOINT_HOOK_MAX_FILE_MB` | `512` | Tamaño máximo por fichero (MiB) en la subida de saves de los dispositivos `http` por la API (ver «Hooks»). Entre `1` y `16384` (16 GiB); fuera de rango o no numérico, el arranque falla con un error claro |
 | `CHECKPOINT_RUNTIME` | automático | `docker` o `native`: fuerza el modo (la imagen lo fija a `docker`) |
@@ -217,6 +218,18 @@ Un juego se puede desactivar sin borrarlo: en **Configuración > Biblioteca**, e
 - **Versiones:** se conservan y siguen visibles (con el sufijo «(desactivado)») y restaurables. Restaurar solo copia al hub: no se propaga a los dispositivos mientras el juego esté desactivado.
 
 Al guardar solo se escribe `enabled: false`; reactivarlo quita la línea.
+
+## Datos sin dispositivo asignado
+
+Al borrar un dispositivo o un juego de la configuración, sus datos en el hub **no se borran**. Qué pasa con cada cosa:
+
+- **Metadatos del dispositivo** (línea base de `data/state/<juego>.json`, `data/staging/<juego>/<dispositivo>/` y sus conflictos o resoluciones pendientes de `data/resolutions/<juego>.json`): se limpian solos al guardar (o restaurar) la configuración sin ese dispositivo. Nunca se tocan las versiones ni el hub.
+- **Versiones de un dispositivo que ya no existe** (o de un nombre antiguo, como `SteamDeck`): siguen en Versiones con la etiqueta «dispositivo desconocido (id)» y se pueden **restaurar al hub** igual que las demás.
+- **Limpieza manual**: Configuración > General > «Datos sin dispositivo asignado» lista lo que ya no pertenece a ningún dispositivo ni juego de la configuración: versiones de un origen desconocido y todo lo que queda en disco de un juego borrado (`hub`, `versions`, `state`, `status`, `logs`, `staging`, `resolutions`), con su tamaño, nº de versiones y fechas (más antigua y más reciente). Si el hub de un juego borrado tiene datos, sale marcado como **única copia**. Pestaña Versiones avisa con un enlace cuando hay algo.
+- **Papelera, no borrado**: elegir elementos y confirmar (diálogo con casilla obligatoria) los **mueve** a `data/trash/<AAAA-MM-DD_HHMMSS>/` con un `manifest.json` (qué era, cuándo, tamaño y de dónde salió). Se conservan `CHECKPOINT_TRASH_TTL_DAYS` días (30 por defecto) y el mantenimiento programado (cada hora) vacía lo caducado. Desde la misma pantalla se pueden **restaurar** (si el destino ya existe, no se pisa nada). No hay retención automática de partidas ni borrado directo.
+- **Seguridad**: solo con sesión. El cliente confirma con el `token` de cada elemento (huella de su contenido en el listado); el hub revalida con la configuración actual y bajo el lock del juego, y nunca mueve un juego de la configuración ni un origen válido (`hub` o un dispositivo de la configuración), aunque se le pida. Si hay una sincronización en curso en ese juego, se salta. Las rutas se resuelven dentro de `data/` y no se siguen enlaces simbólicos.
+
+API (sesión): `GET /api/orphans` → `{items, ttl_days}`; `POST /api/orphans/trash` con `{items: [{id, token}]}` → `{moved, skipped}`; `GET /api/orphans/trash`; `POST /api/orphans/trash/restore` con `{entry, item}`. Errores `err.orphans.*`.
 
 ## Conflictos
 
