@@ -102,8 +102,10 @@ test('los errores al configurar o activar un juego tienen texto propio', { skip 
   assert.match(why('err.steam.appid_in_use'), /otro juego/i);
   assert.match(why('err.config.name_duplicate'), /con ese nombre/i);
   assert.match(gameError({ error: 'path_forbidden' }), /carpeta/i);
-  assert.match(gameError({ error: 'path_missing' }), /ya no existe/i);
+  assert.match(gameError({ error: 'path_missing' }), /no existe o no es una carpeta/i);
   assert.match(gameError({ error: 'path_missing' }), /no se ha creado/i);
+  assert.match(gameError({ error: 'path_vanished' }), /sugerida ya no existe/i);
+  assert.match(gameError({ error: 'path_vanished' }), /no se ha creado/i);
   assert.match(gameError({ error: 'unknown_game' }), /Busca de nuevo/i);
   assert.match(gameError({ error: 'connection' }), /conectar/i);
   assert.match(gameError({ error: 'rate_limited', error_params: { wait_s: 30 } }), /30 s/);

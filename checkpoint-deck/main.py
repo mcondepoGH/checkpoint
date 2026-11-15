@@ -304,7 +304,9 @@ class Plugin:
             return self._failure("not_linked")
         if self._unconfigured_name(appid) is None:
             return self._failure("unknown_game")
-        out = await asyncio.to_thread(tools.create, appid, str(name), str(path), str(path) in self._offered.get(appid, ()))
+        out = await asyncio.to_thread(tools.create, appid, str(name), str(path))
+        if not out["ok"] and out["error"] == "path_missing" and str(path) in self._offered.get(appid, ()):
+            out["error"] = "path_vanished"  # la carpeta que se ofreció como existente ya no está: mensaje propio
         if out["ok"]:
             g = out["game"]
             self.jobs.add_game(g)

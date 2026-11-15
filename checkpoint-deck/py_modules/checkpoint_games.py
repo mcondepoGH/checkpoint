@@ -207,14 +207,15 @@ class GameTools:
         self._client = hc.HubClient(hub, key)
         self._home, self._protected, self._log = Path(home), list(protected), log
 
-    def create(self, appid: int, name: str, path: str, must_exist: bool = False) -> Dict[str, Any]:
-        """`must_exist`: la ruta se sugirió como carpeta existente; si ya no lo es, se rechaza (`path_missing`) sin llamar al hub."""
+    def create(self, appid: int, name: str, path: str) -> Dict[str, Any]:
+        """La carpeta de guardado debe EXISTIR y ser una carpeta (sea sugerida, escrita o elegida con Examinar…); si no, se rechaza
+        (`path_missing`) sin llamar al hub ni crear nada."""
         try:
             real = validate_game_path(path, self._home, self._protected)  # la misma regla que usará la sincronización
         except PathNotAllowed:
             return {"ok": False, "error": "path_forbidden", "error_params": {}, "error_detail": None}
-        if must_exist and not _is_real_dir(str(real)):
-            self._log("crear juego: la carpeta sugerida ya no existe o ya no es una carpeta")
+        if not _is_real_dir(str(real)):
+            self._log("crear juego: la carpeta no existe o no es una carpeta")
             return {"ok": False, "error": "path_missing", "error_params": {}, "error_detail": None}
         try:
             game = self._client.create_game(appid, name, path)

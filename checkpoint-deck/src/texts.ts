@@ -247,6 +247,8 @@ export function gameError(f: GameFailure): string {
     case "path_forbidden":
       return "Esa carpeta no se puede usar (sistema, Steam o Decky). Elige la carpeta de guardado del juego.";
     case "path_missing":
+      return "La carpeta no existe o no es una carpeta. No se ha creado el juego: crea la carpeta, o elige otra con Examinar… o escribe la ruta de una que exista.";
+    case "path_vanished":
       return "La carpeta sugerida ya no existe o ya no es una carpeta. No se ha creado el juego: elige otra con Examinar… o escribe la ruta.";
     case "unknown_game":
       return "Ese juego ya no está en la lista. Busca de nuevo los juegos de Steam.";

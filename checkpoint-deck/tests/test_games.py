@@ -150,6 +150,7 @@ def tools(hub_url, home):
 def test_create_ok(scripthub, home):
     hub = scripthub(lambda r: (200, {"id": "celeste", "name": "Celeste", "appid": 504230, "path": "/home/x/p"}, {}))
     p = home / "saves/Celeste"
+    p.mkdir(parents=True)
     out = tools(hub.url, home).create(504230, "Celeste", str(p))
     assert out == {"ok": True, "game": {"id": "celeste", "name": "Celeste", "appid": 504230, "path": "/home/x/p"}}
     assert json.loads(hub.requests[0].body)["path"] == str(p)
@@ -165,6 +166,7 @@ def test_create_refuses_a_path_the_deck_would_not_accept_before_calling_the_hub(
 def test_create_maps_hub_errors(scripthub, home):
     def run(status, body, headers=None):
         hub = scripthub(lambda r: (status, body, headers or {}))
+        (home / "s").mkdir(exist_ok=True)
         return tools(hub.url, home).create(1, "X", str(home / "s"))
 
     out = run(422, {"detail": {"code": "err.steam.game_invalid", "params": {"field": "name", "reason": "err.config.name_duplicate"}}})
@@ -177,8 +179,18 @@ def test_create_maps_hub_errors(scripthub, home):
     assert tools("http://127.0.0.1:1", home).create(1, "X", str(home / "s"))["error"] == "connection"
 
 
+def test_create_always_requires_an_existing_directory_and_does_not_call_the_hub(scripthub, home):
+    hub = scripthub(lambda r: (200, {"id": "x"}, {}))
+    (home / "f").write_text("fichero")
+    for p in (home / "no_existe", home / "f"):
+        out = tools(hub.url, home).create(1, "X", str(p))
+        assert out == {"ok": False, "error": "path_missing", "error_params": {}, "error_detail": None}
+    assert hub.requests == [] and not (home / "no_existe").exists()
+
+
 def test_create_returns_the_join_flags_and_maps_the_join_refusals(scripthub, home):
     body = {"id": "only", "name": "Only", "appid": 7, "path": "/p", "joined": True, "devices": ["a", "b"], "enabled": False}
+    (home / "s").mkdir()
     hub = scripthub(lambda r: (200, body, {}))
     assert tools(hub.url, home).create(7, "only", str(home / "s")) == {"ok": True, "game": body}
     for reason in ("err.steam.no_free_slot", "err.steam.appid_mismatch", "err.steam.appid_in_use"):

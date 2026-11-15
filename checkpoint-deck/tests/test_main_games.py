@@ -104,6 +104,7 @@ def test_suggest_game_gives_the_home_where_the_folder_picker_starts_when_nothing
 def test_configure_game_creates_it_and_moves_it_to_the_list(fake_decky, scripthub, tmp_path, monkeypatch, caplog):
     st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
     save = tmp_path / "deckhome" / "saves" / "cs2"
+    save.mkdir(parents=True)
 
     async def go():
         await p._main()
@@ -127,6 +128,7 @@ def test_configure_game_creates_it_and_moves_it_to_the_list(fake_decky, scripthu
 def test_configure_game_only_for_an_unconfigured_game_and_reports_hub_errors(fake_decky, scripthub, tmp_path, monkeypatch):
     st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
     st.fail_create = (422, {"detail": {"code": "err.steam.game_invalid", "params": {"field": "name", "reason": "err.config.name_duplicate"}}}, {})
+    (tmp_path / "deckhome" / "s").mkdir(parents=True)
     ok_path = str(tmp_path / "deckhome" / "s")
 
     async def go():
@@ -217,6 +219,7 @@ def test_enabling_it_again_syncs_on_open(fake_decky, scripthub, tmp_path, monkey
 def test_configure_game_joined_moves_it_to_the_list_and_flags_the_join(fake_decky, scripthub, tmp_path, monkeypatch):
     st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
     save = tmp_path / "deckhome" / "saves" / "cs2"
+    save.mkdir(parents=True)
     st.join = {"id": "cs2-hub", "name": "Counter-Strike 2 (hub)", "appid": 730, "path": str(save), "joined": True, "devices": ["pc", "deck"], "enabled": True}
 
     async def go():
@@ -244,12 +247,14 @@ def test_configure_game_a_new_game_is_not_flagged_as_joined(fake_decky, scripthu
         await p._unload()
         return r
 
+    (tmp_path / "deckhome" / "saves" / "cs2").mkdir(parents=True)
     assert "joined" not in asyncio.run(go())["game"]
 
 
 def test_configure_game_joined_a_disabled_game_stays_disabled_in_the_list(fake_decky, scripthub, tmp_path, monkeypatch):
     st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
     save = tmp_path / "deckhome" / "saves" / "cs2"
+    save.mkdir(parents=True)
     st.join = {"id": "cs2-hub", "name": "CS2", "appid": 730, "path": str(save), "joined": True, "devices": ["pc", "deck"], "enabled": False}
 
     async def go():
@@ -267,6 +272,7 @@ def test_configure_game_joined_a_disabled_game_stays_disabled_in_the_list(fake_d
 
 def test_configure_game_join_refusals_keep_the_game_unconfigured(fake_decky, scripthub, tmp_path, monkeypatch):
     st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    (tmp_path / "deckhome" / "s").mkdir(parents=True)
     ok_path = str(tmp_path / "deckhome" / "s")
 
     async def go():
@@ -381,7 +387,7 @@ def test_configure_game_refuses_a_suggested_folder_that_vanished_and_does_not_ca
 
     sug, r, s = asyncio.run(go())
     assert sug["path"] == str(save)
-    assert r["ok"] is False and r["error"] == "path_missing"
+    assert r["ok"] is False and r["error"] == "path_vanished"
     assert not [q for q in hub.requests if q.method == "POST" and q.path == "/api/steam/games"]
     assert 730 in [u["appid"] for u in s["unconfigured"]] and [g["id"] for g in s["games"]] == ["hl2"]  # no queda a medias
     assert str(save) not in caplog.text and "tmp" not in " ".join(m for m in caplog.messages if "crear juego" in m)
@@ -406,20 +412,64 @@ def test_configure_game_refuses_a_suggested_folder_that_became_a_file(fake_decky
         return r
 
     r = asyncio.run(go())
-    assert r["ok"] is False and r["error"] == "path_missing"
+    assert r["ok"] is False and r["error"] == "path_vanished"
     assert not [q for q in hub.requests if q.method == "POST" and q.path == "/api/steam/games"]
 
 
-def test_configure_game_still_accepts_a_typed_folder_that_does_not_exist_yet(fake_decky, scripthub, tmp_path, monkeypatch):
-    st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
-    nueva = tmp_path / "deckhome" / "saves" / "nueva"  # nunca se sugirió: la sincronización la crea al bajar
+def _post_games(hub):
+    return [q for q in hub.requests if q.method == "POST" and q.path == "/api/steam/games"]
+
+
+def test_configure_game_refuses_a_typed_folder_that_does_not_exist_and_does_not_call_the_hub(fake_decky, scripthub, tmp_path, monkeypatch, caplog):
+    _, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    nueva = tmp_path / "deckhome" / "saves" / "nueva"  # escrita a mano, nunca ofrecida
 
     async def go():
         await p._main()
         await p.refresh_library()
         await settled(p)
         r = await p.configure_game(730, "Counter-Strike 2", str(nueva))
+        s = await p.get_sync_state()
+        await p._unload()
+        return r, s
+
+    r, s = asyncio.run(go())
+    assert r["ok"] is False and r["error"] == "path_missing"
+    assert _post_games(hub) == [] and not nueva.exists()  # ni se llama al hub ni se crea la carpeta
+    assert 730 in [u["appid"] for u in s["unconfigured"]] and [g["id"] for g in s["games"]] == ["hl2"]
+    assert str(nueva) not in caplog.text and "tmp" not in " ".join(m for m in caplog.messages if "crear juego" in m)
+
+
+def test_configure_game_refuses_a_typed_path_that_is_a_file(fake_decky, scripthub, tmp_path, monkeypatch):
+    _, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    fichero = tmp_path / "deckhome" / "saves" / "fichero"
+    fichero.parent.mkdir(parents=True)
+    fichero.write_text("no soy una carpeta")
+
+    async def go():
+        await p._main()
+        await p.refresh_library()
+        await settled(p)
+        r = await p.configure_game(730, "Counter-Strike 2", str(fichero))
+        await p._unload()
+        return r
+
+    r = asyncio.run(go())
+    assert r["ok"] is False and r["error"] == "path_missing" and _post_games(hub) == []
+
+
+def test_configure_game_accepts_a_typed_or_browsed_folder_that_exists(fake_decky, scripthub, tmp_path, monkeypatch):
+    _, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    elegida = tmp_path / "deckhome" / "saves" / "elegida"  # escrita o elegida con Examinar: no pasó por suggest_game
+    elegida.mkdir(parents=True)
+
+    async def go():
+        await p._main()
+        await p.refresh_library()
+        await settled(p)
+        r = await p.configure_game(730, "Counter-Strike 2", str(elegida))
         await p._unload()
         return r
 
     assert asyncio.run(go())["ok"] is True
+    assert json.loads(_post_games(hub)[0].body)["path"] == str(elegida)
