@@ -239,7 +239,21 @@
     "trashIntro": "Se vacía sola: cada elemento se borra del todo {days} días después de moverlo.",
     "expires": "se borra el {date}",
     "restore": "Restaurar",
-    "restored": "Restaurado desde la papelera"
+    "restored": "Restaurado desde la papelera",
+    "relocateBtn": "Reubicar…",
+    "relocateTitle": "Reubicar en un juego existente",
+    "relocateIntro": "Los datos de «{game}» se sumarán al historial de otro juego de la configuración.",
+    "relocateTarget": "Juego de destino",
+    "relocatePick": "Elige un juego…",
+    "relocateFrom": "Origen",
+    "relocateTo": "Destino",
+    "relocateKeep": "«{target}» conserva sus partidas actuales: lo de «{game}» (sus versiones y sus partidas actuales) solo se añade como versiones de su historial y no se sobrescribe nada. Si una versión tiene la misma fecha que otra del destino, llega con un sufijo. El resto (estado, registros, etc.) va a la papelera, donde se conserva {days} días.",
+    "relocateConfirm": "Confirmar y reubicar",
+    "relocating": "Reubicando…",
+    "relocated": {
+      "one": "Reubicado en «{target}»: {count} versión sumada a su historial",
+      "other": "Reubicado en «{target}»: {count} versiones sumadas a su historial"
+    }
   },
   "settings": {
     "subtabs": {
@@ -761,7 +775,10 @@
       "move_failed": "no se pudo mover a la papelera",
       "trash_unknown": "esa entrada de la papelera ya no existe o no es válida",
       "restore_conflict": "no se puede restaurar: ya hay datos en el destino (no se pisa nada)",
-      "restore_failed": "no se pudo restaurar desde la papelera"
+      "restore_failed": "no se pudo restaurar desde la papelera",
+      "target_unknown": "el juego de destino no existe en la configuración",
+      "not_game": "solo se pueden reubicar datos de un juego que ya no está en la configuración",
+      "relocate_failed": "no se pudo reubicar: se ha deshecho lo que se había hecho y no se ha perdido nada"
     },
     "pairing": {
       "name_invalid": "nombre de dispositivo no válido: {cause}",

@@ -239,7 +239,21 @@
     "trashIntro": "It empties itself: each item is deleted for good {days} days after it was moved.",
     "expires": "deleted on {date}",
     "restore": "Restore",
-    "restored": "Restored from the trash"
+    "restored": "Restored from the trash",
+    "relocateBtn": "Relocate…",
+    "relocateTitle": "Relocate to an existing game",
+    "relocateIntro": "The data of \"{game}\" will be added to the history of another game in the configuration.",
+    "relocateTarget": "Target game",
+    "relocatePick": "Choose a game…",
+    "relocateFrom": "From",
+    "relocateTo": "To",
+    "relocateKeep": "\"{target}\" keeps its current saves: what \"{game}\" has (its versions and its current saves) is only added as versions of its history and nothing is overwritten. If a version has the same date as one already in the target, it arrives with a suffix. The rest (state, logs, etc.) goes to the trash, kept for {days} days.",
+    "relocateConfirm": "Confirm and relocate",
+    "relocating": "Relocating…",
+    "relocated": {
+      "one": "Relocated to \"{target}\": {count} version added to its history",
+      "other": "Relocated to \"{target}\": {count} versions added to its history"
+    }
   },
   "settings": {
     "subtabs": {
@@ -761,7 +775,10 @@
       "move_failed": "could not move it to the trash",
       "trash_unknown": "that trash entry no longer exists or is not valid",
       "restore_conflict": "cannot restore: there is already data at the destination (nothing is overwritten)",
-      "restore_failed": "could not restore from the trash"
+      "restore_failed": "could not restore from the trash",
+      "target_unknown": "the target game does not exist in the configuration",
+      "not_game": "only data from a game that is no longer in the configuration can be relocated",
+      "relocate_failed": "could not relocate: what had been done was undone and nothing was lost"
     },
     "pairing": {
       "name_invalid": "invalid device name: {cause}",

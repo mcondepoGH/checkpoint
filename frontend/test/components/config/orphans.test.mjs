@@ -29,7 +29,23 @@ const ORIGIN = {
 const GAME = { ...ORIGIN, id: 'game:old', kind: 'game', game: 'old', source: null, only_copy: true, token: 't2' };
 const noop = () => {};
 const base = { items: [], trash: [], ttlDays: 30, selected: [], busy: false, notice: null, confirming: false, ack: false };
-const handlers = { onToggle: noop, onAsk: noop, onCancel: noop, onAck: noop, onConfirm: noop, onRestore: noop, onDismiss: noop };
+const GAMES = [
+  { id: 'tgt', name: 'Destino <b>' },
+  { id: 'other', name: 'Otro' },
+];
+const handlers = {
+  onToggle: noop,
+  onAsk: noop,
+  onCancel: noop,
+  onAck: noop,
+  onConfirm: noop,
+  onRestore: noop,
+  onDismiss: noop,
+  onRelocate: noop,
+  onTarget: noop,
+  onRelocateCancel: noop,
+  onRelocateConfirm: noop,
+};
 const render = (props, lang = 'es') => {
   m.i18n.setLocale(lang);
   return m.renderToStaticMarkup(m.React.createElement(m.OrphanList, { ...base, ...handlers, ...props }));
@@ -114,4 +130,35 @@ test('aviso en Versiones: plural, enlace a Configuración y sin enlace si no hay
   assert.ok(one.includes('Hay 1 elemento de datos sin dispositivo ni juego') && one.includes('Revisar en Configuración'));
   assert.ok(r({ count: 3, onGoSettings: noop }).includes('Hay 3 elementos'));
   assert.ok(!r({ count: 2 }).includes('Revisar'));
+});
+
+test('«Reubicar…» solo en los juegos fuera de la configuración y con juegos de destino', { skip }, () => {
+  const h = render({ items: [ORIGIN, GAME], games: GAMES });
+  assert.equal(h.split('Reubicar…').length - 1, 1);
+  assert.ok(!render({ items: [GAME], games: [] }).includes('Reubicar…'));
+  assert.ok(!render({ items: [ORIGIN], games: GAMES }).includes('Reubicar…'));
+});
+
+test('diálogo de reubicar: desplegable con nombres legibles, resumen y confirmar desactivado sin destino', { skip }, () => {
+  const props = { items: [GAME], games: GAMES, relocating: GAME };
+  const h = render(props);
+  assert.ok(h.includes('role="dialog"') && h.includes('Reubicar en un juego existente') && h.includes('Elige un juego…'));
+  assert.ok(h.includes('<option value="tgt">Destino &lt;b&gt;</option>') && h.includes('<option value="other">Otro</option>'));
+  assert.match(h, /<button[^>]*disabled[^>]*>Confirmar y reubicar/);
+  assert.ok(!h.includes('conserva sus partidas actuales'));
+  const c = render({ ...props, target: 'tgt' });
+  assert.ok(!/<button[^>]*disabled[^>]*>Confirmar y reubicar/.test(c));
+  assert.ok(c.includes('«Destino &lt;b&gt;» conserva sus partidas actuales') && c.includes('30 días') && c.includes('2 KB'));
+  assert.ok(c.includes('<dd>old</dd>') && c.includes('<dd>3</dd>'));
+});
+
+test('diálogo de reubicar en inglés y ocupado', { skip }, () => {
+  const h = render({ items: [GAME], games: GAMES, relocating: GAME, target: 'other', busy: true }, 'en');
+  assert.ok(h.includes('Relocate to an existing game') && h.includes('keeps its current saves'));
+  assert.match(h, /<button[^>]*disabled[^>]*>Relocating…/);
+});
+
+test('aviso tras reubicar', { skip }, () => {
+  const h = render({ notice: { variant: 'ok', body: { code: 'orphans.relocated', params: { count: 2, target: 'Destino' } } } });
+  assert.ok(h.includes('Reubicado en «Destino»: 2 versiones sumadas a su historial'));
 });

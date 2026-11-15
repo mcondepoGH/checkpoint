@@ -1,8 +1,18 @@
 // Lógica pura de la pantalla de datos sin dispositivo ni juego, y su API (con fetch simulado).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hasOnlyCopy, keepSelected, moveNotice, payload, selectedItems, totalSize } from '#src/lib/orphans.js';
-import { listOrphans, listTrash, restoreTrash, trashOrphans } from '#src/lib/api/orphans.js';
+import {
+  canRelocate,
+  hasOnlyCopy,
+  keepSelected,
+  moveNotice,
+  payload,
+  relocateNotice,
+  selectedItems,
+  targetGame,
+  totalSize,
+} from '#src/lib/orphans.js';
+import { listOrphans, listTrash, relocateOrphan, restoreTrash, trashOrphans } from '#src/lib/api/orphans.js';
 import { errorText } from '#src/lib/errors.js';
 import { createI18n } from '#src/lib/i18n.js';
 import { en, es } from '../helpers/locales.mjs';
@@ -54,4 +64,33 @@ test('la API usa las rutas y cuerpos esperados', async () => {
     ['/api/orphans/trash', 'GET', undefined],
     ['/api/orphans/trash/restore', 'POST', JSON.stringify({ entry: '2026-01-01_000000', item: 2 })],
   ]);
+});
+
+test('canRelocate: solo juegos huérfanos y con algún juego de destino', () => {
+  const games = [{ id: 'g', name: 'G' }];
+  assert.equal(canRelocate(it({ kind: 'game' }), games), true);
+  assert.equal(canRelocate(it({ kind: 'origin' }), games), false);
+  assert.equal(canRelocate(it({ kind: 'game' }), []), false);
+  assert.equal(canRelocate(it({ kind: 'game' }), undefined), false);
+});
+
+test('targetGame y relocateNotice', () => {
+  const games = [{ id: 'g', name: 'Juego' }];
+  assert.deepEqual(targetGame(games, 'g'), games[0]);
+  assert.equal(targetGame(games, 'x'), null);
+  assert.equal(targetGame(undefined, 'x'), null);
+  assert.deepEqual(relocateNotice({ versions: 3 }, games[0]), {
+    variant: 'ok',
+    body: { code: 'orphans.relocated', params: { count: 3, target: 'Juego' } },
+  });
+});
+
+test('relocateOrphan manda id, token y destino', async () => {
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push([url, init?.method ?? 'GET', init?.body]);
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+  await relocateOrphan('game:x', 'tk', 'g');
+  assert.deepEqual(calls, [['/api/orphans/relocate', 'POST', JSON.stringify({ id: 'game:x', token: 'tk', target: 'g' })]]);
 });

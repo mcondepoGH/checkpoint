@@ -23,3 +23,15 @@ export function moveNotice(res) {
 
 // Ids marcados que siguen existiendo en la lista nueva (tras recargar, lo que ya no está se desmarca).
 export const keepSelected = (ids, items) => ids.filter((id) => items.some((i) => i.id === id));
+
+// Solo los datos de un juego fuera de la configuración se pueden reubicar en otro juego.
+export const canRelocate = (item, games) => item?.kind === 'game' && Array.isArray(games) && games.length > 0;
+
+// Destino elegido ({id, name}) dentro de los juegos de la config, o null si no es uno de ellos.
+export const targetGame = (games, id) => (games ?? []).find((g) => g.id === id) ?? null;
+
+// Aviso tras reubicar: cuántas versiones se sumaron al historial del destino (nombre legible).
+export const relocateNotice = (res, target) => ({
+  variant: 'ok',
+  body: ui('orphans.relocated', { count: res?.versions ?? 0, target: target?.name ?? res?.target ?? '' }),
+});

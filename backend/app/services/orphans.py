@@ -9,6 +9,8 @@ elemento lleva un `token` (huella de su contenido) que el cliente devuelve; si a
 
 import hashlib
 import logging
+import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Dict, List
@@ -18,7 +20,7 @@ from ..core import settings
 from ..sync import locking
 from ..sync import trash
 from ..sync.trash import TrashError as TrashError, plain_name
-from ..sync.versions import VERSION_RE, _fmt
+from ..sync.versions import VERSION_RE, _fmt, _version_key
 
 api_log = logging.getLogger("checkpoint.api")
 
@@ -208,6 +210,156 @@ def move_to_trash(cfg_fn: Callable[[], Config], data_dir, requested: List[dict])
             sum(m["size"] for m in moved),
         )
     return {"moved": moved, "skipped": skipped}
+
+
+def _free_version(taken: set, stamp: str) -> str:
+    """`stamp` si está libre entre las versiones `taken`; si no, `<AAAA-MM-DD_HHMMSS>-<n>` con el menor n libre. Se anota."""
+    name, n = stamp, 0
+    while name in taken:
+        n += 1
+        name = f"{stamp[:17]}-{n}"
+    taken.add(name)
+    return name
+
+
+def _undo(done: List[tuple], made: List[Path], entry) -> None:
+    """Deshace los movimientos hechos (en orden inverso) y quita las carpetas que quedaron vacías. Nunca borra datos."""
+    for src, dst in reversed(done):
+        try:
+            shutil.move(str(dst), str(src))
+        except OSError:
+            api_log.error("reubicar: no se pudo deshacer un movimiento (los datos siguen en %s)", dst)
+            continue
+        try:
+            dst.parent.rmdir()
+        except OSError:
+            pass
+    for d in made:  # carpetas creadas para recibir datos que al final no llegaron
+        try:
+            d.rmdir()
+        except OSError:
+            pass
+    if entry is not None:
+        for dirpath, _dirs, _files in os.walk(entry, topdown=False):
+            try:
+                os.rmdir(dirpath)
+            except OSError:
+                pass
+
+
+def relocate(cfg_fn: Callable[[], Config], data_dir, item_id: str, token: str, target: str) -> dict:
+    """Reubica un huérfano de tipo JUEGO en el juego `target` de la config. Semántica:
+
+    - `hub/<target>` NO se toca: el destino conserva sus partidas actuales.
+    - Cada versión del huérfano (`versions/<huérfano>/<ts>/<origen>/`) se SUMA al historial del destino como carpeta
+      entera. Nunca se mezcla con una versión que ya exista: si `<ts>` ya está en el destino, la versión llega con el
+      siguiente `<ts>-<n>` libre (no se pisa nada, no se pierde nada).
+    - El hub actual del huérfano (`hub/<huérfano>`) se suma también al historial del destino como una versión nueva
+      (fecha de la reubicación, origen `hub`): se puede restaurar desde Versiones como cualquier otra.
+    - Lo demás (state, status, logs, staging, resolutions) va a la papelera, restaurable hasta que caduque.
+
+    Con el lock de los dos juegos (`err.orphans.busy` si alguno está ocupado) y revalidando token y config con ellos
+    tomados. Si un movimiento falla se deshacen los anteriores (`err.orphans.relocate_failed`). Sin FastAPI: lanza `TrashError`."""
+    data = Path(data_dir)
+    cfg = cfg_fn()
+    if not isinstance(target, str) or not plain_name(target) or target not in cfg.games:
+        raise TrashError("err.orphans.target_unknown")
+    first = {i["id"]: i for i in _scan(cfg, data)}.get(item_id)
+    if first is None:
+        raise TrashError("err.orphans.unknown")
+    if first["kind"] != "game":
+        raise TrashError("err.orphans.not_game")
+    game = first["game"]
+    if game == target:
+        raise TrashError("err.orphans.target_unknown")
+    handles = []
+    try:
+        for name in sorted((game, target)):  # siempre en el mismo orden
+            try:
+                handles.append(locking.acquire(data / "locks" / f"{name}.lock"))
+            except locking.LockBusy:
+                raise TrashError("err.orphans.busy") from None
+        cfg = cfg_fn()
+        item = {i["id"]: i for i in _scan(cfg, data)}.get(item_id)  # revalidar con los locks tomados
+        if item is None:
+            raise TrashError("err.orphans.unknown")
+        if target not in cfg.games or item["kind"] != "game":
+            raise TrashError("err.orphans.target_unknown")
+        if item["token"] != token:
+            raise TrashError("err.orphans.changed")
+        vroot = data / "versions" / target
+        if vroot.is_symlink() or (data / "versions").is_symlink():
+            raise TrashError("err.orphans.unsafe")
+        taken = {p.name for p in vroot.iterdir()} if vroot.is_dir() else set()
+        done: List[tuple] = []
+        made: List[Path] = []
+        entry = None
+        try:
+            for vdir in sorted(_subdirs(data / "versions" / game), key=lambda p: _version_key(p.name)):
+                if not VERSION_RE.match(vdir.name):
+                    continue
+                dst = vroot / _free_version(taken, vdir.name)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(vdir), str(dst))
+                done.append((vdir, dst))
+            hub = data / "hub" / game
+            hub_in = hub.is_dir() and not hub.is_symlink() and bool(trash.tree_stats(hub)[0])
+            if hub_in:
+                dst = vroot / _free_version(taken, datetime.now().strftime("%Y-%m-%d_%H%M%S")) / "hub"
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                made.append(dst.parent)
+                shutil.move(str(hub), str(dst))
+                done.append((hub, dst))
+            try:  # si no queda nada dentro, la carpeta de versiones vacía del huérfano se quita
+                (data / "versions" / game).rmdir()
+            except OSError:
+                pass
+            created = datetime.now(timezone.utc)
+            rest = [(rel, dest, p) for rel, dest, p in _game_parts(data, game) if not (hub_in and rel == f"hub/{game}")]
+            rest_files = rest_size = 0
+            for _rel, _dest, p in rest:
+                f, s, _m = trash.tree_stats(p)
+                rest_files, rest_size = rest_files + f, rest_size + s
+            moves: List[dict] = []
+            if rest:
+                entry = trash.new_entry(data)
+                for rel, dest, _p in rest:
+                    moves.append(trash.move_in(data, entry, rel, dest))
+                    done.append((data / rel, entry / dest))
+                trash.write_manifest(
+                    entry,
+                    created,
+                    [
+                        {
+                            "kind": "game",
+                            "game": game,
+                            "source": None,
+                            "size": rest_size,
+                            "files": rest_files,
+                            "versions": 0,
+                            "oldest": item["oldest"],
+                            "newest": item["newest"],
+                            "moves": moves,
+                            "restored": False,
+                        }
+                    ],
+                )
+        except (OSError, TrashError, shutil.Error):
+            _undo(done, made, entry)
+            raise TrashError("err.orphans.relocate_failed") from None
+    finally:
+        for h in handles:
+            h.release()
+    for suffix in ("", ".excl"):  # el lock (vacío) de un juego que ya no existe no se queda suelto
+        (data / "locks" / f"{game}.lock{suffix}").unlink(missing_ok=True)
+    api_log.info("datos sin dispositivo: un juego reubicado (%d versiones, %d bytes)", item["versions"], item["size"])
+    return {
+        "ok": True,
+        "target": target,
+        "versions": item["versions"],
+        "hub": bool(hub_in),
+        "size": item["size"],
+    }
 
 
 def list_trash(data_dir, ttl_days: float) -> List[dict]:

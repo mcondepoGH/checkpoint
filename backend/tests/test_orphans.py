@@ -540,3 +540,185 @@ def test_mantenimiento_vacia_la_papelera_caducada(cl):
     old = entry(cl.data, "2020-01-01_000000", "2020-01-01T00:00:00Z")
     cl.app.state.ctx.purge_trash()
     assert not old.exists()
+
+
+# ---------- reubicar un juego huérfano en un juego existente ----------
+CFG_T = parse_config(
+    {
+        "devices": {"pc": {"name": "PC", "host": "h1", "user": "u", "os": "linux"}},
+        "games": {
+            "g": {"name": "Juego", "devices": ["pc"], "paths": {"pc": "/p"}},
+            "tgt": {"name": "Destino", "devices": ["pc"], "paths": {"pc": "/p2"}},
+        },
+    }
+)
+OLD = "old-1a2b3c4d"
+
+
+def orphan(data, cfg=CFG_T):
+    return by_id(orphans.scan(cfg, data))[f"game:{OLD}"]
+
+
+def reloc(data, target="tgt", cfg=CFG_T, item=None, token=None):
+    it = item or orphan(data, cfg)
+    return orphans.relocate(lambda: cfg, data, it["id"], token or it["token"], target)
+
+
+def seed_target(data):
+    mk(data, "hub/tgt/keep.sav", "actual")
+    mk(data, f"versions/tgt/{V1}/pc/t.sav", "propia")
+    mk(data, "locks/tgt.lock", "")
+
+
+def test_reubicar_suma_versiones_sin_tocar_el_hub_del_destino(tmp_path):
+    seed_game(tmp_path)
+    seed_target(tmp_path)
+    out = reloc(tmp_path)
+    assert out["ok"] and out["versions"] == 2 and out["hub"] is True and out["target"] == "tgt"
+    assert (tmp_path / "hub/tgt/keep.sav").read_text() == "actual"  # el hub del destino, intacto
+    assert (tmp_path / f"versions/tgt/{V1}/pc/t.sav").read_text() == "propia"  # la versión del destino, intacta
+    assert (tmp_path / f"versions/tgt/{V1}-1/hub/s.sav").read_text() == "123"  # V1 chocaba: llega con sufijo
+    assert (tmp_path / f"versions/tgt/{V2}/pc/s.sav").read_text() == "1"  # V2 no chocaba: igual
+    hubs = [d for d in (tmp_path / "versions/tgt").iterdir() if (d / "hub/s.sav").exists() and d.name != f"{V1}-1"]
+    assert len(hubs) == 1 and (hubs[0] / "hub/s.sav").read_text() == "12345"  # el hub actual del huérfano, como versión
+    assert not (tmp_path / f"hub/{OLD}").exists() and not (tmp_path / f"versions/{OLD}").exists()
+
+
+def test_reubicar_el_resto_va_a_la_papelera_y_se_restaura(tmp_path):
+    seed_game(tmp_path)
+    seed_target(tmp_path)
+    reloc(tmp_path)
+    assert orphans.scan(CFG_T, tmp_path) == []
+    for rel in (f"state/{OLD}.json", f"status/{OLD}.json", f"resolutions/{OLD}.json", f"staging/{OLD}", f"logs/{OLD}"):
+        assert not (tmp_path / rel).exists()
+    assert not (tmp_path / f"locks/{OLD}.lock").exists()
+    (t,) = orphans.list_trash(tmp_path, 30)
+    assert t["items"][0]["game"] == OLD
+    orphans.restore_from_trash(tmp_path, t["entry"], t["items"][0]["index"])
+    assert (tmp_path / f"state/{OLD}.json").exists() and (tmp_path / f"staging/{OLD}/dev/f").exists()
+
+
+def test_reubicar_sin_colision_conserva_los_nombres(tmp_path):
+    seed_game(tmp_path, hub=False)
+    mk(tmp_path, "hub/tgt/keep.sav")
+    out = reloc(tmp_path)
+    assert out["hub"] is False
+    assert sorted(p.name for p in (tmp_path / "versions/tgt").iterdir()) == [V1, V2]
+
+
+def test_reubicar_con_varias_colisiones_no_pisa_nada(tmp_path):
+    seed_game(tmp_path)
+    mk(tmp_path, f"versions/tgt/{V1}/pc/a", "a")
+    mk(tmp_path, f"versions/tgt/{V1}-1/pc/b", "b")
+    reloc(tmp_path)
+    assert (tmp_path / f"versions/tgt/{V1}/pc/a").read_text() == "a"
+    assert (tmp_path / f"versions/tgt/{V1}-1/pc/b").read_text() == "b"
+    assert (tmp_path / f"versions/tgt/{V1}-2/hub/s.sav").read_text() == "123"
+
+
+@pytest.mark.parametrize("target", ["nope", "", "../g", "a/b", "..", ".hid", "old-1a2b3c4d", None, 3])
+def test_reubicar_destino_invalido(tmp_path, target):
+    seed_game(tmp_path)
+    before = sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*"))
+    with pytest.raises(orphans.TrashError) as ex:
+        reloc(tmp_path, target=target)
+    assert ex.value.code == "err.orphans.target_unknown"
+    assert sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*")) == before
+
+
+def test_reubicar_token_obsoleto(tmp_path):
+    seed_game(tmp_path)
+    it = orphan(tmp_path)
+    mk(tmp_path, f"versions/{OLD}/{V1}/hub/extra", "más")
+    with pytest.raises(orphans.TrashError) as ex:
+        reloc(tmp_path, item=it)
+    assert ex.value.code == "err.orphans.changed"
+    assert (tmp_path / f"hub/{OLD}/s.sav").exists() and not (tmp_path / "versions/tgt").exists()
+
+
+def test_reubicar_huerfano_inexistente(tmp_path):
+    with pytest.raises(orphans.TrashError) as ex:
+        reloc(tmp_path, item={"id": "game:zzz", "token": "t"})
+    assert ex.value.code == "err.orphans.unknown"
+
+
+def test_reubicar_huerfano_de_dispositivo_se_rechaza(tmp_path):
+    seed_origins(tmp_path)
+    it = by_id(orphans.scan(CFG_T, tmp_path))["origin:g:gone"]
+    with pytest.raises(orphans.TrashError) as ex:
+        reloc(tmp_path, item=it)
+    assert ex.value.code == "err.orphans.not_game"
+    assert (tmp_path / f"versions/g/{V1}/gone/s.sav").exists()
+
+
+def test_reubicar_con_destino_ocupado(tmp_path):
+    seed_game(tmp_path)
+    h = locking.acquire(tmp_path / "locks" / "tgt.lock")
+    try:
+        with pytest.raises(orphans.TrashError) as ex:
+            reloc(tmp_path)
+    finally:
+        h.release()
+    assert ex.value.code == "err.orphans.busy"
+    assert (tmp_path / f"hub/{OLD}/s.sav").exists()
+    h = locking.acquire(tmp_path / "locks" / "tgt.lock")  # y no deja el lock del huérfano tomado
+    h.release()
+    reloc(tmp_path)
+
+
+@pytest.mark.parametrize("fail_at", [1, 2, 3, 4])
+def test_reubicar_fallo_a_medias_lo_deshace(tmp_path, monkeypatch, fail_at):
+    seed_game(tmp_path)
+    seed_target(tmp_path)
+
+    def snap():
+        return {
+            p.relative_to(tmp_path).as_posix(): (p.read_text() if p.is_file() else None) for p in tmp_path.rglob("*")
+        }
+
+    before = snap()
+    real, calls = orphans.shutil.move, {"n": 0}
+
+    def flaky(src, dst, *a, **k):
+        calls["n"] += 1
+        if calls["n"] == fail_at:
+            raise OSError("disco lleno")
+        return real(src, dst, *a, **k)
+
+    monkeypatch.setattr(orphans.shutil, "move", flaky)
+    with pytest.raises(orphans.TrashError) as ex:
+        reloc(tmp_path)
+    assert ex.value.code == "err.orphans.relocate_failed"
+    monkeypatch.undo()
+    after = snap()
+    assert {k: v for k, v in after.items() if not k.startswith("trash")} == before  # nada perdido ni a medias
+    assert [k for k in after if k.startswith("trash") and after[k] is not None] == []  # sin ficheros en la papelera
+    h = locking.acquire(tmp_path / "locks" / "tgt.lock")
+    h.release()
+
+
+def test_api_reubicar(cl):
+    login(cl)
+    seed_game(cl.data)
+    body = cl.get("/api/orphans").json()
+    assert body["games"] == [{"id": "g", "name": "Juego"}]
+    cfg = yaml.safe_load(settings.CONFIG_PATH.read_text())
+    cfg["games"]["tgt"] = {"name": "Destino", "devices": ["pc"], "paths": {"pc": "/p2"}}
+    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg))
+    games = cl.get("/api/orphans").json()["games"]
+    assert games == [{"id": "g", "name": "Juego"}, {"id": "tgt", "name": "Destino"}]
+    it = next(i for i in cl.get("/api/orphans").json()["items"] if i["kind"] == "game")
+    for bad in ({}, {"id": it["id"], "token": it["token"]}, {"id": 1, "token": "t", "target": "g"}):
+        assert cl.post("/api/orphans/relocate", json=bad).status_code == 400
+    r = cl.post("/api/orphans/relocate", json={"id": it["id"], "token": "viejo", "target": "g"})
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "err.orphans.changed"
+    r = cl.post("/api/orphans/relocate", json={"id": it["id"], "token": it["token"], "target": "../x"})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "err.orphans.target_unknown"
+    r = cl.post("/api/orphans/relocate", json={"id": it["id"], "token": it["token"], "target": "g"})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True, "target": "g", "versions": 2, "hub": True, "size": it["size"]}
+    assert cl.get("/api/orphans").json()["items"] == []
+
+
+def test_api_reubicar_exige_sesion(cl):
+    assert cl.post("/api/orphans/relocate", json={}).status_code == 401

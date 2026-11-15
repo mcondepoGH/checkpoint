@@ -1,10 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { listOrphans, listTrash, restoreTrash, trashOrphans } from '#src/lib/api/orphans.js';
-import { hasOnlyCopy, keepSelected, moveNotice, payload, selectedItems, totalSize } from '#src/lib/orphans.js';
+import { listOrphans, listTrash, relocateOrphan, restoreTrash, trashOrphans } from '#src/lib/api/orphans.js';
+import {
+  canRelocate,
+  hasOnlyCopy,
+  keepSelected,
+  moveNotice,
+  payload,
+  relocateNotice,
+  selectedItems,
+  targetGame,
+  totalSize,
+} from '#src/lib/orphans.js';
 import { fmtDateTime, fmtSize } from '#src/lib/format.js';
 import { ui } from '#src/lib/errors.js';
 import { errText, useI18n } from '#src/hooks/useI18n.js';
-import { Alert, Button, Checkbox } from '#src/components/ui/index.js';
+import { Alert, Button, Checkbox, Select } from '#src/components/ui/index.js';
+import Field from '#src/components/ui/Field.jsx';
 import Modal from '#src/components/ui/Modal.jsx';
 
 function Meta({ it, locale }) {
@@ -39,13 +50,20 @@ const nameOf = (t, it) =>
 export function OrphanList({
   items,
   trash,
+  games = [],
   ttlDays,
   selected,
   busy,
   notice,
   confirming,
   ack,
+  relocating = null,
+  target = '',
   onToggle,
+  onRelocate = () => {},
+  onTarget = () => {},
+  onRelocateCancel = () => {},
+  onRelocateConfirm = () => {},
   onAsk,
   onCancel,
   onAck,
@@ -96,6 +114,13 @@ export function OrphanList({
                     {t('orphans.onlyCopy', { days: ttlDays })}
                   </Alert>
                 )}
+                {canRelocate(it, games) && (
+                  <div className="row pairing-actions">
+                    <Button disabled={busy} onClick={() => onRelocate(it)}>
+                      {t('orphans.relocateBtn')}
+                    </Button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -139,6 +164,56 @@ export function OrphanList({
           </div>
         </Modal>
       )}
+      {relocating && (
+        <Modal title={t('orphans.relocateTitle')} onClose={onRelocateCancel}>
+          <div className="orphans-confirm">
+            <p>{t('orphans.relocateIntro', { game: relocating.game })}</p>
+            <Field label={t('orphans.relocateTarget')}>
+              {(props) => (
+                <Select
+                  {...props}
+                  value={target}
+                  disabled={busy}
+                  onChange={(e) => onTarget(e.target.value)}
+                  placeholder={t('orphans.relocatePick')}
+                  options={games.map((g) => ({ value: g.id, label: g.name }))}
+                />
+              )}
+            </Field>
+            <dl className="pairing-meta">
+              <div>
+                <dt>{t('orphans.relocateFrom')}</dt>
+                <dd>{relocating.game}</dd>
+              </div>
+              <div>
+                <dt>{t('orphans.relocateTo')}</dt>
+                <dd>{targetGame(games, target)?.name ?? '-'}</dd>
+              </div>
+              <div>
+                <dt>{t('orphans.versions')}</dt>
+                <dd>{relocating.versions}</dd>
+              </div>
+              <div>
+                <dt>{t('orphans.size')}</dt>
+                <dd>{fmtSize(relocating.size, locale)}</dd>
+              </div>
+            </dl>
+            {targetGame(games, target) && (
+              <Alert variant="warn" compact>
+                {t('orphans.relocateKeep', { game: relocating.game, target: targetGame(games, target).name, days: ttlDays })}
+              </Alert>
+            )}
+            <div className="row pairing-actions">
+              <Button variant="primary" disabled={!targetGame(games, target) || busy} onClick={onRelocateConfirm}>
+                {busy ? t('orphans.relocating') : t('orphans.relocateConfirm')}
+              </Button>
+              <Button disabled={busy} onClick={onRelocateCancel}>
+                {t('common.cancel')}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {trash.length > 0 && (
         <details className="steam-dismissed orphans-trash">
           <summary className="steam-dismissed-title">
@@ -165,10 +240,14 @@ export function OrphanList({
   );
 }
 
-// Datos sin dispositivo ni juego: lista (con la papelera) y mover/restaurar con doble confirmación. Solo se pinta si hay algo.
+// Datos sin dispositivo ni juego: lista (con la papelera), mover/restaurar con doble confirmación y reubicar un juego
+// huérfano en un juego existente (una confirmación). Solo se pinta si hay algo.
 export default function Orphans() {
   const [items, setItems] = useState([]);
   const [trash, setTrash] = useState([]);
+  const [games, setGames] = useState([]);
+  const [relocating, setRelocating] = useState(null);
+  const [target, setTarget] = useState('');
   const [ttl, setTtl] = useState(30);
   const [selected, setSelected] = useState([]);
   const [confirming, setConfirming] = useState(false);
@@ -183,6 +262,7 @@ export default function Orphans() {
       if (!alive.current) return;
       setItems(o.items);
       setTtl(o.ttl_days);
+      setGames(o.games ?? []);
       setTrash(tr);
       setSelected((s) => keepSelected(s, o.items));
     } catch (e) {
@@ -215,6 +295,25 @@ export default function Orphans() {
     cancel();
     await refresh();
   };
+  const askRelocate = (it) => {
+    setRelocating(it);
+    setTarget('');
+  };
+  const cancelRelocate = () => setRelocating(null);
+  const confirmRelocate = async () => {
+    const dest = targetGame(games, target);
+    if (!relocating || !dest) return;
+    setBusy(true);
+    try {
+      const res = await relocateOrphan(relocating.id, relocating.token, dest.id);
+      setNotice(relocateNotice(res, dest));
+    } catch (e) {
+      setNotice({ variant: 'error', body: e });
+    }
+    setBusy(false);
+    setRelocating(null);
+    await refresh();
+  };
   const restore = async (entry, item) => {
     setBusy(true);
     try {
@@ -231,12 +330,19 @@ export default function Orphans() {
     <OrphanList
       items={items}
       trash={trash}
+      games={games}
       ttlDays={ttl}
       selected={selected}
       busy={busy}
       notice={notice}
       confirming={confirming}
       ack={ack}
+      relocating={relocating}
+      target={target}
+      onRelocate={askRelocate}
+      onTarget={setTarget}
+      onRelocateCancel={cancelRelocate}
+      onRelocateConfirm={confirmRelocate}
       onToggle={toggle}
       onAsk={() => setConfirming(true)}
       onCancel={cancel}

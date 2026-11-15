@@ -15,6 +15,9 @@ _STATUS = {
     "err.orphans.restore_conflict": 409,
     "err.orphans.busy": 409,
     "err.orphans.restore_failed": 500,
+    "err.orphans.relocate_failed": 500,
+    "err.orphans.unknown": 404,
+    "err.orphans.changed": 409,
 }
 
 
@@ -24,7 +27,13 @@ def _invalid():
 
 @router.get("/api/orphans")
 def list_orphans(ctx: AppContext = Depends(get_ctx)):
-    return {"items": svc.scan(ctx.cfg(), settings.DATA_DIR), "ttl_days": settings.TRASH_TTL_DAYS}
+    cfg = ctx.cfg()
+    return {
+        "items": svc.scan(cfg, settings.DATA_DIR),
+        "ttl_days": settings.TRASH_TTL_DAYS,
+        # Juegos de la config a los que se puede reubicar un huérfano de juego (id y nombre legible).
+        "games": [{"id": g, "name": (v.name or "").strip() or g} for g, v in cfg.games.items()],
+    }
 
 
 @router.post("/api/orphans/trash")
@@ -39,6 +48,20 @@ async def trash_orphans(request: Request, ctx: AppContext = Depends(get_ctx)):
             raise _invalid()
     ctx.cfg()  # config inválida: 500 antes de tocar nada
     return svc.move_to_trash(ctx.cfg, settings.DATA_DIR, [{"id": i["id"], "token": i["token"]} for i in items])
+
+
+@router.post("/api/orphans/relocate")
+async def relocate_orphan(request: Request, ctx: AppContext = Depends(get_ctx)):
+    """Reubica el huérfano de juego `id` (con su `token`) en el juego `target` de la config: ver `services.orphans.relocate`."""
+    body = await body_json(request)
+    item_id, token, target = body.get("id"), body.get("token"), body.get("target")
+    if not all(isinstance(x, str) for x in (item_id, token, target)):
+        raise _invalid()
+    ctx.cfg()  # config inválida: 500 antes de tocar nada
+    try:
+        return svc.relocate(ctx.cfg, settings.DATA_DIR, item_id, token, target)
+    except svc.TrashError as e:
+        raise ApiError(_STATUS.get(e.code, 400), e.code, **e.params) from None
 
 
 @router.get("/api/orphans/trash")
