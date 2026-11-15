@@ -14,6 +14,7 @@ import { FileSelectionType, callable, definePlugin, openFilePicker, toaster } fr
 import { FaCloud } from "react-icons/fa";
 import { CrashItem, CrashWatch, startCrashWatch } from "./crashwatch";
 import { copyText } from "./clipboard";
+import { drafts } from "./drafts";
 import { Notice, getLastNotice, startGameWatch, startNoticePump } from "./autosync";
 import {
   BROWSE_HELP,
@@ -445,14 +446,23 @@ const mmss = (s: number) =>
 
 // Un juego instalado en la Deck que el hub aún no tiene: «Configurar» rellena nombre y ruta (lo detectado) y pide confirmar
 function UnconfiguredGame({ appid, name, source, disabled, onDone }: { appid: number; name: string; source?: string; disabled: boolean; onDone: (s: SyncState) => void }) {
-  const [open, setOpen] = useState(false);
+  // El selector de carpetas de Decky cierra la Quick Access y desmonta el panel: el formulario se recupera del borrador
+  // (src/drafts.ts, a nivel de módulo) para no perder la carpeta elegida al volver.
+  const [saved] = useState(() => drafts.get(appid));
+  const [open, setOpen] = useState(saved?.open ?? false);
   const [busy, setBusy] = useState(false);
-  const [gname, setGname] = useState(name);
-  const [path, setPath] = useState("");
-  const [sug, setSug] = useState<Suggestion | null>(null);
+  const [gname, setGname] = useState(saved?.gname ?? name);
+  const [path, setPath] = useState(saved?.path ?? "");
+  const [sug, setSug] = useState<Suggestion | null>((saved?.sug as Suggestion | null | undefined) ?? null);
   const [pick, setPick] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [pickerFailed, setPickerFailed] = useState(false); // el selector de Decky no pudo abrir la carpeta (fallo conocido)
+
+  // Mientras el formulario está abierto se guarda el borrador; al cerrarlo (Cancelar) se borra. Al desmontar no se toca.
+  useEffect(() => {
+    if (open) drafts.set(appid, { open, gname, path, sug });
+    else drafts.delete(appid);
+  }, [appid, open, gname, path, sug]);
 
   const start = async () => {
     setBusy(true);
@@ -487,6 +497,7 @@ function UnconfiguredGame({ appid, name, source, disabled, onDone }: { appid: nu
       }
       if (r.game?.joined) toaster.toast({ title: "Checkpoint", body: joinedText(r.game.name) });
       onDone(await getSyncState()); // el juego pasa a la lista de «Juegos en el hub»
+      drafts.delete(appid);
     } catch (e) {
       capture("configurar el juego")(e);
       setError(gameError({ error: "unexpected" }));
@@ -520,7 +531,12 @@ function UnconfiguredGame({ appid, name, source, disabled, onDone }: { appid: nu
     }
     try {
       const picked = await openFilePicker(FileSelectionType.FOLDER, ...pickerArgs(start));
-      if (picked?.path) setPath(picked.path);
+      if (picked?.path) {
+        // El panel puede estar desmontado cuando el selector resuelve: setPath no llega a nadie, así que la ruta va también
+        // al borrador (este closure sigue vivo) y el formulario remontado sale abierto con ella.
+        drafts.patch(appid, { path: picked.path }, { open: true, gname, path: picked.path, sug });
+        setPath(picked.path);
+      }
     } catch (e) {
       if (e !== "User canceled") capture("selector de carpetas")(e); // cancelar rechaza con ese texto: no es un fallo
     }
@@ -673,6 +689,12 @@ function Games() {
         setSync((s) => (s ? { ...s, games: s.games.map((x) => (x.id === g.id ? { ...x, enabled: !on } : x)) } : s));
       });
   };
+
+  // Sin fugas: los borradores de juegos que ya no están en «Sin configurar» se descartan (los que siguen no se tocan)
+  const unconfiguredIds = sync?.unconfigured?.map((u) => u.appid);
+  useEffect(() => {
+    if (unconfiguredIds) drafts.prune(unconfiguredIds);
+  }, [unconfiguredIds?.join(",")]);
 
   if (!sync) {
     return (

@@ -1,5 +1,13 @@
 # Registro de cambios del plugin
 
+## 1.1.0-rc.2
+
+Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.2` es mayor que `1.1.0-rc.1` y que `1.0.0` (el hub la ofrece a quien tenga cualquiera de las dos) y menor que la futura `1.1.0`. Incluye todo lo de la `1.1.0-rc.1`.
+
+### Arreglo
+
+- Arreglo: el botón Examinar ya no pierde la carpeta elegida al volver del selector (el formulario se recuerda al remontar el panel; no verificado en una Deck real). El formulario «Configurar» guarda un borrador por juego fuera del componente (`src/drafts.ts`) y el selector de Decky escribe en él la carpeta elegida; se borra al cancelar o guardar y se descartan los de juegos que dejan de estar en «Sin configurar». Ya fallaba en la `1.0.0`.
+
 ## 1.1.0-rc.1
 
 Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.1` es mayor que `1.0.0` (el hub la ofrece a quien tenga la `1.0.0`) y menor que la futura `1.1.0`.
