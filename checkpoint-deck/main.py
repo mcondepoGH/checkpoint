@@ -275,13 +275,13 @@ class Plugin:
 
     async def suggest_game(self, appid: int) -> Dict[str, Any]:
         """Datos para configurar un juego que no está en el hub: nombre de Steam y ruta de saves detectada en la Deck
-        (carpetas que existen; vacía si no hay nada; para un atajo de Lutris, su prefijo con `source` = "lutris") y el home de la Deck, donde abre el selector de carpetas. Solo lectura."""
+        (carpetas que existen; vacía si no hay nada; para un atajo de Lutris, `source` = "lutris", `candidates` encontrados en su prefijo y `browse_start`, dónde abre «Examinar…»; el prefijo entero no se sugiere) y el home de la Deck, donde abre el selector de carpetas. Solo lectura."""
         name = self._unconfigured_name(appid)
         if name is None:
             return self._failure("unknown_game")
         home = Path.home()
         if self._is_shortcut(appid):  # atajo: solo hay sugerencia si lanza un juego de Lutris
-            found = await asyncio.to_thread(suggest_shortcut, home, appid, protected_dirs(decky), self._log)
+            found = await asyncio.to_thread(suggest_shortcut, home, appid, protected_dirs(decky), self._log, name)
         else:
             found = await asyncio.to_thread(suggest_path, home, appid, name)
         return {"ok": True, "appid": appid, "name": name, "home": str(home), **found}

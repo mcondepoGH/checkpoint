@@ -91,20 +91,34 @@ def suggest_path(home: Path, appid: int, name: str) -> Dict[str, Any]:
 
 
 def suggest_shortcut(
-    home: Path, appid: int, protected: Sequence[Path] = (), log: Callable[[str], None] = lambda _m: None
+    home: Path,
+    appid: int,
+    protected: Sequence[Path] = (),
+    log: Callable[[str], None] = lambda _m: None,
+    name: str = "",
 ) -> Dict[str, Any]:
     """Como `suggest_path`, para un atajo de Steam (juego que no es de Steam): si lanza un juego de Lutris
-    (`lutris:rungameid/N` en sus `LaunchOptions`), sugiere el prefijo de Lutris (`source` = "lutris"); cualquier otro atajo
+    (`lutris:rungameid/N` en sus `LaunchOptions`) devuelve `source` = "lutris", `candidates` (carpetas que existen en su
+    prefijo, ver `checkpoint_lutris.find_saves`), `path` = la primera ("" si no hay: nada se inventa; el prefijo entero ya no
+    se sugiere) y `browse_start` = dónde abrir «Examinar…» (`<prefijo>/drive_c/users`, o el prefijo). Cualquier otro atajo
     (emuladores, Epic...) queda sin sugerencia. Solo lectura."""
     empty: Dict[str, Any] = {"path": "", "candidates": [], "source": ""}
     for root in checkpoint_steam.find_steam_roots(Path(home)):
         opts = checkpoint_shortcuts.find_launch_options(root, appid)
         if opts is None:
             continue
-        path = checkpoint_lutris.suggest_prefix(
-            home, opts, protected, log, accept=lambda s: bool(_HUB_PATH.match(s.lstrip("/")))
+        found = checkpoint_lutris.find_saves(
+            home, opts, protected, log, accept=lambda s: bool(_HUB_PATH.match(s.lstrip("/"))), name=name
         )
-        return {"path": path, "candidates": [path], "source": "lutris"} if path else empty
+        if not found["prefix"]:
+            return empty
+        cands = found["candidates"]
+        return {
+            "path": cands[0] if cands else "",
+            "candidates": cands,
+            "source": "lutris",
+            "browse_start": found["browse_start"],
+        }
     return empty
 
 

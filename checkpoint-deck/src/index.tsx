@@ -26,8 +26,7 @@ import {
   COPY_OK,
   GAMES_INTRO,
   GameFailure,
-  NO_PATH_FOUND,
-  PATH_FOUND,
+  pathHelp,
   PICKER_FAIL,
   RESOLVE_DEVICE_LABEL,
   RESOLVE_HELP,
@@ -152,6 +151,7 @@ interface Suggestion extends GameFailure {
   path?: string;
   home?: string; // home de la Deck: donde abre el selector si no hay ruta
   candidates?: string[];
+  browse_start?: string; // atajo de Lutris: dónde abre «Examinar…» (<prefijo>/drive_c/users, o el prefijo)
   source?: "proton" | "cloud" | "lutris" | "";
 }
 interface Configured extends GameFailure {
@@ -522,7 +522,10 @@ function UnconfiguredGame({ appid, name, source, disabled, onDone }: { appid: nu
     let start = "/";
     setBusy(true);
     try {
-      const r = await pickerStart((sug?.candidates ?? []).includes(path) ? path : path.trim());
+      // Atajo de Lutris: «Examinar…» abre en el prefijo (`browse_start`) salvo que la carpeta escrita sea propia (ni candidata ni vacía).
+      const typed = path.trim();
+      const own = typed !== "" && !(sug?.candidates ?? []).includes(typed);
+      const r = await pickerStart(sug?.browse_start && !own ? sug.browse_start : (sug?.candidates ?? []).includes(path) ? path : typed);
       if (r.ok && typeof r.path === "string" && r.path.startsWith("/")) start = r.path;
     } catch (e) {
       capture("ruta inicial del selector")(e);
@@ -565,7 +568,7 @@ function UnconfiguredGame({ appid, name, source, disabled, onDone }: { appid: nu
           <PanelSectionRow>
             <TextField
               label="Carpeta de guardado"
-              description={path && sug?.source ? PATH_FOUND[sug.source] : NO_PATH_FOUND}
+              description={pathHelp(path, sug?.source)}
               value={path}
               onChange={(e) => setPath(e.target.value)}
             />

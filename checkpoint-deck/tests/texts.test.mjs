@@ -258,12 +258,18 @@ test('los atajos de Steam salen marcados como «Atajo» en sin configurar', { sk
   assert.equal(t.unconfiguredDescription(5, 'otro'), 'N.º de Steam: 5');
   assert.ok(!t.SHORTCUT_HELP.includes('\n'));
   // la ayuda ya no dice que la carpeta de un atajo nunca se detecta: los de Lutris la traen sugerida; los demás no
-  assert.match(t.SHORTCUT_HELP, /Lutris.*se sugiere la carpeta de su prefijo/);
+  assert.match(t.SHORTCUT_HELP, /Lutris.*candidatas.*prefijo/);
   assert.match(t.SHORTCUT_HELP, /demás atajos.*no se detecta.*Examinar/);
   assert.ok(!t.SHORTCUT_HELP.startsWith('Los marcados como «Atajo» son juegos que no son de Steam (p. ej. Lutris) añadidos a Steam. Su carpeta'));
   // la sugerencia de Lutris tiene su propia línea bajo la carpeta (sin ella la descripción quedaría vacía)
-  assert.match(t.PATH_FOUND.lutris, /prefijo de Lutris/);
+  assert.match(t.PATH_FOUND.lutris, /Candidatos encontrados en el prefijo de Lutris/);
   assert.match(t.PATH_FOUND.lutris, /Examinar/);
+  assert.equal(t.NO_PATH_LUTRIS, 'No se encontró ninguna carpeta de partidas en el prefijo; usa Examinar…');
+  // ayuda según haya o no candidatos
+  assert.equal(t.pathHelp('/x/Saves', 'lutris'), t.PATH_FOUND.lutris);
+  assert.equal(t.pathHelp('', 'lutris'), t.NO_PATH_LUTRIS);
+  assert.equal(t.pathHelp('', ''), t.NO_PATH_FOUND);
+  assert.equal(t.pathHelp('/x', 'proton'), t.PATH_FOUND.proton);
   const src = readFileSync(join(here, '../src/index.tsx'), 'utf8');
   assert.match(src, /unconfiguredDescription\(appid, source\)/);
   assert.match(src, /SHORTCUT_HELP/);

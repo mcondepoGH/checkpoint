@@ -233,10 +233,49 @@ LUTRIS_SC = (2389644016, "DQ7", '"/usr/bin/flatpak"', "run net.lutris.Lutris lut
 EMU_SC = (3000000002, "PS2", '"/home/deck/bin/pcsx2-qt.sh"', "")
 
 
-def test_suggest_shortcut_for_a_lutris_shortcut_gives_its_prefix(home):
+def _dq7_saves(pfx: Path) -> Path:
+    """Guardado sintético con la forma del de Dragon Quest VII (usuario `deck`, steamid ficticio)."""
+    saved = pfx / "drive_c/users/deck/Documents/My Games/DRAGON QUEST VII/Steam/76561197960271999/release/Saved"
+    (saved / "SaveGames").mkdir(parents=True)
+    (saved / "SaveGames" / "slot1.sav").write_bytes(b"x")
+    (saved / "Config").mkdir()
+    (saved / "Config" / "a.ini").write_text("x")
+    return saved / "SaveGames"
+
+
+def test_suggest_shortcut_for_a_lutris_shortcut_gives_candidates_not_the_whole_prefix(home):
     pfx = _lutris_deck(home, [EMU_SC, LUTRIS_SC])
+    saves = _dq7_saves(pfx)
     out = cg.suggest_shortcut(home, 2389644016)
-    assert out == {"path": str(pfx), "candidates": [str(pfx)], "source": "lutris"}
+    assert out["path"] == str(saves) and out["candidates"] == [str(saves)] and out["source"] == "lutris"
+    assert str(pfx) not in out["candidates"] and out["path"] != str(pfx)
+    assert out["browse_start"] == str(pfx / "drive_c/users")
+
+
+def test_suggest_shortcut_without_candidates_leaves_path_empty_and_browses_users(home):
+    pfx = _lutris_deck(home, [LUTRIS_SC])
+    (pfx / "drive_c/users/deck/Documents").mkdir(parents=True)
+    out = cg.suggest_shortcut(home, 2389644016)
+    assert out == {"path": "", "candidates": [], "source": "lutris", "browse_start": str(pfx / "drive_c/users")}
+
+
+def test_suggest_shortcut_without_drive_c_browses_the_prefix(home):
+    pfx = _lutris_deck(home, [LUTRIS_SC])
+    out = cg.suggest_shortcut(home, 2389644016)
+    assert out["path"] == "" and out["candidates"] == [] and out["browse_start"] == str(pfx)
+
+
+def test_suggest_shortcut_uses_the_shortcut_name_to_order(home):
+    pfx = _lutris_deck(home, [LUTRIS_SC])
+    docs = pfx / "drive_c/users/deck/Documents"
+    for n in ("Otro", "Fantasma Quest"):
+        (docs / n).mkdir(parents=True)
+        (docs / n / "f.dat").write_text("x")
+    import os
+
+    os.utime(docs / "Otro" / "f.dat", (9_999_999_999, 9_999_999_999))  # el más reciente, pero no coincide
+    out = cg.suggest_shortcut(home, 2389644016, name="Fantasma Quest")
+    assert out["candidates"][0] == str(docs / "Fantasma Quest")
 
 
 def test_suggest_shortcut_for_an_emulator_shortcut_is_empty(home):
@@ -255,6 +294,7 @@ def test_suggest_shortcut_drops_a_path_the_hub_would_reject(home):
     pfx = _lutris_deck(home, [LUTRIS_SC])
     bad = home / "Games" / "dq7 &x"
     pfx.rename(bad)
+    _dq7_saves(bad)
     import sqlite3
 
     data = home / ".var/app/net.lutris.Lutris/data/lutris"
@@ -263,4 +303,5 @@ def test_suggest_shortcut_drops_a_path_the_hub_would_reject(home):
     con.execute("UPDATE games SET directory = ?", (str(bad),))
     con.commit()
     con.close()
-    assert cg.suggest_shortcut(home, 2389644016)["path"] == ""
+    out = cg.suggest_shortcut(home, 2389644016)
+    assert out["path"] == "" and out["candidates"] == []  # el hub rechaza «&»: no se ofrece

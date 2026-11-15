@@ -1,18 +1,33 @@
 # Registro de cambios del plugin
 
+## 1.1.0-rc.4
+
+Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.4` es mayor que `1.1.0-rc.3`, `1.1.0-rc.2`, `1.1.0-rc.1` y `1.0.0` (el hub la ofrece a quien tenga cualquiera de ellas) y menor que la futura `1.1.0`. Incluye todo lo de la `1.1.0-rc.3`.
+
+### Novedades
+
+- **Candidatos de carpeta de guardado para los atajos de Lutris, en lugar del prefijo entero.** El prefijo de Wine completo (lo que sugería la rc.3) era demasiado amplio. Ahora, tras localizar el prefijo, el plugin busca dentro de `drive_c/users/<usuario>/` (todos los usuarios no de sistema; excluye `Public`) carpetas que existen en `Documents/My Games/*`, `Documents/*`, `Saved Games/*`, `AppData/Local/*`, `AppData/LocalLow/*/*` y `AppData/Roaming/*`, y dentro de cada una subcarpetas `SaveGames`, `Saves`, `Save` o `savedata` (sin distinguir mayúsculas, hasta 6 niveles), que se prefieren a la carpeta del juego. Criterios: solo carpetas con al menos un fichero; se filtra el ruido de Wine y Windows (`Microsoft`, `Wine`, `Temp`, `Packages`, `Programs`, `Windows`, `INetCache`, `Crashpad`, `Cache`, `Logs`...); orden: primero los que se parecen por nombre al juego (Jaccard >= 0,5 sobre tokens normalizados del nombre, el slug y el nombre del atajo, sin «reimagined», «edition»...), luego los modificados más recientemente; máximo 8, sin duplicados ni anidados (se queda el más específico salvo que el contenedor tenga más ficheros propios). Todo en solo lectura, sin seguir enlaces simbólicos y con topes de carpetas, entradas, profundidad y tiempo. El primer candidato se rellena en «Carpeta de guardado» y «Probar otra ruta detectada» recorre los demás. Caso real que lo motivó: Dragon Quest VII Reimagined guarda en `<prefijo>/drive_c/users/deck/Documents/My Games/DRAGON QUEST VII/Steam/<steamid64>/release/Saved/SaveGames`, cuyo nombre no coincide con el slug.
+- **Sin candidatos, nada inventado.** La carpeta queda vacía con el texto «No se encontró ninguna carpeta de partidas en el prefijo; usa Examinar…» y «Examinar…» abre en `<prefijo>/drive_c/users` (o en el prefijo si no existe, o en el comportamiento de antes). `suggest_game` devuelve para estos atajos `source: "lutris"`, `candidates` y `browse_start`.
+- Los demás atajos y los juegos de Steam no cambian.
+
+### Sin verificar
+
+- El flujo completo en una Deck real con esta versión y Lutris nativo (`~/.local/share/lutris`, no verificado en una Deck real). Los candidatos se probaron con prefijos sintéticos modelados sobre el de Dragon Quest VII.
+- Los tipos de TypeScript y la compilación (`tsc`, `rollup`) no se han ejecutado con este cambio.
+
 ## 1.1.0-rc.3
 
 Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.3` es mayor que `1.1.0-rc.2`, que `1.1.0-rc.1` y que `1.0.0` (el hub la ofrece a quien tenga cualquiera de ellas) y menor que la futura `1.1.0`. Incluye todo lo de la `1.1.0-rc.2`.
 
 ### Novedades
 
-- **Carpeta sugerida para los atajos de Lutris.** Al configurar un atajo cuyas opciones de lanzamiento son `lutris:rungameid/N`, el plugin busca en Lutris (solo lectura) la fila `N` de `pga.db` y el `.yml` del juego, y rellena «Carpeta de guardado» con el prefijo de Lutris (`game.prefix`; si no existe, `directory` de la base). «Examinar…» sigue como alternativa y el formulario recuerda lo escrito. Nuevo módulo `checkpoint_lutris.py`: abre `pga.db` con `mode=ro` (no escribe ni deja `-journal`), lee el `.yml` con un analizador mínimo (sin PyYAML ni dependencias) y valida la ruta con la misma regla que la sincronización y dentro del home; ficheros ausentes, corruptos o bloqueados dan «sin sugerencia» sin error y sin rutas ni usuarios en el log. Busca en Lutris Flatpak (`~/.var/app/net.lutris.Lutris/data/lutris`, verificado en una Deck real) y en Lutris nativo (`~/.local/share/lutris`, `.yml` en `games/` o `~/.config/lutris/games/`; no verificado). Los demás atajos (emuladores, Epic...) siguen sin sugerencia. `suggest_game` devuelve `source: "lutris"` en este caso; se lee además `LaunchOptions` de `shortcuts.vdf` (solo en local, no se envía al hub).
+- **Carpeta sugerida para los atajos de Lutris.** (Superado en la `1.1.0-rc.4`: la rc.3 sugería el prefijo de Wine ENTERO, demasiado amplio; la rc.4 ofrece candidatos de carpeta de guardado dentro del prefijo.) Al configurar un atajo cuyas opciones de lanzamiento son `lutris:rungameid/N`, el plugin busca en Lutris (solo lectura) la fila `N` de `pga.db` y el `.yml` del juego, y rellena «Carpeta de guardado» con el prefijo de Lutris (`game.prefix`; si no existe, `directory` de la base). «Examinar…» sigue como alternativa y el formulario recuerda lo escrito. Nuevo módulo `checkpoint_lutris.py`: abre `pga.db` con `mode=ro` (no escribe ni deja `-journal`), lee el `.yml` con un analizador mínimo (sin PyYAML ni dependencias) y valida la ruta con la misma regla que la sincronización y dentro del home; ficheros ausentes, corruptos o bloqueados dan «sin sugerencia» sin error y sin rutas ni usuarios en el log. Busca en Lutris Flatpak (`~/.var/app/net.lutris.Lutris/data/lutris`, verificado en una Deck real) y en Lutris nativo (`~/.local/share/lutris`, `.yml` en `games/` o `~/.config/lutris/games/`; no verificado). Los demás atajos (emuladores, Epic...) siguen sin sugerencia. `suggest_game` devuelve `source: "lutris"` en este caso; se lee además `LaunchOptions` de `shortcuts.vdf` (solo en local, no se envía al hub).
 - El texto de ayuda de los atajos y la línea bajo la carpeta ya no dicen que la carpeta no se detecta cuando viene de Lutris.
 
 ### Sin verificar
 
 - El flujo completo en una Deck real con esta versión (la cadena `LaunchOptions` -> `pga.db` -> `.yml` se comprobó a mano sobre los ficheros de una Deck con Lutris Flatpak) y Lutris nativo.
-- Que el prefijo sea una buena carpeta de guardado: es lo que se sugiere, no dónde guarda cada juego.
+- Que el prefijo sea una buena carpeta de guardado: no lo es; la rc.4 lo sustituye por candidatos.
 - Los tipos de TypeScript y la compilación (`tsc`, `rollup`) no se han ejecutado con este cambio.
 
 ## 1.1.0-rc.2

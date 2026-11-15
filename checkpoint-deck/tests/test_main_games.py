@@ -312,7 +312,7 @@ def test_shortcut_shows_as_unconfigured_with_origin_and_can_be_created_in_the_hu
     assert sent[0]["ok"] is True and sent[0]["name"] == "Lutris Juego" and sent[0]["path"] == ""  # sin ruta detectada: la pide la interfaz
 
 
-def test_suggest_game_gives_the_lutris_prefix_for_a_lutris_shortcut_and_nothing_for_other_shortcuts(fake_decky, scripthub, tmp_path, monkeypatch):
+def test_suggest_game_gives_lutris_candidates_for_a_lutris_shortcut_and_nothing_for_other_shortcuts(fake_decky, scripthub, tmp_path, monkeypatch):
     """Atajos sintéticos: uno de Lutris (Flatpak, pga.db y .yml sintéticos en el home falso) y uno de emulador."""
     import sqlite3
     import struct
@@ -340,16 +340,22 @@ def test_suggest_game_gives_the_lutris_prefix_for_a_lutris_shortcut_and_nothing_
     con.commit()
     con.close()
     (data / "games" / "j-1.yml").write_text(f"game:\n  prefix: {pfx}\n")
+    saves = pfx / "drive_c/users/deck/Documents/My Games/Juego/Saves"
+    saves.mkdir(parents=True)
+    (saves / "a.sav").write_bytes(b"x")
 
     async def go():
         await p._main()
         await p.refresh_library()
         await settled(p)
         out = (await p.suggest_game(3_000_000_001), await p.suggest_game(3_000_000_002), await p.suggest_game(1245620))
+        out += (await p.picker_start(out[0]["browse_start"]),)
         await p._unload()
         return out
 
-    lutris, emu, steam_game = asyncio.run(go())
-    assert lutris["ok"] and lutris["path"] == str(pfx) and lutris["source"] == "lutris" and lutris["candidates"] == [str(pfx)]
+    lutris, emu, steam_game, picker = asyncio.run(go())
+    assert lutris["ok"] and lutris["path"] == str(saves) and lutris["source"] == "lutris" and lutris["candidates"] == [str(saves)]
+    assert lutris["path"] != str(pfx)  # el prefijo entero ya no se sugiere
+    assert lutris["browse_start"] == str(pfx / "drive_c/users") and picker["path"] == lutris["browse_start"]
     assert emu["ok"] and emu["path"] == "" and emu["source"] == "" and emu["home"] == str(home)
     assert steam_game["source"] != "lutris" and steam_game["path"] == ""
