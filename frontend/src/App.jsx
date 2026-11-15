@@ -16,7 +16,7 @@ import Settings from '#src/pages/Settings.jsx';
 import Sync from '#src/pages/Sync.jsx';
 import Versions from '#src/pages/Versions.jsx';
 import { errText, initDefaultLang, useI18n } from '#src/hooks/useI18n.js';
-import { Alert } from '#src/components/ui/index.js';
+import { Alert, ErrorBoundary } from '#src/components/ui/index.js';
 import { useTheme } from '#src/hooks/useTheme.js';
 
 // Pestañas: el id es estable; las etiquetas (completa y corta, para móvil) son claves `app.tab.<id>.full|short`.
@@ -192,25 +192,29 @@ export default function App() {
           </Alert>
         )}
         <div hidden={tab !== 'settings'}>
-          <Settings
-            loaded={loaded}
-            stale={stale && dirty}
-            configError={loaded.error}
-            runtime={loaded.runtime}
-            platform={loaded.platform}
-            onApplied={(r) => {
-              setLoaded((l) => ({ ...l, version: r.version, config: r.config, error: null }));
-              setLatest(r.version);
-            }}
-            onReload={() => loadConfig()}
-            onDirty={setDirty}
-            updates={updates}
-            onUpdates={setUpdates}
-            firstUse={firstUse}
-          />
+          <ErrorBoundary version={installedVersion(updates)}>
+            <Settings
+              loaded={loaded}
+              stale={stale && dirty}
+              configError={loaded.error}
+              runtime={loaded.runtime}
+              platform={loaded.platform}
+              onApplied={(r) => {
+                setLoaded((l) => ({ ...l, version: r.version, config: r.config, error: null }));
+                setLatest(r.version);
+              }}
+              onReload={() => loadConfig()}
+              onDirty={setDirty}
+              updates={updates}
+              onUpdates={setUpdates}
+              firstUse={firstUse}
+            />
+          </ErrorBoundary>
         </div>
-        {tab === 'sync' && <Sync config={config} watch={watch} onGoSettings={() => setTab('settings')} />}
-        {tab === 'versions' && <Versions config={config} onGoSettings={() => setTab('settings')} />}
+        <ErrorBoundary resetKey={tab} version={installedVersion(updates)}>
+          {tab === 'sync' && <Sync config={config} watch={watch} onGoSettings={() => setTab('settings')} />}
+          {tab === 'versions' && <Versions config={config} onGoSettings={() => setTab('settings')} />}
+        </ErrorBoundary>
       </main>
       {installedVersion(updates) && <footer className="app-footer muted">Checkpoint {installedVersion(updates)}</footer>}
       {showUpdate && updatesApplicable(updates) && <UpdateDialog info={updates} onClose={() => setShowUpdate(false)} />}

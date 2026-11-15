@@ -4,6 +4,8 @@ import EmptyState from '#src/components/ui/EmptyState.jsx';
 import { errText, useI18n } from '#src/hooks/useI18n.js';
 import { Alert, Button, Select } from '#src/components/ui/index.js';
 import { getVersionsLimit, listVersions, restoreVersion } from '#src/lib/api/versions.js';
+import VersionList from '#src/components/versions/VersionList.jsx';
+import { watchLatest } from '#src/lib/versionsWatch.js';
 
 export default function Versions({ config, onGoSettings }) {
   const { t } = useI18n();
@@ -30,6 +32,19 @@ export default function Versions({ config, onGoSettings }) {
     loadLimit(game);
   }, [game, config]);
 
+  // La lista se refresca sola cuando aparece una versión nueva (p. ej. el checkpoint de cierre de un juego): se vigila la
+  // más reciente cada ~15 s, solo con la pestaña visible y mientras esta página está montada.
+  useEffect(() => {
+    if (!game) return undefined;
+    return watchLatest(
+      () => getVersionsLimit(game),
+      (l) => {
+        setLimit(l);
+        load(game);
+      },
+    );
+  }, [game, config]);
+
   const restore = async (version, source, sourceName) => {
     if (!window.confirm(t('versions.confirm', { version, source: sourceName }))) return;
     try {
@@ -43,7 +58,7 @@ export default function Versions({ config, onGoSettings }) {
   };
 
   return (
-    <section className={list.length === 0 ? 'fill' : undefined}>
+    <section className={list.length === 0 && !limit?.current ? 'fill' : undefined}>
       <div className="row between versions-head">
         <h2>{t('versions.title')}</h2>
         <Select
@@ -74,6 +89,7 @@ export default function Versions({ config, onGoSettings }) {
       )}
       {msg && <Alert variant={msg.error ? 'error' : 'ok'}>{errText(msg.body)}</Alert>}
       {list.length === 0 &&
+        !limit?.current &&
         (games.length === 0 ? (
           <EmptyState
             variant="page"
@@ -91,21 +107,7 @@ export default function Versions({ config, onGoSettings }) {
         ) : (
           <EmptyState variant="page" icon="🗂️" title={t('versions.none.title')} text={t('versions.none.text')} />
         ))}
-      <div className="grid">
-        {list.map((v) => (
-          <div className="card" key={v.version}>
-            <h3>{v.version}</h3>
-            {v.sources.map((s) => (
-              <div className="row between version-src" key={s.source}>
-                <span className="version-info">
-                  <b>{s.name || s.source}</b> · {t('files', { count: s.files })} · {s.mtime}
-                </span>
-                <Button onClick={() => restore(v.version, s.source, s.name || s.source)}>{t('versions.restore')}</Button>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
+      <VersionList current={limit?.current} list={list} onRestore={restore} />
     </section>
   );
 }

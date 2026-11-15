@@ -344,3 +344,16 @@ test('steam_appid: un valor inválido se envía tal cual para que el backend dé
   d.games[0].steamAppid = 'abc';
   assert.equal(toConfig(d).games['a-1'].steam_appid, 'abc');
 });
+
+// Mismo criterio que `classic_devices` del backend (sin los `http`): sin dispositivos clásicos el hub no puede sincronizar (`err.sync.push_only`).
+test('isHttpOnly: todos http -> true; mezcla, clásicos o sin dispositivos conocidos', async () => {
+  const { classicDevices, isHttpOnly } = await import('#src/components/config/draft.js');
+  const devices = { pc: { name: 'PC' }, deck: { name: 'Deck', http: true }, tv: { name: 'TV', http: true } };
+  assert.equal(isHttpOnly({ devices: ['deck'] }, devices), true);
+  assert.equal(isHttpOnly({ devices: ['deck', 'tv'] }, devices), true);
+  assert.equal(isHttpOnly({ devices: ['pc', 'deck'] }, devices), false);
+  assert.equal(isHttpOnly({ devices: ['pc'] }, devices), false);
+  assert.deepEqual(classicDevices({ devices: ['pc', 'deck', 'x'] }, devices), ['pc']);
+  assert.equal(isHttpOnly({ devices: [] }, devices), true);
+  assert.equal(isHttpOnly({ devices: ['deck'] }, undefined), true);
+});

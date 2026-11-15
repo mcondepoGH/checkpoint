@@ -10,3 +10,4 @@ export { default as CopyBox } from './CopyBox.jsx';
 export { default as Tabs } from './Tabs.jsx';
 export { default as WatchBar } from './WatchBar.jsx';
 export { default as WatchStatus } from './WatchStatus.jsx';
+export { default as ErrorBoundary } from './ErrorBoundary.jsx';

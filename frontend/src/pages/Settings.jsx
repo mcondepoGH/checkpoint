@@ -8,7 +8,8 @@ import BackupsDialog from '#src/components/config/BackupsDialog.jsx';
 import DiffView from '#src/components/config/DiffView.jsx';
 import { errText, useI18n } from '#src/hooks/useI18n.js';
 import { errorText, fieldErrorText, ui } from '#src/lib/errors.js';
-import { Alert, Button, Tabs } from '#src/components/ui/index.js';
+import { Alert, Button, ErrorBoundary, Tabs } from '#src/components/ui/index.js';
+import { installedVersion } from '#src/lib/updates.js';
 import General from './settings/General.jsx';
 import Library from './settings/Library.jsx';
 import Launchers from './settings/Launchers.jsx';
@@ -180,36 +181,40 @@ export default function Settings({
         panels={{
           general: <General updates={updates} onUpdates={onUpdates} />,
           library: (
-            <Library
-              draft={draft}
-              setDraft={setDraft}
-              patch={patch}
-              errors={errors}
-              local={local}
-              fe={fe}
-              devErrs={devErrs}
-              gameErrs={gameErrs}
-              runtime={runtime}
-              platform={platform}
-              tests={tests}
-              onTest={testDevice}
-              onDelDevice={delDevice}
-              bar={{
-                hasErrors,
-                validating,
-                dirty,
-                canSave,
-                errorCount,
-                jumpToError,
-                onBackups: () => setDialog({ kind: 'backups' }),
-                onYaml: () => setDialog({ kind: 'yaml', config: payload }),
-                onDiscard: () => {
-                  setDraft(fromConfig(loaded.config));
-                  setMsg(null);
-                },
-                onSave: openSave,
-              }}
-            />
+            <ErrorBoundary version={installedVersion(updates)}>
+              <Library
+                draft={draft}
+                setDraft={setDraft}
+                patch={patch}
+                errors={errors}
+                local={local}
+                fe={fe}
+                devErrs={devErrs}
+                gameErrs={gameErrs}
+                runtime={runtime}
+                platform={platform}
+                tests={tests}
+                onTest={testDevice}
+                onDelDevice={delDevice}
+                active={sub === 'library'}
+                onReload={onReload}
+                bar={{
+                  hasErrors,
+                  validating,
+                  dirty,
+                  canSave,
+                  errorCount,
+                  jumpToError,
+                  onBackups: () => setDialog({ kind: 'backups' }),
+                  onYaml: () => setDialog({ kind: 'yaml', config: payload }),
+                  onDiscard: () => {
+                    setDraft(fromConfig(loaded.config));
+                    setMsg(null);
+                  },
+                  onSave: openSave,
+                }}
+              />
+            </ErrorBoundary>
           ),
           launchers: sub === 'launchers' ? <Launchers games={launcherGames} /> : null,
         }}

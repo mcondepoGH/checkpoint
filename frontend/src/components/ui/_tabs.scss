@@ -84,8 +84,12 @@
       box-shadow: inset 0 0 0 2px var(--accent);
     }
   }
+  // Panel de subpestaña: columna con UN gap entre bloques de primer nivel. Los bloques hijos no llevan margen vertical propio
+  // (se suma o colapsa y rompe la separación al añadir o quitar uno); lo vigila test/pages/settings-spacing.test.mjs.
   > .uitabs-panel {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    gap: v.$gap-section;
     &[hidden] {
       display: none;
     }

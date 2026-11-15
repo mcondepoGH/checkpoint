@@ -24,6 +24,16 @@
     "other": "{count} files"
   },
   "app": {
+    "crash": {
+      "title": "This section could not be displayed",
+      "text": "An error occurred while drawing it. The rest of the app keeps working; if it happens again, reload the page.",
+      "reload": "Reload the page",
+      "details": "Show details",
+      "detailsCopy": "Copy details",
+      "detailsCopied": "Copied",
+      "toastTitle": "An error occurred",
+      "dismiss": "Dismiss notice"
+    },
     "tab": {
       "sync": {
         "full": "Sync",
@@ -50,6 +60,17 @@
     "user": "Username",
     "password": "Password",
     "submit": "Sign in"
+  },
+  "hook": {
+    "sync": {
+      "uploaded": "Uploaded to the hub",
+      "downloaded": "Downloaded from the hub",
+      "up_to_date": "No changes",
+      "missing_dir": "Folder does not exist",
+      "no_path": "No path",
+      "conflict": "Conflict",
+      "error": "Sync error: {reason}"
+    }
   },
   "result": {
     "ok": "successful",
@@ -83,6 +104,8 @@
     "title": "Sync",
     "solo": { "label": "Checkpoint only", "help": "Single device: the hub keeps versions; there is no copy between machines." },
     "state": {
+      "ok": "OK",
+      "error": "Error",
       "conflict": "Conflict",
       "partial": "Partial",
       "dry-run": "Dry run (simulation)",
@@ -111,6 +134,21 @@
     "flagText": "two different versions, nothing has been saved.",
     "resolve": "Resolve",
     "run": "Sync",
+    "httpOnly": "Syncs from the device itself",
+    "httpConflict": {
+      "text": "the data on the hub and on {device} have both changed.",
+      "useHub": "Use the hub's data",
+      "useDevice": "Use {device}'s data",
+      "confirmTitle": "Resolve the conflict of {game}",
+      "confirmHub": "{device} will download the hub's data and replace its own; its plugin first keeps a copy in the .checkpoint-backup folder next to the game's.",
+      "confirmDevice": "The hub will keep {device}'s data. It first saves a version of what it has now (you'll see it under Versions).",
+      "confirmWhen": "Nothing changes now: {device} will apply it when the game opens or closes, or when you press Sync in its plugin.",
+      "confirm": "Resolve",
+      "pendingLead": "Pending resolution:",
+      "pendingHub": "{device} will use the hub's data on its next sync.",
+      "pendingDevice": "{device} will upload its data on its next sync.",
+      "cancel": "Cancel resolution"
+    },
     "running": "Running…",
     "log": {
       "title": "Log: {game} {state}",
@@ -155,6 +193,12 @@
     "none": {
       "title": "No saved versions",
       "text": "There are no versions of this game yet. They are saved automatically when a copy is overwritten during sync."
+    },
+    "current": {
+      "title": "Current",
+      "label": "Current",
+      "help": "What the hub holds for this game right now. It cannot be restored: it is already the current one.",
+      "hub": "Checkpoint hub"
     },
     "restore": "Restore"
   },
@@ -281,7 +325,97 @@
     "testing": "Testing…",
     "checkFolder": "Check folder",
     "test": "Test connection",
-    "deleteAria": "Delete device {title}"
+    "deleteAria": "Delete device {title}",
+    "http": {
+      "badge": "No SSH (http)",
+      "help": "This device connects to the hub by itself; SSH is not needed."
+    }
+  },
+  "pairing": {
+    "title": "Pairing requests",
+    "intro": "These devices ask to connect to the hub. Accept only the ones you recognise.",
+    "dirtyWarn": "You have unsaved changes on this screen. If you accept, the device list will not reload until you save or discard them.",
+    "ip": "From address",
+    "expires": "Expires in",
+    "expired": "Expired",
+    "codeAria": "Code {code}",
+    "check": "Check that the code {code} is the one your device shows before accepting.",
+    "accept": "Accept",
+    "reject": "Reject",
+    "working": "One moment…",
+    "existing": {
+      "http": "A device with that name already exists: it will be reused and its key will be regenerated.",
+      "other": "A device with that name exists and is not http: it cannot be accepted; you can only reject."
+    },
+    "accepted": "“{name}” paired. It now appears in the device list and will receive its key by itself.",
+    "acceptedDirty": "“{name}” paired, but you have unsaved changes and the list was not reloaded. Save or discard your changes to see the device (if saving says the configuration changed, reload and redo your changes).",
+    "rejected": "Request from “{name}” rejected.",
+    "gone": "The request no longer exists: it expired or was withdrawn. The list was updated.",
+    "notPending": "The request was already resolved (accepted, rejected or expired). The list was updated.",
+    "configChanged": "The configuration changed while accepting. Press Accept again to retry.",
+    "failAccept": "The request could not be accepted. Try again.",
+    "failReject": "The request could not be rejected. Try again."
+  },
+  "deck": {
+    "title": "Steam Deck plugin",
+    "intro": "Download the Decky Loader plugin and install it on the Deck (Decky settings > Developer > Install plugin from ZIP, or Install plugin from URL: <hub>/api/deck/plugin). This code runs on your Deck: check the checksum before installing it.",
+    "download": "Download plugin",
+    "failed": "Could not fetch the plugin info. Reload the page to try again.",
+    "missing": "This hub does not include the plugin: the Docker image ships it packaged; in native mode, build the zip with “pnpm run zip” in checkpoint-deck/.",
+    "version": "Version",
+    "sha": "SHA-256",
+    "versionUnknown": "unknown",
+    "size": "Size",
+    "verify": "To verify it, compare the checksum with the output of"
+  },
+  "steam": {
+    "title": "Steam suggestions",
+    "intro": "The Steam Deck found Steam games that might belong to your library, but it is not certain. Accept only the ones that are the same game. Games with exactly the same name are linked automatically and do not show up here.",
+    "dirtyWarn": "You have unsaved changes on this screen. If you accept, they will not be reloaded until you save or discard them.",
+    "appid": "Steam id: {appid}",
+    "game": "Game in your library",
+    "from": "Sent by",
+    "check": "Is “{steam}” on Steam the same game as “{game}”? If you accept, that game will keep the Steam id on all its devices.",
+    "accept": "Accept",
+    "discard": "Discard",
+    "working": "One moment…",
+    "dismissedTitle": "Remembered discards",
+    "dismissedIntro": "You discarded these suggestions and they will not be offered again. Forget a discard if you want it offered again.",
+    "dismissedRow": "“{steam}” (id {appid}) is not “{game}”",
+    "forget": "Forget",
+    "accepted": "“{game}” now has its Steam id ({appid}).",
+    "acceptedDirty": "“{game}” now has its Steam id ({appid}), but you have unsaved changes and the screen was not reloaded. Save or discard your changes to see it (if saving says the configuration changed, reload and repeat your changes).",
+    "dismissedNow": "Suggestion for “{game}” discarded. It will not be offered again.",
+    "forgotten": "Discard for “{game}” forgotten: it can be offered again when the Deck sends its list.",
+    "gone": "The suggestion no longer exists: it expired or was withdrawn. The list was refreshed.",
+    "gameGone": "The proposed game is no longer in the configuration. The list was refreshed.",
+    "gameHasAppid": "That game already has a Steam id, so nothing was changed. The list was refreshed.",
+    "appidInUse": "Another game already uses that Steam id, so nothing was changed. The list was refreshed.",
+    "configChanged": "The configuration changed while accepting. Press Accept again to retry.",
+    "dismissedGone": "That discard no longer exists. The list was refreshed.",
+    "failAccept": "The suggestion could not be accepted. Try again.",
+    "failDismiss": "The suggestion could not be discarded. Try again.",
+    "failForget": "The discard could not be forgotten. Try again."
+  },
+  "devkey": {
+    "title": "Device key",
+    "has": "Has a key",
+    "none": "No key",
+    "hint": "The device identifies itself to the hub with this key. It only works for this device.",
+    "show": "Show",
+    "hide": "Hide",
+    "generate": "Generate key",
+    "regenerate": "Regenerate",
+    "revoke": "Revoke",
+    "field": "Device key (read only)",
+    "copyWhat": "device key",
+    "copyFail": "The key could not be copied. Press Show and copy it by hand.",
+    "lockNew": "Save the configuration first: the key can only be managed on devices that are already saved.",
+    "lockDirty": "This card has unsaved changes. Save or discard them to manage the key.",
+    "confirm": {
+      "regenerate": { "title": "Regenerate the key", "text": "The previous key will stop working and you will need to enter the new one on the device again.", "yes": "Yes, regenerate" },
+      "revoke": { "title": "Revoke the key", "text": "The device will not be able to connect to the hub until it has a new key. You can generate one whenever you want.", "yes": "Yes, revoke" }
+    }
   },
   "draft": {
     "nameHint": "Up to {max} characters. Spaces, symbols, accents and emoji are allowed; no / or \\",
@@ -536,12 +670,19 @@
       "photo_empty": "the photo is empty",
       "photo_unknown": "there is no profile photo"
     },
+    "resolution": {
+      "invalid": "invalid resolution: bad winner or fingerprint format",
+      "no_conflict": "there is no recorded conflict for that game and device: the device must compare its saves first",
+      "stale": "the data changed since the conflict was seen: compare again before resolving",
+      "side_empty": "the chosen side has no data: it can't be used to resolve"
+    },
     "hook": {
       "device_required": "pass the device with ?device=<name or id>; the game is on: {devices}",
       "device_unknown": "the device does not belong to this game",
       "device_ambiguous": "{cause}",
       "device_not_http": "this device is not http: the hub contacts it over SSH or it is “This computer”",
       "device_push_only": "this device is http: there is no opened notice or watch; the device calls the API itself",
+      "result_invalid": "the sync result is not valid (state or code outside the list, unexpected fields or over 1 KiB)",
       "manifest_path_invalid": "the manifest has an invalid path (absolute, with .. or with disallowed characters)",
       "manifest_duplicate": "the manifest repeats a path",
       "manifest_sha_invalid": "the manifest has a sha256 that is not 64 hexadecimal characters",
@@ -571,6 +712,9 @@
       "invalid": "API key missing or invalid",
       "device_mismatch": "the given device is not the one of the API key"
     },
+    "deck": {
+      "plugin_missing": "the Steam Deck plugin is not included in this hub"
+    },
     "pairing": {
       "name_invalid": "invalid device name: {cause}",
       "os_invalid": "invalid operating system (options: {options})",
@@ -582,6 +726,22 @@
       "code_mismatch": "the code does not match; {remaining} attempts left",
       "device_not_http": "there is already a non-http device named “{name}”",
       "not_pending": "the request is no longer pending"
+    },
+    "steam": {
+      "body_invalid": "the body must be exactly {\"games\": [...]}",
+      "entry_invalid": "entry {index} is not valid (it must be {appid, name}: positive integer appid and a name of 1 to 200 characters)",
+      "too_many_games": "too many games in the list (max {max})",
+      "body_too_large": "the request is too large (max {max} bytes)",
+      "suggestion_unknown": "unknown or expired suggestion",
+      "game_unknown": "the proposed game no longer exists",
+      "game_has_appid": "the game “{game}” already has a Steam id",
+      "appid_in_use": "another game already uses Steam id {appid}",
+      "dismissed_unknown": "unknown discard",
+      "config_invalid": "the resulting configuration is not valid",
+      "game_body_invalid": "the game body does not have the expected shape",
+      "no_free_slot": "the game already has 2 devices",
+      "appid_mismatch": "that name already exists with a different Steam game",
+      "game_invalid": "the game is not valid: check its name, path and Steam id"
     },
     "config": {
       "required": "required field",

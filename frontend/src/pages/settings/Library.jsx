@@ -4,6 +4,9 @@ import EmptyState from '#src/components/ui/EmptyState.jsx';
 import Icon from '#src/components/ui/Icon.jsx';
 import DeviceCard from '#src/components/config/DeviceCard.jsx';
 import GameCard from '#src/components/config/GameCard.jsx';
+import PairingRequests from '#src/components/config/PairingRequests.jsx';
+import DeckPlugin from '#src/components/config/DeckPlugin.jsx';
+import SteamSuggestions from '#src/components/config/SteamSuggestions.jsx';
 import PublicKey from '#src/components/keyhelp/PublicKey.jsx';
 import { Button, Input } from '#src/components/ui/index.js';
 import {
@@ -36,6 +39,8 @@ export default function Library({
   onTest,
   onDelDevice,
   bar,
+  active = true,
+  onReload = () => {},
 }) {
   const { t } = useI18n();
   const noNamed = draft.devices.filter((d) => d.name).length < 1;
@@ -62,71 +67,78 @@ export default function Library({
         </Field>
       </fieldset>
 
-      <div className="row between section-head">
-        <h3>{t('settings.devices')}</h3>
-        <Button onClick={() => setDraft((d) => ({ ...d, devices: [...d.devices, blankDevice()] }))}>{t('settings.addDevice')}</Button>
-      </div>
-      <div className="grid">
-        {draft.devices.map((d) => (
-          <DeviceCard
-            key={d.key}
-            dev={d}
-            errors={devErrs(d)}
-            localError={local[d.key]}
-            localFlagError={local[`local-${d.key}`]}
-            canLocal={canOfferLocal(draft, runtime, d.key)}
-            runtime={runtime}
-            platform={platform}
-            test={tests[d.key]}
-            idText={idOf(d, 'dispositivo')}
-            renamed={renamed(d)}
-            onChange={(p) => patch('devices', d.key, p)}
-            onTest={() => onTest(d)}
-            onRemove={() => onDelDevice(d)}
+      <div className="cfg-section">
+        <div className="row between section-head">
+          <h3>{t('settings.devices')}</h3>
+          <Button onClick={() => setDraft((d) => ({ ...d, devices: [...d.devices, blankDevice()] }))}>{t('settings.addDevice')}</Button>
+        </div>
+        <DeckPlugin />
+        <PairingRequests active={active} dirty={bar.dirty} onReload={onReload} />
+        <SteamSuggestions active={active} dirty={bar.dirty} onReload={onReload} />
+        <div className="grid">
+          {draft.devices.map((d) => (
+            <DeviceCard
+              key={d.key}
+              dev={d}
+              errors={devErrs(d)}
+              localError={local[d.key]}
+              localFlagError={local[`local-${d.key}`]}
+              canLocal={canOfferLocal(draft, runtime, d.key)}
+              runtime={runtime}
+              platform={platform}
+              test={tests[d.key]}
+              idText={idOf(d, 'dispositivo')}
+              renamed={renamed(d)}
+              onChange={(p) => patch('devices', d.key, p)}
+              onTest={() => onTest(d)}
+              onRemove={() => onDelDevice(d)}
+            />
+          ))}
+        </div>
+        {draft.devices.length === 0 && (
+          <EmptyState
+            icon="💻"
+            title={t('settings.noDevices.title')}
+            text={t('settings.noDevices.text')}
+            action={
+              <Button variant="primary" onClick={() => setDraft((d) => ({ ...d, devices: [...d.devices, blankDevice()] }))}>
+                {t('settings.addDevice')}
+              </Button>
+            }
           />
-        ))}
+        )}
       </div>
-      {draft.devices.length === 0 && (
-        <EmptyState
-          icon="💻"
-          title={t('settings.noDevices.title')}
-          text={t('settings.noDevices.text')}
-          action={
-            <Button variant="primary" onClick={() => setDraft((d) => ({ ...d, devices: [...d.devices, blankDevice()] }))}>
-              {t('settings.addDevice')}
-            </Button>
-          }
-        />
-      )}
 
-      <div className="row between section-head">
-        <h3>{t('settings.games')}</h3>
-        <Button disabled={noNamed} onClick={() => setDraft((d) => ({ ...d, games: [...d.games, blankGame()] }))}>
-          {t('settings.addGame')}
-        </Button>
-      </div>
-      {noNamed && <p className="muted">{t('settings.needOne')}</p>}
-      <div className="grid">
-        {draft.games.map((g) => (
-          <GameCard
-            key={g.key}
-            game={g}
-            devices={draft.devices}
-            errors={gameErrs(g)}
-            localError={local[g.key]}
-            keepError={local[`keep-${g.key}`]}
-            steamError={local[`steam-${g.key}`]}
-            globalMax={draft.maxVersions}
-            nameA={nameOf(draft, g.a)}
-            nameB={nameOf(draft, g.b)}
-            idA={deviceId(draft, g.a)}
-            idB={deviceId(draft, g.b)}
-            idText={idOf(g, 'juego')}
-            renamed={renamed(g)}
-            onChange={(p) => patch('games', g.key, p)}
-            onRemove={() => setDraft((d) => ({ ...d, games: d.games.filter((x) => x.key !== g.key) }))}
-          />
-        ))}
+      <div className="cfg-section">
+        <div className="row between section-head">
+          <h3>{t('settings.games')}</h3>
+          <Button disabled={noNamed} onClick={() => setDraft((d) => ({ ...d, games: [...d.games, blankGame()] }))}>
+            {t('settings.addGame')}
+          </Button>
+        </div>
+        {noNamed && <p className="muted">{t('settings.needOne')}</p>}
+        <div className="grid">
+          {draft.games.map((g) => (
+            <GameCard
+              key={g.key}
+              game={g}
+              devices={draft.devices}
+              errors={gameErrs(g)}
+              localError={local[g.key]}
+              keepError={local[`keep-${g.key}`]}
+              steamError={local[`steam-${g.key}`]}
+              globalMax={draft.maxVersions}
+              nameA={nameOf(draft, g.a)}
+              nameB={nameOf(draft, g.b)}
+              idA={deviceId(draft, g.a)}
+              idB={deviceId(draft, g.b)}
+              idText={idOf(g, 'juego')}
+              renamed={renamed(g)}
+              onChange={(p) => patch('games', g.key, p)}
+              onRemove={() => setDraft((d) => ({ ...d, games: d.games.filter((x) => x.key !== g.key) }))}
+            />
+          ))}
+        </div>
       </div>
 
       <div className="actionbar" role="group" aria-label={t('settings.bar.aria')}>

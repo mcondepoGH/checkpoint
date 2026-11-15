@@ -86,3 +86,35 @@ test('LauncherBlock: nota «Desactivado: el aviso se omitirá» solo con el jueg
   assert.ok(!has(R('LauncherBlock', props(g())), 'el aviso se omitirá'), 'sin el campo cuenta como activo');
   assert.ok(has(R('LauncherBlock', props(g({ enabled: false })), 'en'), 'Disabled: the notice will be skipped.'));
 });
+
+const HTTP = { name: 'Solo http', devices: ['deck'] };
+const MIX = { name: 'Mezcla', devices: ['pc', 'deck'] };
+const mkh = (games) => ({ devices: { pc: dev, deck: { name: 'Deck', http: true } }, games });
+
+test('Sync: juego solo http sin Sincronizar ni Simulación y con la línea del plugin (es y en)', { skip }, () => {
+  const h = R('Sync', { config: mkh({ a: HTTP }) });
+  assert.ok(!has(h, 'btn primary">Sincronizar') && !has(h, 'Simulación'));
+  assert.ok(has(h, 'Se sincroniza desde el propio dispositivo<'));
+  const en = R('Sync', { config: mkh({ a: HTTP }) }, 'en');
+  assert.ok(!has(en, 'Dry run') && !has(en, 'btn primary">Sync'));
+  assert.ok(has(en, 'Syncs from the device itself<'));
+});
+
+test('Sync: juego mixto clásico + http mantiene el botón y la simulación', { skip }, () => {
+  const h = R('Sync', { config: mkh({ a: MIX }) });
+  assert.equal((h.match(/btn primary">Sincronizar/g) || []).length, 1);
+  assert.equal((h.match(/Simulación/g) || []).length, 1);
+  assert.ok(!has(h, 'Se sincroniza desde el propio dispositivo'));
+});
+
+test('Sync: solo http conserva «Jugando» y el último resultado de PlayingBars', { skip }, () => {
+  const watch = {
+    now: '2026-01-01T10:00:00Z',
+    watches: [],
+    playing: [{ game: 'a', device: 'deck', since: '2026-01-01T10:00:00Z', expires: '2026-01-01T22:00:00Z' }],
+    results: [],
+  };
+  const h = R('Sync', { config: mkh({ a: HTTP }), watch });
+  assert.ok(has(h, 'Jugando en Deck'));
+  assert.ok(!has(h, 'btn primary">Sincronizar'));
+});

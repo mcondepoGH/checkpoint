@@ -3,10 +3,17 @@ import { recordText } from '#src/lib/errors.js';
 // Lógica pura del registro automático (sin React): se prueba sin navegador.
 
 // Origen (lo que se ve en el registro): 3 etiquetas que agrupan los disparadores (`trigger` del backend: manual, scheduled,
-// startup, hook, hook_closed) sin tocar el valor guardado. El panel de Lanzadores sigue usando `autolog.trigger.hook|hook_closed`.
+// startup, hook, hook_opened, hook_closed) sin tocar el valor guardado. El panel de Lanzadores sigue usando `autolog.trigger.hook|hook_closed`.
 // Clave `autolog.origin.<origen>`; el color lo pone el tono `<origen>` de Pill.
 export const ORIGINS = ['manual', 'scheduled', 'launcher'];
-const ORIGIN_OF = { manual: 'manual', scheduled: 'scheduled', startup: 'scheduled', hook: 'launcher', hook_closed: 'launcher' };
+const ORIGIN_OF = {
+  manual: 'manual',
+  scheduled: 'scheduled',
+  startup: 'scheduled',
+  hook: 'launcher',
+  hook_opened: 'launcher',
+  hook_closed: 'launcher',
+};
 export const originOf = (trigger) => ORIGIN_OF[trigger] || null; // null: disparador desconocido (se muestra tal cual)
 
 // Filtro por origen del registro: 'all' o uno de ORIGINS. Un valor desconocido no filtra. Las entradas de disparador

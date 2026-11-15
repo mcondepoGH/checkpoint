@@ -2,9 +2,11 @@ import React, { useId } from 'react';
 import Field from '#src/components/ui/Field.jsx';
 import { LOCAL_DOCKER_MSG, LOCAL_HELP, LOCAL_LABEL, NAME_HINT, NAME_MAX, OS_OPTIONS, localPatch } from './draft.js';
 import IdNote from './IdNote.jsx';
+import DeviceKey from './DeviceKey.jsx';
+import { lockReason } from '#src/lib/devicekey.js';
 import { fieldErrorText } from '#src/lib/errors.js';
 import { errText, useI18n } from '#src/hooks/useI18n.js';
-import { Alert, Button, Checkbox, Input, Select } from '#src/components/ui/index.js';
+import { Alert, Badge, Button, Checkbox, Input, Select } from '#src/components/ui/index.js';
 
 // `runtime` ('docker' | 'native') y `platform` vienen de /api/config. «Este equipo» solo se ofrece en modo nativo.
 // Resultado de «Probar conexión»/«Comprobar carpeta»: con varias carpetas, una línea por ruta (cada una con su code si lo hay).
@@ -33,6 +35,33 @@ export default function DeviceCard({
   const set = (k) => (e) => onChange({ [k]: e.target.value });
   const descId = useId();
   const title = dev.name || t('device.new');
+  if (dev.http) {
+    // Dispositivo http (alta por solicitud de vinculación): sin SSH ni «Probar conexión»; solo el nombre se edita.
+    const osLabel = OS_OPTIONS.find(([v]) => v === dev.os)?.[1] ?? dev.os;
+    return (
+      <fieldset className="card cfg-card">
+        <legend className="cfg-title">{title}</legend>
+        <div>
+          <Badge>{t('device.http.badge')}</Badge>
+        </div>
+        <p className="muted device-http-help">{t('device.http.help')}</p>
+        <Field label={t('game.name')} hint={t(NAME_HINT, { max: NAME_MAX })} error={localError || errors.name || errors['']}>
+          {(p) => <Input {...p} value={dev.name} onChange={set('name')} maxLength={NAME_MAX} placeholder={t('device.namePh')} />}
+        </Field>
+        <p className="device-os">
+          <span className="muted">{t('device.os')}:</span> <strong>{osLabel}</strong>
+        </p>
+        <DeviceKey deviceId={dev.id} lock={lockReason(dev, renamed)} />
+        <IdNote id={idText} isNew={!dev.id} renamed={renamed} />
+        <div className="row">
+          <span className="spacer" />
+          <Button variant="danger" onClick={onRemove} aria-label={t('device.deleteAria', { title })}>
+            {t('common.delete')}
+          </Button>
+        </div>
+      </fieldset>
+    );
+  }
   return (
     <fieldset className="card cfg-card">
       <legend className="cfg-title">{title}</legend>

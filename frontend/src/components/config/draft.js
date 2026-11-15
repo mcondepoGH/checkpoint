@@ -99,7 +99,7 @@ export function fromConfig(cfg) {
     name: d.name,
     orig: d.name,
     local: d.local === true,
-    http: d.http === true, // se conserva al guardar (toConfig); aún no se edita en el formulario
+    http: d.http === true, // se conserva al guardar (toConfig); en el formulario solo se edita el nombre (se da de alta por solicitud de vinculación)
     host: d.host ?? '',
     port: String(d.port ?? 22),
     user: d.user ?? '',
@@ -241,6 +241,11 @@ export const isDirty = (draft, config, runtime) =>
 
 // ¿El juego tiene un solo dispositivo? (config guardada: `devices.length === 1`)
 export const isSoloCheckpoint = (game) => (game?.devices?.length ?? 0) === 1;
+
+// Ids de los dispositivos del juego que el hub contacta (sin los `http`): mismo criterio que `classic_devices` del backend.
+export const classicDevices = (game, devices) => (game?.devices ?? []).filter((d) => d in (devices ?? {}) && !devices[d].http);
+// Sin ninguno clásico el hub no sincroniza (`err.sync.push_only`): es el propio dispositivo quien sube y baja por la API.
+export const isHttpOnly = (game, devices) => classicDevices(game, devices).length === 0;
 
 export const gamesUsing = (draft, devKey) => draft.games.filter((g) => g.a === devKey || g.b === devKey).map((g) => g.name); // '' si no tiene nombre (la pantalla pone «(sin nombre)»)
 
