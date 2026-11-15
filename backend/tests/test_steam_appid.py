@@ -26,6 +26,13 @@ def test_default_is_none_and_valid_value_kept():
     assert c.games["a"].steam_appid is None and c.games["b"].steam_appid == 1245620
 
 
+def test_appid_has_no_ceiling_so_steam_shortcut_ids_up_to_2_pow_32_are_accepted():
+    """Los atajos de Steam (juegos que no son de Steam) usan ids de 32 bits sin signo, por encima de 2**31-1."""
+    for v in (2**31, 3_000_000_001, 2**32 - 1):
+        c = parse_config(cfg_with(a={"steam_appid": v}))
+        assert c.games["a"].steam_appid == v
+
+
 def test_none_is_not_written():
     c = parse_config(cfg_with(a={}, b={"steam_appid": 7}))
     d = c.model_dump(exclude_none=True)

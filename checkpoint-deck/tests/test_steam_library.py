@@ -168,3 +168,44 @@ def test_unreadable_extra_library_does_not_break_scan(tmp_path):
     finally:
         sd.chmod(0o755)
     assert any("se omite" in m and str(sd) in m for m in logs)
+
+
+# ---- atajos de Steam (shortcuts.vdf)
+def _shortcut_file(home, steamid, appid, name):
+    import struct
+
+    body = b"\x02appid\x00" + struct.pack("<I", appid) + b"\x01AppName\x00" + name.encode() + b"\x00\x01Exe\x00x\x00"
+    data = b"\x00shortcuts\x00\x000\x00" + body + b"\x08\x08\x08"
+    p = home / ".local/share/Steam/userdata" / steamid / "config"
+    p.mkdir(parents=True, exist_ok=True)
+    (p / "shortcuts.vdf").write_bytes(data)
+
+
+def test_scan_games_adds_shortcuts_above_the_acf_ceiling(deck):
+    _shortcut_file(deck / "home", "111", 3_000_000_001, "Lutris Game")
+    games, shortcuts = sl.scan_games(deck / "home")
+    assert (3_000_000_001, "Lutris Game") in games and shortcuts == {3_000_000_001}
+    assert [a for a, _ in games] == sorted(a for a, _ in games)
+    assert 730 in {a for a, _ in games} and 730 not in shortcuts
+
+
+def test_acf_keeps_its_own_ceiling_but_shortcuts_go_to_2_pow_32(tmp_path):
+    root = tmp_path / "home/.local/share/Steam/steamapps"
+    root.mkdir(parents=True)
+    (root / "appmanifest_3000000001.acf").write_text('"AppState" { "appid" "3000000001" "name" "Grande" }')
+    assert sl.scan_library(tmp_path / "home") == []  # un juego de Steam > 2**31-1 sigue descartado
+    _shortcut_file(tmp_path / "home", "111", 2**32 - 1, "Tope")
+    assert sl.scan_library(tmp_path / "home") == [(2**32 - 1, "Tope")]
+
+
+def test_steam_game_wins_over_a_shortcut_with_the_same_id(deck):
+    _shortcut_file(deck / "home", "111", 730, "Atajo con id de Steam")
+    games, shortcuts = sl.scan_games(deck / "home")
+    assert dict(games)[730] != "Atajo con id de Steam" and 730 not in shortcuts
+
+
+def test_corrupt_shortcuts_do_not_break_the_library(deck):
+    p = deck / "home/.local/share/Steam/userdata/111/config"
+    p.mkdir(parents=True)
+    (p / "shortcuts.vdf").write_bytes(b"\x00basura")
+    assert [a for a, _ in sl.scan_library(deck / "home")] == [220, 730, 1245620]

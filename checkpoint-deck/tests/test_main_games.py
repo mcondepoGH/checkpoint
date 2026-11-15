@@ -285,3 +285,28 @@ def test_configure_game_join_refusals_keep_the_game_unconfigured(fake_decky, scr
     for reason, r in out.items():
         assert r["ok"] is False and r["error"] == "game_invalid" and r["error_params"] == {"field": "name", "reason": reason}
     assert [g["id"] for g in s["games"]] == ["hl2"] and len(s["unconfigured"]) == 2
+
+
+def test_shortcut_shows_as_unconfigured_with_origin_and_can_be_created_in_the_hub(fake_decky, scripthub, tmp_path, monkeypatch):
+    """Atajo de Steam (fichero sintético) con appid por encima de 2**31-1: sale en «sin configurar» marcado y se crea en el hub."""
+    import struct
+
+    st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    cfg = tmp_path / "deckhome/.local/share/Steam/userdata/111/config"
+    cfg.mkdir(parents=True)
+    body = b"\x02appid\x00" + struct.pack("<I", 3_000_000_001) + b"\x01AppName\x00Lutris Juego\x00"
+    (cfg / "shortcuts.vdf").write_bytes(b"\x00shortcuts\x00\x000\x00" + body + b"\x08\x08\x08")
+    sent = []
+
+    async def go():
+        await p._main()
+        await p.refresh_library()
+        s = await settled(p)
+        sent.append(await p.suggest_game(3_000_000_001))
+        await p._unload()
+        return s
+
+    s = asyncio.run(go())
+    assert {"appid": 3_000_000_001, "name": "Lutris Juego", "source": "shortcut"} in s["unconfigured"]
+    assert all("source" not in u for u in s["unconfigured"] if u["appid"] != 3_000_000_001)
+    assert sent[0]["ok"] is True and sent[0]["name"] == "Lutris Juego" and sent[0]["path"] == ""  # sin ruta detectada: la pide la interfaz

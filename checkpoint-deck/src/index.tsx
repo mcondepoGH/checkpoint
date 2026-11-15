@@ -33,10 +33,12 @@ import {
   RESOLVE_HUB_LABEL,
   SEARCH_HELP,
   SEARCH_LABEL,
+  SHORTCUT_HELP,
   SHOW_UNCONFIGURED_HELP,
   SHOW_UNCONFIGURED_LABEL,
   TOGGLE_HELP,
   UNCONFIGURED_HELP,
+  unconfiguredDescription,
   UPDATE_SHA_LABEL,
   UPDATE_STEPS,
   UpdateInfo,
@@ -143,7 +145,7 @@ interface SyncState {
     ignored: number;
   } | null;
   games: GameRow[];
-  unconfigured: { appid: number; name: string }[]; // instalados en la Deck sin juego en el hub (tras buscar)
+  unconfigured: { appid: number; name: string; source?: string }[]; // instalados en la Deck sin juego en el hub (tras buscar)
 }
 interface Suggestion extends GameFailure {
   appid?: number;
@@ -450,7 +452,7 @@ const mmss = (s: number) =>
   `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 // Un juego instalado en la Deck que el hub aún no tiene: «Configurar» rellena nombre y ruta (lo detectado) y pide confirmar
-function UnconfiguredGame({ appid, name, disabled, onDone }: { appid: number; name: string; disabled: boolean; onDone: (s: SyncState) => void }) {
+function UnconfiguredGame({ appid, name, source, disabled, onDone }: { appid: number; name: string; source?: string; disabled: boolean; onDone: (s: SyncState) => void }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [gname, setGname] = useState(name);
@@ -536,7 +538,7 @@ function UnconfiguredGame({ appid, name, disabled, onDone }: { appid: number; na
   return (
     <div>
       <PanelSectionRow>
-        <Field label={name} description={`N.º de Steam: ${appid}`} focusable>
+        <Field label={name} description={unconfiguredDescription(appid, source)} focusable>
           {open ? "Sin configurar" : ""}
         </Field>
       </PanelSectionRow>
@@ -792,8 +794,9 @@ function Games() {
       {unconfigured.showList && (
         <PanelSection title="Sin configurar en el hub">
           <PanelSectionRow>{UNCONFIGURED_HELP}</PanelSectionRow>
+          {sync.unconfigured.some((u) => u.source === "shortcut") && <PanelSectionRow>{SHORTCUT_HELP}</PanelSectionRow>}
           {sync.unconfigured.map((u) => (
-            <UnconfiguredGame key={u.appid} appid={u.appid} name={u.name} disabled={busy} onDone={setSync} />
+            <UnconfiguredGame key={u.appid} appid={u.appid} name={u.name} source={u.source} disabled={busy} onDone={setSync} />
           ))}
         </PanelSection>
       )}

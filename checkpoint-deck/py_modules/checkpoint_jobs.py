@@ -8,7 +8,7 @@ en el hub: `unconfigured`), `check` (lista de juegos con su estado), `check_one`
 
 import asyncio
 import threading
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import checkpoint_client as hc
 from checkpoint_games import is_tool
@@ -26,8 +26,11 @@ class Jobs:
         refresh: Callable[[], Tuple[str, Dict[str, Any]]],
         log: Callable[[str], None] = lambda _m: None,
         library: Callable[[], List[Tuple[int, str]]] = lambda: [],
+        shortcuts: Callable[[], Set[int]] = lambda: set(),
     ):
         self._make_engine, self._refresh, self._log, self._library = make_engine, refresh, log, library
+        self._shortcuts_of = shortcuts  # appids de la biblioteca que son atajos de Steam (juegos que no son de Steam)
+        self._shortcuts: Set[int] = set()
         self._installed: Optional[List[Tuple[int, str]]] = None  # None = aún no se ha buscado en Steam
         self._unconfigured: List[Dict[str, Any]] = []
         self._lock = threading.Lock()
@@ -114,6 +117,7 @@ class Jobs:
                 if res == "ok":
                     self._set(summary=data)
                     self._installed = list(self._library())
+                    self._shortcuts = set(self._shortcuts_of())
                     eng = self._make_engine()
                     if eng is not None:
                         self._engine = eng
@@ -206,7 +210,9 @@ class Jobs:
             return
         used = {g["appid"] for g in self._games if g.get("appid")}
         self._unconfigured = [
-            {"appid": a, "name": n} for a, n in self._installed if a not in used and not is_tool(n)
+            {"appid": a, "name": n, **({"source": "shortcut"} if a in self._shortcuts else {})}
+            for a, n in self._installed
+            if a not in used and not is_tool(n)
         ]
 
     # ---- cambios que hace la interfaz (el hub ya los aceptó)

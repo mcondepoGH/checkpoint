@@ -369,3 +369,15 @@ def test_resolve_job_failure_keeps_the_row_in_conflict_with_the_reason():
 
     g2 = asyncio.run(go())["games"][1]
     assert g2["state"] == "conflict" and g2["code"] == "game_running"  # el conflicto sigue ahí: se puede reintentar
+
+
+def test_unconfigured_marks_shortcuts_with_their_origin():
+    async def go():
+        eng = FakeEngine()
+        lib = [(30, "Treinta"), (3_000_000_001, "Atajo")]
+        j = Jobs(lambda: eng, lambda: ("ok", {"found": 2}), log=lambda m: None, library=lambda: lib, shortcuts=lambda: {3_000_000_001})
+        j.start("refresh")
+        return await settle(j)
+
+    s = asyncio.run(go())
+    assert s["unconfigured"] == [{"appid": 30, "name": "Treinta"}, {"appid": 3_000_000_001, "name": "Atajo", "source": "shortcut"}]

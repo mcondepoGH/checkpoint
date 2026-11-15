@@ -286,3 +286,12 @@ export function unconfiguredView(show: boolean, count: number): { showList: bool
   if (count <= 0) return { showList: false, hiddenNote: null };
   return show ? { showList: true, hiddenNote: null } : { showList: false, hiddenNote: hiddenUnconfiguredText(count) };
 }
+
+// ---- atajos de Steam (juegos que no son de Steam, p. ej. Lutris) en «Sin configurar en el hub» ----
+export const SHORTCUT_LABEL = "Atajo";
+export const SHORTCUT_HELP =
+  "Los marcados como «Atajo» son juegos que no son de Steam (p. ej. Lutris) añadidos a Steam. Su carpeta de guardado no se detecta: escríbela.";
+// Línea de descripción de un juego sin configurar: un atajo lo dice; su número no es un id de la tienda de Steam
+export function unconfiguredDescription(appid: number, source?: string): string {
+  return source === "shortcut" ? `${SHORTCUT_LABEL} · N.º de Steam: ${appid}` : `N.º de Steam: ${appid}`;
+}

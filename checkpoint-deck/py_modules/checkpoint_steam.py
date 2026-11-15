@@ -1,19 +1,21 @@
 """Biblioteca de Steam de la Deck: lee los `appmanifest_*.acf` (appid y nombre) sin usar la interfaz interna de Steam.
 
 Solo biblioteca estándar. De cada juego sale ÚNICAMENTE el appid y el nombre: nada más del fichero se conserva ni se
-envía. Todo error de un fichero (ilegible, truncado, sin nombre) lo descarta sin romper el resto.
+envía. Suma los atajos de Steam (juegos que no son de Steam, p. ej. Lutris) de `shortcuts.vdf`. Todo error de un fichero (ilegible, truncado, sin nombre) lo descarta sin romper el resto.
 """
 
 import os
 import re
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+
+import checkpoint_shortcuts
 
 MAX_GAMES = 5000  # igual que `MAX_GAMES` del hub (backend/app/services/steam.py)
 MAX_NAME = 200  # igual que `MAX_NAME` del hub
 MAX_FILE = 256 * 1024  # un manifiesto real pesa pocos KB; más es basura y no se lee entero
 MAX_DEPTH = 32
-MAX_APPID = 2**31 - 1
+MAX_APPID = 2**31 - 1  # solo juegos de Steam (appmanifest); los atajos tienen su propio techo (checkpoint_shortcuts.MAX_APPID)
 STEAM_ROOTS = (".local/share/Steam", ".steam/steam", ".steam/root", ".var/app/com.valvesoftware.Steam/.local/share/Steam")
 _ESC = {"n": "\n", "t": "\t", "\\": "\\", '"': '"'}
 _ACF_RE = re.compile(r"^appmanifest_\d+\.acf$")
@@ -196,10 +198,14 @@ def scan_steam_root(root: Path, limit: int = MAX_GAMES, log: Callable[[str], Non
     return list(seen.items())
 
 
-def scan_library(home: Optional[Path] = None, limit: int = MAX_GAMES, log: Callable[[str], None] = _noop) -> List[Tuple[int, str]]:
-    """Todos los juegos instalados bajo `home` (por defecto el directorio personal), ordenados por appid."""
+def scan_games(
+    home: Optional[Path] = None, limit: int = MAX_GAMES, log: Callable[[str], None] = _noop
+) -> Tuple[List[Tuple[int, str]], Set[int]]:
+    """(juegos, ids de atajo): los juegos instalados bajo `home` (por defecto el directorio personal) más los atajos de
+    Steam, ordenados por appid, y cuáles de esos appids son atajos. Un juego de Steam gana a un atajo con el mismo id."""
     home = Path(home) if home else Path.home()
     seen: Dict[int, str] = {}
+    shortcuts: Set[int] = set()
     roots = find_steam_roots(home)
     if not roots:
         log("biblioteca: no hay ninguna raíz de Steam bajo el directorio personal")
@@ -207,4 +213,14 @@ def scan_library(home: Optional[Path] = None, limit: int = MAX_GAMES, log: Calla
         for appid, name in scan_steam_root(root, limit, log):
             if len(seen) < limit:
                 seen.setdefault(appid, name)
-    return sorted(seen.items())
+    for root in roots:
+        for appid, name in checkpoint_shortcuts.scan_shortcuts(root, limit, log):
+            if len(seen) < limit and appid not in seen:
+                seen[appid] = name
+                shortcuts.add(appid)
+    return sorted(seen.items()), shortcuts
+
+
+def scan_library(home: Optional[Path] = None, limit: int = MAX_GAMES, log: Callable[[str], None] = _noop) -> List[Tuple[int, str]]:
+    """Juegos instalados y atajos de Steam bajo `home`, ordenados por appid (sin distinguir el origen: ver `scan_games`)."""
+    return scan_games(home, limit, log)[0]

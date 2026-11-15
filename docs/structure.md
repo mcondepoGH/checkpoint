@@ -143,7 +143,8 @@ checkpoint-deck/
 ├── py_modules/            lógica sin Decky, solo biblioteca estándar; los nombres llevan el prefijo `checkpoint_` porque
 │   │                      Decky comparte `sys.path` entre plugins
 │   ├── checkpoint_hub.py       validación de URL, HTTP con `urllib`, ajustes con permisos 0600, máquina de estados de la vinculación
-│   ├── checkpoint_steam.py     lector de VDF/ACF y de las bibliotecas de Steam (`appmanifest_*.acf`, incluida la SD): solo appid y nombre
+│   ├── checkpoint_steam.py     lector de VDF/ACF y de las bibliotecas de Steam (`appmanifest_*.acf`, incluida la SD): solo appid y nombre; `scan_games` suma los atajos (techo de ACF `2**31-1`) y devuelve cuáles son
+│   ├── checkpoint_shortcuts.py lector de `userdata/<id>/config/shortcuts.vdf` (VDF binario) de los atajos de Steam (juegos que no son de Steam): appid (32 bits sin signo, techo `2**32-1`), nombre, `Exe` y `StartDir`; solo appid y nombre salen de la Deck; `derive_appid` (crc32 de Exe + nombre, no verificado) solo si se pide
 │   ├── checkpoint_client.py    `HubClient` con la clave `ckd_`: juegos, fingerprint, descarga con Range, subida reanudable, commit, reintentos; `refresh_library`
 │   ├── checkpoint_manifest.py  manifiesto local `[{path,sha256,size,mtime}]` con las mismas reglas que `backend/app/sync/fingerprint.py`
 │   ├── checkpoint_sync.py      motor de sincronización manual (`check_game`, `sync_game`, `sync_all`) y validación de rutas

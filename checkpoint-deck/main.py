@@ -7,7 +7,7 @@ carpeta al `sys.path`), para probarla sin Decky.
 
 import asyncio
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 import decky  # lo inyecta el cargador
 
@@ -46,8 +46,15 @@ class Plugin:
 
     async def _main(self) -> None:
         self.pairing = Pairing(decky.DECKY_PLUGIN_SETTINGS_DIR, log=self._log)
-        self._installed: List[Any] = []  # (appid, nombre) de la última búsqueda en Steam
-        self.jobs = Jobs(self._make_engine, self._scan_and_send, log=self._log, library=lambda: self._installed)
+        self._installed: List[Any] = []  # (appid, nombre) de la última búsqueda en Steam (juegos y atajos)
+        self._shortcut_ids: Set[int] = set()  # cuáles de esos appids son atajos de Steam
+        self.jobs = Jobs(
+            self._make_engine,
+            self._scan_and_send,
+            log=self._log,
+            library=lambda: self._installed,
+            shortcuts=lambda: self._shortcut_ids,
+        )
         # Avisos automáticos de abrir y cerrar: su motor NO rechaza el juego abierto (es justo el que sincroniza)
         self.notices = Notices()
         self.auto = AutoSync(
@@ -159,7 +166,7 @@ class Plugin:
         )
 
     def _scan(self):
-        self._installed = checkpoint_steam.scan_library(log=self._log)
+        self._installed, self._shortcut_ids = checkpoint_steam.scan_games(log=self._log)
         return self._installed
 
     def _scan_and_send(self):

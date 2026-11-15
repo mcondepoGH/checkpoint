@@ -1,5 +1,17 @@
 # Registro de cambios del plugin
 
+## Sin publicar
+
+### Novedades
+
+- **Atajos de Steam (juegos que no son de Steam, p. ej. Lutris) en la biblioteca.** «Buscar juegos de Steam» lee también `userdata/<id>/config/shortcuts.vdf` (VDF binario, todos los usuarios de Steam de la Deck). Los atajos salen en «Sin configurar en el hub» marcados «Atajo» y se pueden crear en el hub; el número de un atajo puede pasar de `2**31-1` (techo propio `2**32-1`; el de los juegos de Steam no cambia). El hub ya acepta esos números (sin techo, solo > 0; con test).
+- Un `shortcuts.vdf` ausente, corrupto o enorme se omite sin romper la biblioteca y sin rutas ni steamid en el log.
+
+### Sin verificar
+
+- Que el `appid` de `shortcuts.vdf` sea el `unAppID` del evento de `SteamClient.GameSessions` al abrir un atajo: por eso abrir y cerrar un atajo todavía no sincroniza. Los tests usan ficheros sintéticos, no capturas de una Deck.
+- La derivación del número de un atajo sin `appid` (`crc32(Exe + nombre)` con el bit alto): implementada pero desactivada.
+
 ## 1.0.0 - 2026-11-15
 
 Primera versión estable (antes `0.2.9`). `checkpointProtocol: 1`. Con semver, `1.0.0` es mayor que `0.2.9`: el hub la ofrece a quien tenga una `0.2.x`.

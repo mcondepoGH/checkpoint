@@ -253,3 +253,15 @@ test('resolver un conflicto: errores con texto, confirmaciones y estado de confl
   assert.match(t.conflictText({ state: 'conflict', code: 'codigo_raro' }), /Conflicto: cambios/);
   assert.match(t.conflictText({ state: 'conflict' }), /Conflicto/);
 });
+
+test('los atajos de Steam salen marcados como «Atajo» en sin configurar', { skip }, async () => {
+  const t = await load();
+  assert.equal(t.SHORTCUT_LABEL, 'Atajo');
+  assert.equal(t.unconfiguredDescription(220), 'N.º de Steam: 220');
+  assert.equal(t.unconfiguredDescription(3000000001, 'shortcut'), 'Atajo · N.º de Steam: 3000000001');
+  assert.equal(t.unconfiguredDescription(5, 'otro'), 'N.º de Steam: 5');
+  assert.ok(!t.SHORTCUT_HELP.includes('\n'));
+  const src = readFileSync(join(here, '../src/index.tsx'), 'utf8');
+  assert.match(src, /unconfiguredDescription\(appid, source\)/);
+  assert.match(src, /SHORTCUT_HELP/);
+});
