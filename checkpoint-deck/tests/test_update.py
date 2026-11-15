@@ -246,3 +246,10 @@ def test_evaluate_1_0_0_is_offered_over_0_2_9_and_rc_stays_below_release():
     assert upd.evaluate(info_for(d, "1.1.0-rc.1"), "1.1.0-rc.2", 1, 1)["state"] == "up_to_date"
     assert upd.evaluate(info_for(d, "1.1.0"), "1.1.0-rc.2", 1, 1)["state"] == "available"
     assert upd.evaluate(info_for(d, "1.1.0-rc.2"), "1.1.0", 1, 1)["state"] == "up_to_date"
+    # 1.1.0-rc.3: se ofrece a quien tiene la rc.2, la rc.1 o la 1.0.0, no al revés, y la 1.1.0 final la supera
+    assert upd.evaluate(info_for(d, "1.1.0-rc.3"), "1.1.0-rc.2", 1, 1)["state"] == "available"
+    assert upd.evaluate(info_for(d, "1.1.0-rc.3"), "1.1.0-rc.1", 1, 1)["state"] == "available"
+    assert upd.evaluate(info_for(d, "1.1.0-rc.3"), "1.0.0", 1, 1)["state"] == "available"
+    assert upd.evaluate(info_for(d, "1.1.0-rc.2"), "1.1.0-rc.3", 1, 1)["state"] == "up_to_date"
+    assert upd.evaluate(info_for(d, "1.1.0"), "1.1.0-rc.3", 1, 1)["state"] == "available"
+    assert upd.evaluate(info_for(d, "1.1.0-rc.3"), "1.1.0", 1, 1)["state"] == "up_to_date"

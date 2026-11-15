@@ -1,5 +1,20 @@
 # Registro de cambios del plugin
 
+## 1.1.0-rc.3
+
+Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.3` es mayor que `1.1.0-rc.2`, que `1.1.0-rc.1` y que `1.0.0` (el hub la ofrece a quien tenga cualquiera de ellas) y menor que la futura `1.1.0`. Incluye todo lo de la `1.1.0-rc.2`.
+
+### Novedades
+
+- **Carpeta sugerida para los atajos de Lutris.** Al configurar un atajo cuyas opciones de lanzamiento son `lutris:rungameid/N`, el plugin busca en Lutris (solo lectura) la fila `N` de `pga.db` y el `.yml` del juego, y rellena «Carpeta de guardado» con el prefijo de Lutris (`game.prefix`; si no existe, `directory` de la base). «Examinar…» sigue como alternativa y el formulario recuerda lo escrito. Nuevo módulo `checkpoint_lutris.py`: abre `pga.db` con `mode=ro` (no escribe ni deja `-journal`), lee el `.yml` con un analizador mínimo (sin PyYAML ni dependencias) y valida la ruta con la misma regla que la sincronización y dentro del home; ficheros ausentes, corruptos o bloqueados dan «sin sugerencia» sin error y sin rutas ni usuarios en el log. Busca en Lutris Flatpak (`~/.var/app/net.lutris.Lutris/data/lutris`, verificado en una Deck real) y en Lutris nativo (`~/.local/share/lutris`, `.yml` en `games/` o `~/.config/lutris/games/`; no verificado). Los demás atajos (emuladores, Epic...) siguen sin sugerencia. `suggest_game` devuelve `source: "lutris"` en este caso; se lee además `LaunchOptions` de `shortcuts.vdf` (solo en local, no se envía al hub).
+- El texto de ayuda de los atajos y la línea bajo la carpeta ya no dicen que la carpeta no se detecta cuando viene de Lutris.
+
+### Sin verificar
+
+- El flujo completo en una Deck real con esta versión (la cadena `LaunchOptions` -> `pga.db` -> `.yml` se comprobó a mano sobre los ficheros de una Deck con Lutris Flatpak) y Lutris nativo.
+- Que el prefijo sea una buena carpeta de guardado: es lo que se sugiere, no dónde guarda cada juego.
+- Los tipos de TypeScript y la compilación (`tsc`, `rollup`) no se han ejecutado con este cambio.
+
 ## 1.1.0-rc.2
 
 Versión de prueba (pre-release, sin publicar). `checkpointProtocol: 1`. Con semver, `1.1.0-rc.2` es mayor que `1.1.0-rc.1` y que `1.0.0` (el hub la ofrece a quien tenga cualquiera de las dos) y menor que la futura `1.1.0`. Incluye todo lo de la `1.1.0-rc.1`.
