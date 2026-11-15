@@ -201,7 +201,45 @@
       "hub": "Hub de Checkpoint"
     },
     "restore": "Restaurar",
-    "unknown": "dispositivo desconocido ({id})"
+    "unknown": "dispositivo desconocido ({id})",
+    "orphans": {
+      "one": "Hay {count} elemento de datos sin dispositivo ni juego en el hub (por ejemplo, de un dispositivo borrado).",
+      "other": "Hay {count} elementos de datos sin dispositivo ni juego en el hub (por ejemplo, de un dispositivo borrado)."
+    },
+    "orphansGo": "Revisar en Configuración"
+  },
+  "orphans": {
+    "title": "Datos sin dispositivo asignado",
+    "intro": "Estos datos siguen en el hub, pero ya no pertenecen a ningún dispositivo ni juego de la configuración (por ejemplo, de un dispositivo o un juego que se borró). Nada se borra solo: puedes moverlos a la papelera, donde se conservan {days} días antes de borrarse del todo y desde donde puedes restaurarlos.",
+    "origin": "{game} · dispositivo desconocido ({source})",
+    "game": "{game} · juego fuera de la configuración",
+    "size": "Tamaño",
+    "versions": "Versiones",
+    "oldest": "Más antigua",
+    "newest": "Más reciente",
+    "onlyCopy": "Única copia: el hub guarda la única copia de las partidas de este juego. Si lo mueves a la papelera, se borrará del todo pasados {days} días.",
+    "trashBtn": "Mover a la papelera… ({count})",
+    "confirmTitle": "Mover a la papelera",
+    "confirmIntro": {
+      "one": "Se va a mover {count} elemento a la papelera ({size}):",
+      "other": "Se van a mover {count} elementos a la papelera ({size} en total):"
+    },
+    "confirmKeep": "En la papelera se conservan {days} días y después se borran del todo. Hasta entonces puedes restaurarlos desde aquí.",
+    "confirmOnlyCopy": "Entre ellos hay datos que son la única copia.",
+    "ack": "Entiendo que, pasados {days} días, lo movido se borra del todo",
+    "ackOnlyCopy": "Entiendo que hay datos que son la única copia y que se borrarán del todo pasados {days} días",
+    "confirm": "Confirmar y mover a la papelera",
+    "moving": "Moviendo…",
+    "moved": {
+      "one": "Movido a la papelera: {count} elemento",
+      "other": "Movidos a la papelera: {count} elementos"
+    },
+    "partial": "Movidos: {moved}. No se han movido {skipped}: {causes}",
+    "trashTitle": "Papelera",
+    "trashIntro": "Se vacía sola: cada elemento se borra del todo {days} días después de moverlo.",
+    "expires": "se borra el {date}",
+    "restore": "Restaurar",
+    "restored": "Restaurado desde la papelera"
   },
   "settings": {
     "subtabs": {

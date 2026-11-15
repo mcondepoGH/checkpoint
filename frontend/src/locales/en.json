@@ -201,7 +201,45 @@
       "hub": "Checkpoint hub"
     },
     "restore": "Restore",
-    "unknown": "unknown device ({id})"
+    "unknown": "unknown device ({id})",
+    "orphans": {
+      "one": "There is {count} item of data without a device or game in the hub (for example, from a deleted device).",
+      "other": "There are {count} items of data without a device or game in the hub (for example, from a deleted device)."
+    },
+    "orphansGo": "Review in Settings"
+  },
+  "orphans": {
+    "title": "Data without an assigned device",
+    "intro": "This data is still in the hub, but it no longer belongs to any device or game in the configuration (for example, from a device or game that was deleted). Nothing is deleted automatically: you can move it to the trash, where it is kept for {days} days before it is deleted for good and from where you can restore it.",
+    "origin": "{game} · unknown device ({source})",
+    "game": "{game} · game not in the configuration",
+    "size": "Size",
+    "versions": "Versions",
+    "oldest": "Oldest",
+    "newest": "Newest",
+    "onlyCopy": "Only copy: the hub holds the only copy of this game's saves. If you move it to the trash, it will be deleted for good after {days} days.",
+    "trashBtn": "Move to trash… ({count})",
+    "confirmTitle": "Move to trash",
+    "confirmIntro": {
+      "one": "{count} item will be moved to the trash ({size}):",
+      "other": "{count} items will be moved to the trash ({size} in total):"
+    },
+    "confirmKeep": "The trash keeps them for {days} days and then deletes them for good. Until then you can restore them from here.",
+    "confirmOnlyCopy": "Some of them are the only copy of that data.",
+    "ack": "I understand that after {days} days what I move is deleted for good",
+    "ackOnlyCopy": "I understand that some of it is the only copy and will be deleted for good after {days} days",
+    "confirm": "Confirm and move to trash",
+    "moving": "Moving…",
+    "moved": {
+      "one": "Moved to the trash: {count} item",
+      "other": "Moved to the trash: {count} items"
+    },
+    "partial": "Moved: {moved}. Not moved: {skipped}: {causes}",
+    "trashTitle": "Trash",
+    "trashIntro": "It empties itself: each item is deleted for good {days} days after it was moved.",
+    "expires": "deleted on {date}",
+    "restore": "Restore",
+    "restored": "Restored from the trash"
   },
   "settings": {
     "subtabs": {

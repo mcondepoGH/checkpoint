@@ -645,6 +645,13 @@ button.ab-chip {
   overflow-wrap: anywhere;
 }
 
+// Datos sin dispositivo ni juego: reutiliza `.pairing*` y el plegable de Steam; solo la lista del diálogo es propia.
+.orphans-confirm-list {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
 // Sugerencias de Steam: reutiliza `.pairing*`; solo el appid y el plegable de descartes son propios.
 .steam-appid {
   font-family: ui-monospace, monospace;
