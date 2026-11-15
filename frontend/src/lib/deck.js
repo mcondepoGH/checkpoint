@@ -1,6 +1,5 @@
 // Plugin de Steam Deck: URLs públicas de descarga y normalización de `GET /api/deck/plugin/info`. Sin React.
 export const DOWNLOAD_URL = '/api/deck/plugin';
-export const SHA_URL = '/api/deck/plugin.sha256';
 export const ZIP_NAME = 'Checkpoint.zip';
 
 const SHA_RE = /^[0-9a-f]{64}$/;

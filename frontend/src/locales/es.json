@@ -327,7 +327,7 @@
     "test": "Probar conexión",
     "deleteAria": "Eliminar dispositivo {title}",
     "http": {
-      "badge": "Sin SSH (http)",
+      "badge": "Plugin",
       "help": "Este dispositivo se conecta él solo al hub; no hace falta SSH."
     }
   },
@@ -358,15 +358,13 @@
   },
   "deck": {
     "title": "Plugin de Steam Deck",
-    "intro": "Descarga el plugin de Decky Loader e instálalo en la Deck (Ajustes de Decky > Desarrollador > Instalar plugin desde ZIP, o Instalar plugin desde URL: <hub>/api/deck/plugin). Es código que se ejecuta en la Deck: comprueba la suma antes de instalarlo.",
+    "intro": "Descarga el plugin de Decky Loader e instálalo en la Deck (Ajustes de Decky > Desarrollador > Instalar plugin desde ZIP, o Instalar plugin desde URL: <hub>/api/deck/plugin).",
     "download": "Descargar plugin",
     "failed": "No se pudo consultar el plugin. Recarga la página para reintentarlo.",
     "missing": "Este hub no incluye el plugin: la imagen de Docker lo trae empaquetado; en modo nativo, genera el zip con «pnpm run zip» en checkpoint-deck/.",
     "version": "Versión",
-    "sha": "SHA-256",
     "versionUnknown": "desconocida",
-    "size": "Tamaño",
-    "verify": "Para verificarlo, compara la suma con la de"
+    "size": "Tamaño"
   },
   "steam": {
     "title": "Sugerencias de Steam",

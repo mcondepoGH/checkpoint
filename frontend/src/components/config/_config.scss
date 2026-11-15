@@ -729,7 +729,7 @@ button.ab-chip {
   overflow-wrap: anywhere;
 }
 
-// Plugin de Steam Deck: reutiliza `.pairing*` (título, intro, meta); solo la suma y el enlace como botón son propios.
+// Plugin de Steam Deck: reutiliza `.pairing*` (título, intro, meta); solo el enlace como botón es propio.
 .deck-plugin {
   display: flex;
   flex-direction: column;
@@ -740,9 +740,4 @@ button.ab-chip {
     display: inline-flex;
     align-items: center;
   }
-}
-.deck-plugin-sha {
-  font-family: ui-monospace, monospace;
-  font-size: v.$fs-hint;
-  overflow-wrap: anywhere;
 }

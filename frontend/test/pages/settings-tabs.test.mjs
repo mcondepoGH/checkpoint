@@ -105,6 +105,7 @@ test('Lanzadores: solo el contenido (sin plegado Mostrar/Ocultar) y el botón de
   m.i18n.setLocale('es');
   const h = m.renderToStaticMarkup(m.React.createElement(m.Launchers, { games: [], selected: '', onSelect() {} }));
   assert.ok(has(h, 'Lanzadores</h3>') && !has(h, 'Mostrar') && !has(h, 'Ocultar') && !has(h, 'aria-expanded'));
+  assert.ok(has(h, 'deck-plugin'));
   assert.ok(!/onShowLaunchers|showLaunchers|launchers-section|launchersOpen/.test(readSrc('pages', 'Settings.jsx')));
 });
 

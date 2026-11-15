@@ -327,7 +327,7 @@
     "test": "Test connection",
     "deleteAria": "Delete device {title}",
     "http": {
-      "badge": "No SSH (http)",
+      "badge": "Plugin",
       "help": "This device connects to the hub by itself; SSH is not needed."
     }
   },
@@ -358,15 +358,13 @@
   },
   "deck": {
     "title": "Steam Deck plugin",
-    "intro": "Download the Decky Loader plugin and install it on the Deck (Decky settings > Developer > Install plugin from ZIP, or Install plugin from URL: <hub>/api/deck/plugin). This code runs on your Deck: check the checksum before installing it.",
+    "intro": "Download the Decky Loader plugin and install it on the Deck (Decky settings > Developer > Install plugin from ZIP, or Install plugin from URL: <hub>/api/deck/plugin).",
     "download": "Download plugin",
     "failed": "Could not fetch the plugin info. Reload the page to try again.",
     "missing": "This hub does not include the plugin: the Docker image ships it packaged; in native mode, build the zip with “pnpm run zip” in checkpoint-deck/.",
     "version": "Version",
-    "sha": "SHA-256",
     "versionUnknown": "unknown",
-    "size": "Size",
-    "verify": "To verify it, compare the checksum with the output of"
+    "size": "Size"
   },
   "steam": {
     "title": "Steam suggestions",

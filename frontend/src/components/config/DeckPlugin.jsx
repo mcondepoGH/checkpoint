@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getDeckPluginInfo } from '#src/lib/api/deck.js';
-import { DOWNLOAD_URL, SHA_URL, ZIP_NAME, normalizeInfo } from '#src/lib/deck.js';
+import { DOWNLOAD_URL, ZIP_NAME, normalizeInfo } from '#src/lib/deck.js';
 import { fmtSize } from '#src/lib/format.js';
 import { useI18n } from '#src/hooks/useI18n.js';
 import { Alert, Button } from '#src/components/ui/index.js';
@@ -51,16 +51,7 @@ export function DeckPluginView({ info, loaded, failed }) {
                 <dd>{fmtSize(info.size, locale)}</dd>
               </div>
             )}
-            <div>
-              <dt>{t('deck.sha')}</dt>
-              <dd>
-                <code className="deck-plugin-sha">{info.sha256}</code>
-              </dd>
-            </div>
           </dl>
-          <p className="muted pairing-check">
-            {t('deck.verify')} <code>sha256sum {ZIP_NAME}</code> (<a href={SHA_URL}>{ZIP_NAME}.sha256</a>)
-          </p>
         </>
       )}
     </section>
