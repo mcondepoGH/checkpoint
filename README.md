@@ -722,6 +722,21 @@ npm test                                         # pruebas de node (borrador, fo
 npm run build                                    # producción
 ```
 
+### Pruebas: ciclo rápido local
+
+Para iterar (sin cobertura, sin caché de pytest y con el directorio temporal en `tmpfs`; `/dev/shm` suele ser de solo 64 MB, de sobra para el backend):
+
+```bash
+cd backend
+python -m pytest -p no:cacheprovider --basetemp=/dev/shm/ck-pytest -m "not slow" -n 2 -q   # ciclo rápido
+python -m pytest -p no:cacheprovider --basetemp=/dev/shm/ck-pytest -q                      # todo, en serie
+```
+
+- `-m "not slow"` omite los pocos tests marcados `slow` (esperas reales de los temporizadores del vigilante, análisis de todo el código); CI los corre todos.
+- `-n 2` usa `pytest-xdist` (en `requirements-dev.txt`) con dos procesos: no uses `-n auto` en el NAS (4 núcleos sin AVX2, comparte CPU con el resto del stack). Cada test escribe solo en su `tmp_path`, así que el paralelo da los mismos aprobados que el serie; si un fallo aparece solo en paralelo, repite en serie antes de darlo por bueno.
+- CI no cambia: `pytest --cov=app --cov-fail-under=90` en serie y con todos los tests.
+- En `checkpoint-deck/` no uses `--basetemp=/dev/shm/...`: el plugin rechaza rutas bajo `/dev` y fallan unos 125 tests; deja el directorio temporal por defecto (`pytest -p no:cacheprovider -q`).
+
 ### Formato, lint y auditorías
 
 - Frontend: `npm run lint` (ESLint), `npm run format` y `npm run format:check` (Prettier, incluye los SCSS; los JSON de `src/locales` quedan fuera).
