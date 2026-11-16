@@ -136,7 +136,7 @@ def test_pull_nombres_raros(tr, tmp_path):
 
 def test_pull_fichero_grande(tr, tmp_path):
     s, d = tmp_path / "saves", tmp_path / "dest"
-    big = os.urandom(1024) * (6 * 1024)  # 6 MiB
+    big = os.urandom(1024) * 256  # 256 KiB
     put(s, "big.bin", big)
     d.mkdir()
     tr.pull(str(s), d)

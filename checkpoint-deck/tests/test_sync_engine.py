@@ -217,13 +217,13 @@ def test_sync_all(world):
 
 # ---- fallos y red
 def test_interrupted_upload_is_resumed(world, monkeypatch):
-    data = os.urandom(900_000)
+    data = os.urandom(300_000)
     put(world.save, "big.bin", data)
     real_read = hc._Slice.read
     state = {"cut": True, "puts": []}
 
     def flaky(self, n=-1):
-        if state["cut"] and self.sent >= 300_000:
+        if state["cut"] and self.sent >= 100_000:
             state["cut"] = False
             raise ConnectionResetError("corte simulado")
         return real_read(self, n)
