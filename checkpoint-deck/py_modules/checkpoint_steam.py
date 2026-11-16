@@ -126,6 +126,11 @@ def _read(path: Path) -> Optional[Dict[str, Any]]:
         return None
 
 
+def read_vdf(path: Path) -> Optional[Dict[str, Any]]:
+    """VDF/ACF de `path` como diccionario (claves en minúsculas) o None si no se puede leer o está mal formado."""
+    return _read(path)
+
+
 def find_steam_roots(home: Path) -> List[Path]:
     """Raíces de Steam que existen bajo `home` (sin repetir las que apuntan al mismo sitio)."""
     out: List[Path] = []

@@ -257,3 +257,65 @@ def test_glob_de_fichero_en_carpeta_whitelist_simple():
         ("Pub/G/saves/*.sav", False),
         ("Pub/G/saves", False),
     ]
+
+
+# ---- heurística LÖVE (`d: true`)
+def _build(games):
+    doc, _ = gen.build(games, "c")
+    return {g["n"]: g for g in doc["games"]}
+
+
+LOVE = {"d": True, "r": "xdgData", "p": "love/Move Or Die", "os": "linux"}
+
+
+def _love_game(**extra):
+    g = {
+        "steam": {"id": 323850},
+        "files": {
+            "<xdgData>/love/Move Or Die/startup.ini": {"tags": ["config"], "when": [{"os": "linux"}]},
+            "<winAppData>/LOVE/Move Or Die/Levels": {"tags": ["save"], "when": [{"os": "windows"}]},
+        },
+    }
+    g.update(extra)
+    return g
+
+
+def test_love_sin_save_linux_emite_ruta_dudosa():
+    g = _build({"Move Or Die": _love_game()})["Move Or Die"]
+    assert LOVE in g["paths"] and sum(1 for p in g["paths"] if p.get("d")) == 1
+    assert ("pfxRoaming", "LOVE/Move Or Die/Levels", "win") in paths(g)  # la de Windows se conserva
+
+
+def test_love_home_local_share_y_cualquier_tag():
+    games = {"G": {"steam": {"id": 1}, "files": {"<home>/.local/share/love/G/a.cfg": {"tags": ["other"]}}}}
+    games["G"]["files"]["<home>/.local/share/love/G/a.cfg"]["when"] = [{"os": "linux"}]
+    assert _build(games)["G"]["paths"] == [{"r": "xdgData", "p": "love/G", "os": "linux", "d": True}]
+
+
+def test_love_con_save_linux_normal_no_emite():
+    g = _love_game()
+    g["files"]["<xdgConfig>/Move Or Die/Saves"] = {"tags": ["save"], "when": [{"os": "linux"}]}
+    out = _build({"Move Or Die": g})["Move Or Die"]
+    assert not any(p.get("d") for p in out["paths"]) and ("xdgConfig", "Move Or Die/Saves", "linux") in paths(out)
+
+
+def test_no_love_no_emite():
+    games = {
+        "Otro": {"steam": {"id": 2}, "files": {"<xdgData>/otro/X/startup.ini": {"tags": ["config"], "when": [{"os": "linux"}]}}},
+        "Config": {"steam": {"id": 3}, "files": {"<xdgConfig>/love/X/a.ini": {"tags": ["config"], "when": [{"os": "linux"}]}}},
+        "Solo": {"steam": {"id": 4}, "files": {"<xdgData>/love/solo.ini": {"tags": ["config"], "when": [{"os": "linux"}]}}},
+        "SinId": {"files": {"<xdgData>/love/Y/a.ini": {"tags": ["config"], "when": [{"os": "linux"}]}}},
+    }
+    assert _build(games) == {}
+
+
+def test_love_dedupe_una_por_juego():
+    g = {
+        "steam": {"id": 5},
+        "files": {
+            f"<xdgData>/love/Dup/{n}": {"tags": ["config"], "when": [{"os": "linux"}]} for n in ("a.ini", "b.ini", "sub/c.ini")
+        },
+    }
+    g["files"]["<xdgData>/love/Otro/x.ini"] = {"tags": ["config"], "when": [{"os": "linux"}]}
+    out = _build({"Dup": g})["Dup"]["paths"]
+    assert [p for p in out if p.get("d")] == [{"r": "xdgData", "p": "love/Dup", "os": "linux", "d": True}]

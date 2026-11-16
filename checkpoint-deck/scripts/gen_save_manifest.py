@@ -7,11 +7,11 @@ Uso:
 Herramienta de desarrollo, NO forma parte del plugin ni se empaqueta en el zip. Necesita PyYAML (el del backend,
 `backend/requirements.txt`). Esquema de salida (v=1; los campos `slug` y `x` son opcionales y aditivos, por eso
 `v` sigue en 1: un lector de v=1 que ignora claves desconocidas no se rompe y uno que los conoce los trata como
-ausentes si faltan):
+ausentes si faltan; también `d`):
 
     {"v":1,"src":"ludusavi-manifest@<commit>","games":[{"n":nombre,"steam":int|null,"lutris":slug|null,
       "slug":"<nombre slugificado>" (solo si `lutris` es null),
-      "paths":[{"r":<raíz>,"p":"<ruta relativa>","os":"linux|win","x":[<patrones a excluir>] (opcional)}]}]}
+      "paths":[{"r":<raíz>,"p":"<ruta relativa>","os":"linux|win","x":[<patrones a excluir>] (opcional),"d":true (opcional)}]}]}
 
 `slug`: nombre del juego slugificado como Lutris (minúsculas, ASCII, alfanumérico y guiones; «Dragon Quest VII
 Reimagined» -> `dragon-quest-vii-reimagined`). Es un casado SECUNDARIO y menos fiable (el slug local de Lutris puede
@@ -27,6 +27,12 @@ carpeta es de la lista blanca (Saves, SaveGames...), en `steamCloud` ni en rutas
 Rutas con glob de fichero (`*.sav`, `GameSaveData*.sav`) bajo una carpeta de la lista blanca: se emite TAMBIÉN la
 ruta a esa carpeta (sin el glob), para no perder partidas en subcarpetas (DQ VII Reimagined: `SaveGames/Book/...`);
 el glob se conserva por si el resolvedor lo prefiere, y la carpeta es la preferible.
+
+`d`: ruta DUDOSA (`true`; ausente = no dudosa). Heurística LÖVE: si un juego no tiene NINGUNA ruta Linux aceptada y el
+manifiesto trae una entrada Linux `<xdgData>/love/<X>/...` (con cualquier tag, normalmente `config`), se emite
+`{"r":"xdgData","p":"love/<X>","os":"linux","d":true}` (la carpeta del juego, no el fichero de config), una sola por
+juego. Solo para el prefijo `love/` bajo xdgData (los juegos hechos con el motor LÖVE guardan en `~/.local/share/love/<juego>`;
+Move or Die: `love/Move Or Die`). El resolvedor la sugiere con `doubtful: true`.
 
 Raíces `r`: home, xdgData, xdgConfig, pfxRoaming, pfxLocal, pfxLocalLow, pfxDocs, pfxSaved, pfxProgData, install,
 steamCloud (solo subruta bajo `userdata/<usuario>/<appid>/`). `<storeUserId>` se escribe `*`. Las rutas de Windows
@@ -276,7 +282,25 @@ def game_variants(game_name, data, stats):
             if len(segs) >= 2 and _is_file_glob(segs[-1]) and segs[-2].lower() in SAVE_DIRS:
                 # glob de fichero bajo SaveGames/Saves...: también la carpeta, por si el guardado va en subcarpetas
                 out.append({"r": root, "p": "/".join(segs[:-1]), "os": os_out})
+    if not any(i["os"] == "linux" for i in out):
+        out += love_paths(data)
     return out
+
+
+def love_paths(data):
+    """Heurística LÖVE: `<xdgData>/love/<X>/...` en Linux (con cualquier tag) -> `love/<X>` con `d: true` (dudosa)."""
+    found = []
+    for path, entry in (data.get("files") or {}).items():
+        oses, why = when_oses(entry.get("when"), path)
+        if why or "linux" not in oses:
+            continue
+        root, rel = map_root(path, "linux")
+        segs = _segs(rel) if root == "xdgData" else []
+        if len(segs) >= 3 and segs[0] == "love" and segs[1] and "<" not in segs[1] and not _has_glob(segs[1]):
+            item = {"r": "xdgData", "p": f"love/{segs[1]}", "os": "linux", "d": True}
+            if item not in found:
+                found.append(item)
+    return found[:1]
 
 
 def dedupe(paths, stats):

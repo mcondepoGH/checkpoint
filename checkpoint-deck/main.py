@@ -29,12 +29,17 @@ from checkpoint_auto import AutoRunner, AutoSync, Notices
 from checkpoint_client import refresh_library as hub_refresh_library
 from checkpoint_games import GameTools, suggest_path, suggest_shortcut
 from checkpoint_jobs import Jobs
+from checkpoint_lutris_api import LutrisSteamLookup
+from checkpoint_savesuggest import SaveSuggester
 from checkpoint_sync import SyncEngine, protected_dirs
 from checkpoint_version import plugin_dir, read_version
 
 
 PREFS_FILE = "prefs.json"  # preferencias de la interfaz, aparte de settings.json (que lleva la clave `ckd_`)
-PREF_DEFAULTS: Dict[str, bool] = {"show_unconfigured": True}  # única preferencia: mostrar «Sin configurar en el hub»
+PREF_DEFAULTS: Dict[str, bool] = {
+    "show_unconfigured": True,  # mostrar «Sin configurar en el hub»
+    "lutris_lookup": True,  # preguntar a lutris.net el appid de Steam de los juegos de Lutris nuevos (solo el slug, una vez, con caché)
+}
 DIAG_MAX_LEN = 64  # largo máximo de cada campo del evento crudo en el log de diagnóstico
 DIAG_WINDOW = 60.0  # segundos de la ventana que limita el log de eventos crudos
 DIAG_MAX_PER_WINDOW = 20  # líneas de eventos crudos distintos permitidas por ventana
@@ -53,6 +58,12 @@ class Plugin:
         self._installed: List[Any] = []  # (appid, nombre) de la última búsqueda en Steam (juegos y atajos)
         self._offered: Dict[int, Set[str]] = {}  # appid -> carpetas que `suggest_game` ofreció (existían al ofrecerlas)
         self._shortcut_ids: Set[int] = set()  # cuáles de esos appids son atajos de Steam
+        self.saves = SaveSuggester(  # manifiesto propio de rutas de guardado
+            decky.DECKY_PLUGIN_SETTINGS_DIR,
+            log=self._log,
+            lookup=LutrisSteamLookup(decky.DECKY_PLUGIN_SETTINGS_DIR, log=self._log),
+            lookup_enabled=lambda: self._prefs()["lutris_lookup"],
+        )
         self.jobs = Jobs(
             self._make_engine,
             self._scan_and_send,
@@ -287,6 +298,16 @@ class Plugin:
             found = await asyncio.to_thread(suggest_path, home, appid, name, protected_dirs(decky))
         self._offered[appid] = {p for p in [found.get("path", ""), *found.get("candidates", [])] if p}  # lo que se ofreció como existente
         return {"ok": True, "appid": appid, "name": name, "home": str(home), **found}
+
+    async def suggest_saves(self) -> Dict[str, Any]:
+        """Carpetas de guardado exactas (del manifiesto propio `save_manifest.json` de la carpeta de ajustes) de TODOS los
+        juegos de Steam y Lutris instalados que casan: `{ok, manifest, games: [...]}` (ver `checkpoint_savesuggest`). Solo
+        lectura; nada se configura sin confirmación. Añade `network_lookups` y `lookups_pending` (consultas a lutris.net). Sin manifiesto: `{ok: False, error: "no_manifest"}`."""
+        return await asyncio.to_thread(self.saves.all)
+
+    async def suggest_saves_for(self, source: str, ident: Any) -> Dict[str, Any]:
+        """Lo mismo para un juego: `source` = "steam" con su appid (entero) o "lutris" con su slug (texto) o id de fila (entero)."""
+        return await asyncio.to_thread(self.saves.one, source, ident)
 
     async def picker_start(self, path: str = "") -> Dict[str, Any]:
         """Ruta segura con la que abrir el selector de carpetas de Decky: `path` si existe, es carpeta y se puede leer; si no, el

@@ -119,21 +119,29 @@ def _scalar(raw: str) -> str:
     return re.split(r"\s+#", v, maxsplit=1)[0].strip()
 
 
-def _yml_prefix(path: Path) -> Optional[str]:
-    """`game.prefix` del .yml de Lutris (analizador mínimo: solo la sección `game:` y sus claves directas)."""
+_TOP = re.compile(r"^([A-Za-z_][\w-]*):\s+(.*?)\s*$")
+
+
+def read_yml(path: Path) -> Dict[str, Dict[str, str]]:
+    """`{"game": {clave: valor}, "top": {clave: valor}}` del .yml de Lutris (analizador mínimo: claves escalares de la
+    sección `game:` y de primer nivel; `{}` en ambas si no se puede leer)."""
+    out: Dict[str, Dict[str, str]] = {"game": {}, "top": {}}
     try:
         with open(path, "rb") as f:
             raw = f.read(MAX_YML + 1)
     except OSError:
-        return None
+        return out
     if len(raw) > MAX_YML:
-        return None
+        return out
     in_game, indent = False, None
     for line in raw.decode("utf-8", "replace").splitlines():
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         if not line[0].isspace():
             in_game, indent = bool(_SECTION.match(line)), None
+            t = _TOP.match(line)
+            if t and t.group(2):
+                out["top"].setdefault(t.group(1), _scalar(t.group(2)))
             continue
         if not in_game:
             continue
@@ -142,9 +150,14 @@ def _yml_prefix(path: Path) -> Optional[str]:
             continue
         if indent is None:
             indent = m.group(1)
-        if m.group(1) == indent and m.group(2) == "prefix" and m.group(3):
-            return _scalar(m.group(3)) or None
-    return None
+        if m.group(1) == indent and m.group(3):
+            out["game"].setdefault(m.group(2), _scalar(m.group(3)))
+    return out
+
+
+def _yml_prefix(path: Path) -> Optional[str]:
+    """`game.prefix` del .yml de Lutris (solo la sección `game:` y sus claves directas)."""
+    return read_yml(path)["game"].get("prefix") or None
 
 
 def _locate(
