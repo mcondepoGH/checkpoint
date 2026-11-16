@@ -151,16 +151,27 @@ def test_mtime_tie_different_content_is_conflict(env):
     assert read(env.pc_dir, "s.sav") == "a" and read(env.laptop_dir, "s.sav") == "b"
 
 
-def test_keep_versions_prunes(env):
+def test_keep_versions_prunes(env, monkeypatch):
+    import app.sync.versions as versions
+    from datetime import datetime, timedelta
+
+    reloj = [datetime(2026, 1, 1, 10, 0, 0)]
+
+    class _Reloj:
+        fromtimestamp = staticmethod(datetime.fromtimestamp)
+
+        @staticmethod
+        def now():
+            return reloj[0]
+
+    monkeypatch.setattr(versions, "datetime", _Reloj)  # nombres de versión por segundo: reloj falso, sin dormir
     t = 1000
     for i in range(4):
         t += 100
         env.write(env.pc_dir, "s.sav", f"pc{i}", t)
         env.write(env.laptop_dir, "s.sav", f"dk{i}", t + 50)
         env.sync(opts={"conflict_policy": "newest"})
-        import time
-
-        time.sleep(1.1)  # nombres de versión por segundo
+        reloj[0] += timedelta(seconds=2)
     assert len(list_versions(env.data, "g")) == 2
 
 
