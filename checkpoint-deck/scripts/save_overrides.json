@@ -1,0 +1,17 @@
+{
+  "_doc": "Correcciones manuales del manifiesto propio. Cada entrada casa por `steam` (appid) o `lutris` (slug). `replace`: sustituye las rutas generadas de los `os` que lista (el resto se conserva). `add`: añade rutas. `note`: solo sale en el informe.",
+  "overrides": [
+    {
+      "steam": 294100,
+      "name": "RimWorld",
+      "replace": [
+        {"r": "xdgConfig", "p": "unity3d/Ludeon Studios/RimWorld by Ludeon Studios/Saves", "os": "linux"}
+      ]
+    },
+    {
+      "steam": 1868140,
+      "name": "Dave the Diver",
+      "note": "pendiente de verificar SData/SteamSData"
+    }
+  ]
+}

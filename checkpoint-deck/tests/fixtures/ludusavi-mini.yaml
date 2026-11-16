@@ -1,0 +1,124 @@
+Stardew Valley:
+  files:
+    "<home>/.config/StardewValley/Saves":
+      tags: [save]
+      when: [{os: mac}]
+    "<winAppData>/StardewValley/Saves":
+      tags: [save]
+      when: [{os: windows}]
+    "<winAppData>/StardewValley/default_options":
+      tags: [config]
+      when: [{os: windows}]
+    "<xdgConfig>/StardewValley/Saves":
+      tags: [save]
+      when: [{os: linux}]
+  id:
+    gogExtra: [1541385446]
+  steam:
+    id: 413150
+Slug Game:
+  files:
+    "<winLocalAppData>/Slug Studio/Slug Game/Saves":
+      tags: [save]
+  id:
+    lutris: slug-game
+No Id Game:
+  files:
+    "<winAppData>/Nada/Nada Game/Saves":
+      tags: [save]
+Other Store Game:
+  files:
+    "<winAppData>/Epic Co/Epic Game/Saves":
+      tags: [save]
+      when: [{os: windows, store: epic}]
+    "<winAppData>/Epic Co/Epic Game/Saves2":
+      tags: [save]
+      when: [{os: windows, store: steam}]
+  steam:
+    id: 11
+Roots Game:
+  files:
+    "<winAppData>/Pub/Roots/Saves": {tags: [save], when: [{os: windows}]}
+    "<winLocalAppData>/Pub/Roots/Saves": {tags: [save], when: [{os: windows}]}
+    "<home>/AppData/LocalLow/Pub/Roots/Saves": {tags: [save]}
+    "<winDocuments>/My Games/Pub/Roots/Saves": {tags: [save]}
+    "<home>/Saved Games/Pub/Roots/Saves": {tags: [save]}
+    "<winProgramData>/Pub/Roots/Saves": {tags: [save]}
+    "<xdgData>/Pub/Roots/Saves": {tags: [save]}
+    "<home>/.local/share/Pub/Roots/Saves2": {tags: [save], when: [{os: linux}]}
+    "<home>/.config/Pub/Roots/Saves3": {tags: [save], when: [{os: linux}]}
+    "<home>/.pub/Roots": {tags: [save], when: [{os: linux}]}
+    "<base>/data/Saves": {tags: [save]}
+    "<root>/userdata/<storeUserId>/12/remote/slot1": {tags: [save]}
+  steam:
+    id: 12
+Filter Game:
+  files:
+    "<winAppData>/Single": {tags: [save]}
+    "<winAppData>/Filter Game": {tags: [save]}
+    "<winAppData>/Pub/Filter Game": {tags: [save]}
+    "<winAppData>/Pub/Filter Game/cache": {tags: [save]}
+    "<winAppData>/Pub/Filter Game/Shaders/x": {tags: [save]}
+    "<winAppData>/Pub/Filter Game/Saves/crash.dump": {tags: [save]}
+    "<winAppData>/Other/Stuff/*.sav": {tags: [save]}
+    "<winAppData>/Solo/*.sav": {tags: [save]}
+    "<winAppData>/Foo/Bar/Saves/a/b/c/d": {tags: [save]}
+    "<winAppData>/Foo/Bar/a/b/c/d/e": {tags: [save]}
+    "<winAppData>/Foo/Saves": {tags: [save]}
+    "<winAppData>/Foo/Saves/profile.json": {tags: [save]}
+    "<winAppData>/Foo/Config/profile.json": {tags: [save]}
+    "<winAppData>/Foo/data.json": {tags: [save]}
+    "<winAppData>/Alpha/Beta": {tags: [save]}
+    "<base>": {tags: [save]}
+    "<base>/*": {tags: [save]}
+    "<base>/*.dat": {tags: [save]}
+    "<base>/slot": {tags: [save]}
+    "<base>/slot1.sav": {tags: [save]}
+    "<base>/Saves": {tags: [save]}
+    "<base>/Mods/Saves": {tags: [save]}
+    "<base>/Binaries/Win64/x.sav": {tags: [save]}
+    "<root>/userdata/<storeUserId>/13": {tags: [save]}
+    "<root>/userdata/<storeUserId>/13/remote": {tags: [save]}
+    "<winDir>/x/y/z": {tags: [save]}
+    "<xdgData>/Solo": {tags: [save], when: [{os: linux}]}
+    "<winAppData>/Pub/Dupe/Saves": {tags: [save]}
+    "<winAppData>/Pub/Dupe/Saves/": {tags: [save]}
+    "<winAppData>/Pub/Reg/Saves": {tags: [config]}
+  steam:
+    id: 13
+Registry Only:
+  registry:
+    HKEY_CURRENT_USER/Software/Foo: {tags: [save]}
+  steam:
+    id: 14
+RimWorld:
+  files:
+    "<winLocalAppData>/Ludeon/RimWorld/Saves": {tags: [save]}
+    "<home>/.config/unity3d/Wrong/Path": {tags: [save], when: [{os: linux}]}
+  steam:
+    id: 294100
+Dave the Diver:
+  files:
+    "<winLocalAppData>/nexon/Dave/SData/*": {tags: [save]}
+  id:
+    lutris: dave-the-diver
+  steam:
+    id: 1868140
+Dragon Quest Mini:
+  files:
+    "<winDocuments>/My Games/DQ Mini/Steam/<storeUserId>/release/Saved/SaveGames/GameSaveData*.sav": {tags: [save], when: [{os: windows}]}
+    "<winDocuments>/My Games/DQ Mini/Steam/<storeUserId>/release/Saved/SaveGames/Lang998.sav": {tags: [config], when: [{os: windows}]}
+  steam:
+    id: 20
+Magicka Mini:
+  files:
+    "<home>/.bitsquid/Magicka2/*.sav": {tags: [save], when: [{os: linux}]}
+    "<home>/.bitsquid/Magicka2/user_settings.config": {tags: [config], when: [{os: linux}]}
+    "<winAppData>/ParadoxInteractive/Magicka2": {tags: [config, save], when: [{os: windows}]}
+  steam:
+    id: 21
+"Ünïcode: Game's \"Edition\"!":
+  files:
+    "<winAppData>/Uni/Code/Saves": {tags: [save]}
+  steam:
+    id: 22
