@@ -235,7 +235,10 @@ def test_loop_runs_maintenance_even_with_cycles_disabled(monkeypatch):
 
     async def go():
         t = asyncio.create_task(s.loop())
-        await asyncio.sleep(0.3)
+        for _ in range(500):  # espera al evento (2 pasadas de mantenimiento), no a un tiempo fijo
+            if len(calls) >= 2:
+                break
+            await asyncio.sleep(0.01)
         t.cancel()
 
     asyncio.run(go())

@@ -108,6 +108,11 @@ def wait_for(cond, secs=5):
     return False
 
 
+def stopped(c, secs=5):
+    """El vigilante ya no está armado: sin más sondeos ni reintentos posibles (sustituye a dormir «por si acaso»)."""
+    return wait_for(lambda: watches(c).json() == [], secs)
+
+
 def hist(trigger):
     return [x for x in history.read() if x["trigger"] == trigger]
 
@@ -157,7 +162,7 @@ def test_seen_then_closed_makes_one_hook_closed_checkpoint_with_skip(cl):
     e.write(e.d1, "jugado", 3000)  # el dispositivo guarda partida mientras juega
     cl.proc.running = False
     assert wait_for(lambda: hist("hook_closed"))
-    time.sleep(0.4)
+    assert stopped(cl)
     h = history.read()
     assert [x["trigger"] for x in h].count("hook_closed") == 1 and h[0]["result"] == "ok"
     assert e.read(e.hub) == "jugado" and e.read(e.d2) == "jugado"
@@ -187,8 +192,7 @@ def test_transport_error_after_seen_counts_as_closed(cl):
     cl.proc.fail = True
     cl.proc.running = False
     assert wait_for(lambda: watches(cl).json() == [])
-    assert wait_for(lambda: hist("hook_closed")) or True  # el checkpoint corre con el dispositivo caído: aborta
-    time.sleep(0.3)
+    assert wait_for(lambda: hist("hook_closed"))  # el checkpoint corre con el dispositivo caído: aborta
     assert len(hist("hook_closed")) == 1 and hist("hook_closed")[0]["result"] == "aborted"
 
 
@@ -201,7 +205,7 @@ def test_second_opened_replaces_watch_single_checkpoint(cl):
     assert wait_for(lambda: watches(cl).json()[0]["state"] == "running")
     cl.proc.running = False
     assert wait_for(lambda: hist("hook_closed"))
-    time.sleep(0.4)
+    assert stopped(cl)
     assert len(hist("hook_closed")) == 1
 
 
@@ -215,11 +219,11 @@ def test_locked_checkpoint_not_retried_and_logged(cl, caplog):
     h = locking.acquire(settings.DATA_DIR / "locks" / "g1.lock")
     try:
         cl.proc.running = False
-        assert wait_for(lambda: watches(cl).json() == [])
-        time.sleep(0.4)
+        assert stopped(cl)
+        assert wait_for(lambda: hist("hook_closed"))  # el intento ya quedó anotado «ocupado» con el candado aún cogido
     finally:
         h.release()
-    time.sleep(0.4)
+    assert stopped(cl)
     h = hist("hook_closed")  # una sola entrada «omitido: ocupado», sin reintento y sin checkpoint
     assert len(h) == 1 and h[0]["result"] == "skipped" and h[0]["code"] == "err.hook.busy" and h[0]["device"] == "dev-1"
     assert any("sync_in_progress" in r.getMessage() or "ocupado" in r.getMessage() for r in caplog.records)
@@ -232,7 +236,7 @@ def test_aborted_checkpoint_not_retried(cl):
     cl.proc.reopen = True  # el vigilante lo ve cerrado; al sincronizar el proceso figura abierto: aborta (process_open)
     cl.proc.running = False
     assert wait_for(lambda: hist("hook_closed"))
-    time.sleep(0.5)
+    assert stopped(cl)
     assert len(hist("hook_closed")) == 1 and hist("hook_closed")[0]["result"] == "aborted"
 
 

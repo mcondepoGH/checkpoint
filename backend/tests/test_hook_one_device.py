@@ -114,7 +114,7 @@ def test_cierre_guarda_checkpoint_en_el_hub(cl):
     e.write(e.d1, "jugado", 3000)
     e.running = False
     assert wait_for(lambda: [x for x in history.read() if x["trigger"] == "hook_closed"])
-    time.sleep(0.3)
+    assert wait_for(lambda: cl.get("/api/hook/watches", headers=cl.hdr).json() == [])  # vigilante parado: sin más cierres
     h = [x for x in history.read() if x["trigger"] == "hook_closed"]
     assert len(h) == 1 and h[0]["result"] == "ok"
     assert e.read(e.hub) == "jugado"

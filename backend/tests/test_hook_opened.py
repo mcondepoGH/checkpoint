@@ -252,10 +252,10 @@ def test_server_timeout_returns_200_and_run_continues(client, monkeypatch):
         assert opened(client).status_code == 409  # sigue en curso
     finally:
         gate.set()
-    for _ in range(50):
+    for _ in range(250):  # sondeo corto: sale en cuanto el run en segundo plano anota el historial
         if history.read():
             break
-        time.sleep(0.1)
+        time.sleep(0.02)
     assert history.read()[0]["trigger"] == "hook"
 
 
