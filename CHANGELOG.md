@@ -1,5 +1,11 @@
 # Cambios
 
+## 2.2.2 (2026-11-16)
+
+### Cambios
+
+- Plugin de Steam Deck 1.3.3: los toasts ya no llevan el nombre del juego y sus mensajes son más claros (caben en 45 caracteres); los avisos del panel muestran el nombre completo del juego.
+
 ## 2.2.1 (2026-11-16)
 
 ### Cambios
