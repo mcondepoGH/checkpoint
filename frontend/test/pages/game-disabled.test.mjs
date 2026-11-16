@@ -2,6 +2,7 @@
 // Usa esbuild (viene con Vite); si no está disponible el test se salta.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { bundle } from '../helpers/bundle.mjs';
 
 const { mod: m, skip } = await bundle(
@@ -118,3 +119,22 @@ test('Sync: solo http conserva «Jugando» y el último resultado de PlayingBars
   assert.ok(has(h, 'Jugando en Deck'));
   assert.ok(!has(h, 'btn primary">Sincronizar'));
 });
+
+test(
+  'Sync: la etiqueta «Solo checkpoint» va en la cabecera (h3) junto a la insignia, no en una fila propia; meter y última sync anclados al fondo',
+  { skip },
+  () => {
+    const SOLO = { name: 'Solo', devices: ['pc'] };
+    const h = R('Sync', { config: mk({ a: SOLO, b: ON }) });
+    const cards = h.split('<h3').slice(1);
+    const solo = cards.find((c) => c.includes('Solo checkpoint'));
+    assert.ok(solo, 'la etiqueta se pinta');
+    const head = solo.slice(0, solo.indexOf('</h3>'));
+    assert.ok(has(head, 'game-name') && has(head, 'Solo checkpoint'), 'etiqueta en el mismo h3 que el nombre y la insignia');
+    assert.ok(!/<p>\s*<span class="pill/.test(h), 'sin fila <p> propia para la etiqueta');
+    assert.equal((h.match(/Solo checkpoint/g) || []).length, 1, 'solo la lleva el juego de un dispositivo');
+    assert.ok(has(h, 'class="game-last"'), 'meter y última sync en un bloque inferior');
+    const css = fs.readFileSync(new URL('../../src/styles/_components.scss', import.meta.url), 'utf8');
+    assert.match(css, /\.game-last\s*\{[^}]*margin-top:\s*auto/);
+  },
+);

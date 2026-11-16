@@ -269,27 +269,29 @@ export default function Sync({ config, watch = NO_WATCHES, onGoSettings }) {
                 ) : (
                   badge(s)
                 )}
-              </h3>
-              <p className="muted">{config.games[g].devices.map(devName).join(' ⇄ ')}</p>
-              {isSoloCheckpoint(config.games[g]) && (
-                <p>
+                {isSoloCheckpoint(config.games[g]) && (
                   <Pill tone="info" title={t('sync.solo.help')}>
                     <Icon name="history" />
                     {t('sync.solo.label')}
                   </Pill>
-                </p>
-              )}
-              {(!off || s) && !httpOnly && (
-                <div
-                  className={`meter ${running ? 'running' : s?.result || ''}`}
-                  role="progressbar"
-                  aria-label={t('sync.meterAria', { game: gameName(g) })}
-                >
-                  <i />
+                )}
+              </h3>
+              <p className="muted">{config.games[g].devices.map(devName).join(' ⇄ ')}</p>
+              {(((!off || s) && !httpOnly) || (httpOnly && httpRes)) && (
+                <div className="game-last">
+                  {(!off || s) && !httpOnly && (
+                    <div
+                      className={`meter ${running ? 'running' : s?.result || ''}`}
+                      role="progressbar"
+                      aria-label={t('sync.meterAria', { game: gameName(g) })}
+                    >
+                      <i />
+                    </div>
+                  )}
+                  {(!off || s) && !httpOnly && <LastRun s={s} devName={devName} />}
+                  {httpOnly && httpRes && <LastRun s={httpRunStatus(httpRes)} devName={devName} />}
                 </div>
               )}
-              {(!off || s) && !httpOnly && <LastRun s={s} devName={devName} />}
-              {httpOnly && httpRes && <LastRun s={httpRunStatus(httpRes)} devName={devName} />}
               {off && <p className="muted game-off-note">{t('sync.disabled.help')}</p>}
               {!off && !httpOnly && (
                 <Checkbox checked={!!dry[g]} onChange={(e) => setDry({ ...dry, [g]: e.target.checked })} label={t('common.dryRun')} />

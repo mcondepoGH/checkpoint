@@ -131,7 +131,11 @@ test('labelOf muestra el nombre, nunca el id', () => {
 
 test('las pantallas no pintan ids de juego como título', () => {
   const src = (f) => readFlat(new URL(`../../../src/${f}`, import.meta.url));
-  assert.match(src('pages/Sync.jsx'), /<h3 title=.*> ?<span className="game-name">\{gameName\(g\)\}<\/span>/);
+  assert.match(
+    src('pages/Sync.jsx'),
+    /isSoloCheckpoint\(config\.games\[g\]\)[\s\S]*sync\.solo\.label[\s\S]*<\/h3>/,
+    'la etiqueta va dentro del h3 de la cabecera',
+  );
   assert.match(src('pages/Versions.jsx'), /labelOf\(config\.games, g\)/);
 });
 
@@ -222,7 +226,11 @@ test('Settings pide al menos un dispositivo y Sync pinta la etiqueta Solo checkp
   assert.doesNotMatch(st, /needTwo/);
   assert.equal((st.match(/\.filter\(\(d\) => d\.name\)\.length < 1/g) || []).length, 1);
   assert.ok((st.match(/noNamed/g) || []).length >= 3, 'el aviso y el botón de añadir juego usan la misma condición');
-  assert.match(src('pages/Sync.jsx'), /isSoloCheckpoint\(config\.games\[g\]\)[\s\S]*sync\.solo\.label/);
+  assert.match(
+    src('pages/Sync.jsx'),
+    /isSoloCheckpoint\(config\.games\[g\]\)[\s\S]*sync\.solo\.label[\s\S]*<\/h3>/,
+    'la etiqueta va en el h3 de la cabecera',
+  );
 });
 
 // ---- juego desactivado ----

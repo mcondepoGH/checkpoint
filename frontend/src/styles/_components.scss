@@ -47,6 +47,17 @@
   flex-wrap: wrap;
   font-size: v.$fs-subtitle;
 }
+// Etiquetas de la cabecera (p. ej. «Solo checkpoint») junto a la insignia de estado, en la misma línea (envuelven si no caben).
+.grid > .card h3 .pill {
+  max-width: 100%;
+}
+// Meter + «Última sync»: anclados al fondo del espacio libre de la tarjeta (columna flex), para que queden alineados entre tarjetas de la misma fila.
+.grid > .card > .game-last {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: auto;
+}
 .grid > .card h3::before {
   content: '🎮';
   font-size: v.$fs-subtitle;
