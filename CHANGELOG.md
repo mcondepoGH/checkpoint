@@ -1,5 +1,12 @@
 # Cambios
 
+## 2.2.1 (2026-11-16)
+
+### Cambios
+
+- Sincronizar: las tarjetas de juego quedan alineadas con y sin la etiqueta «Solo checkpoint» (pasa a la cabecera, junto al estado) y la «Última sync» queda anclada abajo.
+- Plugin de Steam Deck 1.3.2: los avisos de Inicio se ven completos, sin recortar.
+
 ## 2.2.0 (2026-11-16)
 
 ### Novedades
