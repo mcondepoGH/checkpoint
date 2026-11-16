@@ -158,7 +158,18 @@ class HookService:
 
         def work():
             try:
-                res, m, c, st = scheduler.run_game(cfg, game, log=run.lines.append, policy="skip")
+                try:
+                    res, m, c, st = scheduler.run_game(cfg, game, log=run.lines.append, policy="skip")
+                except Exception as e:  # run_game «nunca lanza», pero sin red el hilo moriría sin historial ni box
+                    # Mismo resultado que el `except` de run_game (error + err.sync.unexpected), pero el texto de la
+                    # excepción no va al mensaje ni al log (puede llevar rutas o tokens): solo el tipo. El detalle del
+                    # historial conserva `history.short(str(e))` (redacta y trunca), igual que en el resto de errores.
+                    hook_log.warning("hook %s juego=%s: excepción inesperada (%s)", trigger, g.name, type(e).__name__)
+                    res, m, st = "error", type(e).__name__, None
+                    c = {
+                        "code": "err.sync.unexpected",
+                        "params": {"type": type(e).__name__, "detail": history.short(str(e))},
+                    }
                 box.update(res=res, m=m, c=c, st=st or {})
                 run.status = st or {
                     "result": res,
