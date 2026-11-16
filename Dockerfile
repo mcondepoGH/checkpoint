@@ -6,17 +6,47 @@ RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
-# --- 2) zip del plugin de Steam Deck (Decky Loader): el hub lo sirve en /api/deck/plugin ---
+# --- 2) manifiesto de rutas de guardado (Steam y Lutris, ~2 MB) del plugin de Steam Deck ---
+# Se genera aquí (no se commitea): baja el manifiesto de Ludusavi de un commit FIJO y lo pasa por gen_save_manifest.py.
+# Para actualizarlo, cambia LUDUSAVI_MANIFEST_COMMIT (o `--build-arg LUDUSAVI_MANIFEST_COMMIT=<hash>`).
+# Si falla la descarga o el generador, el build FALLA (no se empaqueta sin manifiesto en silencio). Para saltarlo a
+# propósito (sin red de build): `--build-arg SKIP_SAVE_MANIFEST=1`; el zip sale sin manifiesto y «Sugerir carpeta» lo avisa.
+FROM python:3.12-slim AS savemanifest
+ARG LUDUSAVI_MANIFEST_COMMIT=0b39b9129e1d7024b3d45b8c1b577ec494ee470d
+ARG SKIP_SAVE_MANIFEST=0
+WORKDIR /gen
+# PyYAML con la misma versión fijada que el backend (backend/requirements.txt)
+COPY backend/requirements.txt /gen/backend-requirements.txt
+RUN [ "$SKIP_SAVE_MANIFEST" = "1" ] || pip install --no-cache-dir "$(grep -i '^PyYAML==' /gen/backend-requirements.txt)"
+COPY checkpoint-deck/scripts/gen_save_manifest.py checkpoint-deck/scripts/save_overrides.json /gen/
+RUN mkdir -p /out \
+ && if [ "$SKIP_SAVE_MANIFEST" = "1" ]; then \
+      echo "AVISO: SKIP_SAVE_MANIFEST=1: el zip del plugin saldra SIN manifiesto de rutas de guardado." >&2; \
+    else \
+      set -e; \
+      case "$LUDUSAVI_MANIFEST_COMMIT" in *[!0-9a-f]*|"") echo "LUDUSAVI_MANIFEST_COMMIT no es un hash hexadecimal: $LUDUSAVI_MANIFEST_COMMIT" >&2; exit 1 ;; esac; \
+      python -I -c "import sys, urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/mtkennerly/ludusavi-manifest/' + sys.argv[1] + '/data/manifest.yaml', '/gen/manifest.yaml')" "$LUDUSAVI_MANIFEST_COMMIT" \
+        || { echo "No se pudo descargar el manifiesto de Ludusavi (commit $LUDUSAVI_MANIFEST_COMMIT): revisa la red del build o usa --build-arg SKIP_SAVE_MANIFEST=1." >&2; exit 1; }; \
+      python -I /gen/gen_save_manifest.py /gen/manifest.yaml /out/save_manifest.json --commit "$LUDUSAVI_MANIFEST_COMMIT" \
+        || { echo "gen_save_manifest.py fallo: no se genera el manifiesto de rutas de guardado." >&2; exit 1; }; \
+      [ -s /out/save_manifest.json ] || { echo "save_manifest.json vacio." >&2; exit 1; }; \
+    fi
+
+# --- 3) zip del plugin de Steam Deck (Decky Loader): el hub lo sirve en /api/deck/plugin ---
 FROM node:25-alpine AS deck
+ARG SKIP_SAVE_MANIFEST=0
 # package.sh necesita bash y python3 (zipfile); el build usa pnpm 9 (el de la plantilla de Decky y su pnpm-lock.yaml).
 RUN apk add --no-cache bash python3 && npm install -g pnpm@9 --no-audit --no-fund
 WORKDIR /deck
 COPY checkpoint-deck/package.json checkpoint-deck/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY checkpoint-deck/ ./
-RUN pnpm run zip
+# El manifiesto lo genera la etapa savemanifest y entra al zip como data/save_manifest.json; package.sh lo valida y falla si falta.
+COPY --from=savemanifest /out /savemanifest
+RUN if [ "$SKIP_SAVE_MANIFEST" = "1" ]; then export SAVE_MANIFEST=none; else export SAVE_MANIFEST=/savemanifest/save_manifest.json; fi \
+ && pnpm run zip
 
-# --- 3) runtime ---
+# --- 4) runtime ---
 FROM python:3.12-alpine
 # `apk upgrade` trae los paquetes de la base con sus correcciones de seguridad (p. ej. krb5-libs, que entra
 # por openssh-client); `setuptools` viene preinstalado en la imagen base y se sube a una versión corregida.

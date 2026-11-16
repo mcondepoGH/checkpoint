@@ -1,5 +1,15 @@
 # Registro de cambios del plugin
 
+## 1.2.0 - 2026-11-16
+
+`checkpointProtocol: 1` (sin cambios). Con semver, `1.2.0` es mayor que `1.1.0`.
+
+### Novedades
+
+- **«Sugerencias de guardado» (panel Juegos).** Botón «Sugerir carpeta»: busca la carpeta de guardado EXACTA de los juegos de Steam y Lutris instalados con un manifiesto propio de rutas (generado desde el de Ludusavi con `scripts/gen_save_manifest.py`). Por juego muestra cada ruta candidata con tamaño, número de ficheros y fecha de modificación; «dudosa» cuando la coincidencia o la ruta lo son (p. ej. juegos LÖVE) y «No encontrada aún» cuando la carpeta todavía no existe. Nunca se aplica solo: «Usar esta carpeta» pide confirmación en un modal y solo rellena el formulario «Configurar» de «Sin configurar en el hub»; guardar en el hub sigue el flujo de siempre (`validate_game_path`, la carpeta debe existir). Nuevo callable `apply_save_suggestion`, que vuelve a verificar la ruta (`verified_dir`) y que sea una de las sugeridas. Sin manifiesto sale un mensaje claro.
+- **Consulta opcional a lutris.net.** Interruptor «Consultar lutris.net para identificar juegos de Lutris» (preferencia `lutris_lookup`, activada por defecto): solo se envía el slug del juego, una vez por juego y con caché; sirve para casar un juego de Lutris con su appid de Steam. Los callables `suggest_saves` y `suggest_saves_for` devuelven las sugerencias.
+- **El manifiesto va dentro del zip** (`data/save_manifest.json`, solo lectura). `ManifestStore` lee primero el de la carpeta de ajustes (si existe y es válido) y, si no, el empaquetado. `scripts/package.sh` lo recibe con `--save-manifest <json>` o `SAVE_MANIFEST`, lo valida (`v` 1, juegos y el commit de Ludusavi en `src`) y falla con mensaje claro si falta (`--no-save-manifest` o `SAVE_MANIFEST=none` empaqueta sin él, con aviso; la imagen Docker del hub solo lo usa con `--build-arg SKIP_SAVE_MANIFEST=1`: por defecto su build genera el manifiesto). El JSON no se commitea. Ver el README, «Manifiesto de rutas de guardado».
+
 ## 1.1.0 - 2026-11-15
 
 `checkpointProtocol: 1`. Con semver, `1.1.0` es mayor que `1.0.0` y que las pruebas `1.1.0-rc.1` a `1.1.0-rc.6` (el hub la ofrece a quien tenga cualquiera de ellas). Reúne todo lo de esas pruebas.

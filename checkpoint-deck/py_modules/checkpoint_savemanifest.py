@@ -117,43 +117,60 @@ class SaveManifest:
 
 
 class ManifestStore:
-    """Manifiesto con carga diferida y cacheada. `path` configurable (`set_path`); `set_bytes` lo recibe ya descargado.
-    Con ruta, se recarga solo si cambian mtime o tamaño del fichero. `get()` devuelve None si no hay o no es válido."""
+    """Manifiesto con carga diferida y cacheada. Por defecto hay DOS ubicaciones, por prioridad: el de la carpeta de ajustes
+    (`default_dir/save_manifest.json`, el que el usuario o una descarga dejan) y, si no existe o no es válido, el EMPAQUETADO en
+    el plugin (`bundled_dir/save_manifest.json`, p. ej. `<plugin>/data`; solo lectura, lo mete `scripts/package.sh` en el zip).
+    `set_path` fija una ruta explícita y desactiva ambas; `set_bytes` lo recibe ya descargado. Se recarga solo si cambian la
+    ubicación elegida, su mtime o su tamaño. `get()` devuelve None si no hay o no es válido."""
 
-    def __init__(self, default_dir: Union[str, Path, None] = None, log: Callable[[str], None] = lambda _m: None) -> None:
-        self._path: Optional[Path] = Path(default_dir) / FILE_NAME if default_dir else None
+    def __init__(
+        self,
+        default_dir: Union[str, Path, None] = None,
+        log: Callable[[str], None] = lambda _m: None,
+        bundled_dir: Union[str, Path, None] = None,
+    ) -> None:
+        self._paths: List[Path] = [Path(d) / FILE_NAME for d in (default_dir, bundled_dir) if d]
         self._log = log
         self._cache: Optional[SaveManifest] = None
         self._stamp: Any = None
         self._mem = False
+        self._used: Optional[Path] = None
 
     @property
     def path(self) -> Optional[Path]:
-        return self._path
+        """Ubicación principal (la de ajustes, o la fijada con `set_path`)."""
+        return self._paths[0] if self._paths else None
+
+    @property
+    def used(self) -> Optional[Path]:
+        """Fichero del que salió el manifiesto cargado por última vez (None si no hay o viene de memoria)."""
+        return self._used
 
     def set_path(self, path: Union[str, Path]) -> None:
-        self._path, self._cache, self._stamp, self._mem = Path(path), None, None, False
+        self._paths, self._cache, self._stamp, self._mem, self._used = [Path(path)], None, None, False, None
 
     def set_bytes(self, raw: Union[bytes, str]) -> None:
         """Usa estos bytes (ya descargados) en vez del fichero; solo en memoria, no se escribe nada. Lanza `SaveManifestError`."""
-        self._cache, self._stamp, self._mem = SaveManifest.from_bytes(raw), None, True
+        self._cache, self._stamp, self._mem, self._used = SaveManifest.from_bytes(raw), None, True, None
 
     def get(self) -> Optional[SaveManifest]:
         if self._mem:
             return self._cache
-        if self._path is None:
-            return None
-        try:
-            st = os.stat(self._path)
-        except OSError:
-            self._cache, self._stamp = None, None
-            return None
-        stamp = (st.st_mtime_ns, st.st_size)
-        if self._cache is None or stamp != self._stamp:
+        stamps = []
+        for p in self._paths:
             try:
-                self._cache = SaveManifest.from_path(self._path)
+                st = os.stat(p)
+            except OSError:
+                continue
+            stamps.append((p, st.st_mtime_ns, st.st_size))
+        stamp = tuple(stamps)
+        if self._cache is not None and stamp == self._stamp:
+            return self._cache
+        self._cache, self._used, self._stamp = None, None, stamp
+        for p, _, _ in stamps:  # por prioridad: el primero que cargue bien
+            try:
+                self._cache, self._used = SaveManifest.from_path(p), p
+                break
             except SaveManifestError as e:
                 self._log(f"guardado: el manifiesto de rutas no es válido ({e})")
-                self._cache = None
-            self._stamp = stamp
         return self._cache

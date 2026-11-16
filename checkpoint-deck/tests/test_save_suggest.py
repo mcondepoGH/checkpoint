@@ -454,3 +454,67 @@ def test_doubtful_ignora_metadatos_de_steam(home):
     write(home / ".local/share/love/M/steam_autocloud.vdf", "meta")
     r = one(M(mgame("M", steam=9, paths=[rule("xdgData", "love/M", "linux", d_=True)])), home, "steam", 9)
     assert r["paths"][0]["files"] == 0 and r["paths"][0]["doubtful"] is True
+
+
+# ---- dos ubicaciones por defecto: ajustes (prioridad) y empaquetado en el plugin (solo lectura)
+def _put(d, name, steam=1):
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / "save_manifest.json"
+    f.write_bytes(manifest(mgame(name, steam=steam, paths=[rule("home", "x")]), src=name))
+    return f
+
+
+def test_store_uses_bundled_when_settings_has_none(tmp_path):
+    bundled = _put(tmp_path / "plugin/data", "empaquetado")
+    st = ManifestStore(tmp_path / "ajustes", bundled_dir=tmp_path / "plugin/data")
+    assert st.get().src == "empaquetado" and st.used == bundled
+
+
+def test_store_settings_wins_over_bundled_and_falls_back_when_removed_or_invalid(tmp_path):
+    bundled = _put(tmp_path / "plugin/data", "empaquetado")
+    settings = _put(tmp_path / "ajustes", "ajustes")
+    logs = []
+    st = ManifestStore(tmp_path / "ajustes", logs.append, bundled_dir=tmp_path / "plugin/data")
+    assert st.get().src == "ajustes" and st.used == settings
+    settings.write_text("basura")  # inválido: cae al empaquetado
+    os.utime(settings, (time.time() + 5, time.time() + 5))
+    assert st.get().src == "empaquetado" and st.used == bundled and logs
+    settings.unlink()
+    assert st.get().src == "empaquetado"
+    _put(tmp_path / "ajustes", "ajustes2")  # vuelve a existir: gana otra vez
+    assert st.get().src == "ajustes2"
+
+
+def test_store_bundled_is_never_written_and_set_path_overrides_both(tmp_path):
+    bundled = _put(tmp_path / "plugin/data", "empaquetado")
+    before = bundled.read_bytes()
+    st = ManifestStore(tmp_path / "ajustes", bundled_dir=tmp_path / "plugin/data")
+    st.set_bytes(manifest(mgame("M", steam=3, paths=[rule("home", "x")]), src="mem"))
+    assert st.get().src == "mem"
+    other = _put(tmp_path / "otro", "otro")
+    st.set_path(other)
+    assert st.get().src == "otro" and st.used == other
+    st.set_path(tmp_path / "no-existe.json")
+    assert st.get() is None  # una ruta explícita no cae al empaquetado
+    assert bundled.read_bytes() == before and not (tmp_path / "ajustes").exists()
+
+
+def test_plugin_reads_the_manifest_bundled_in_its_data_folder(fake_decky, tmp_path, monkeypatch):
+    home = tmp_path / "h"
+    root = steam_home(home)
+    pfx = steam_game(root, 413150, "Stardew Valley")
+    write(pfx / "drive_c/users/steamuser/AppData/Roaming/StardewValley/Saves/a")
+    monkeypatch.setenv("HOME", str(home))
+    plugin = tmp_path / "plugin"
+    fake_decky.DECKY_PLUGIN_DIR = str(plugin)
+    (plugin / "data").mkdir(parents=True)
+    (plugin / "data/save_manifest.json").write_bytes(manifest(STARDEW, src="bundled@1"))
+    import main
+
+    p = main.Plugin()
+    asyncio.run(p._main())
+    try:
+        out = asyncio.run(p.suggest_saves())
+        assert out["ok"] and out["manifest"] == "bundled@1" and out["games"][0]["id"] == 413150
+    finally:
+        asyncio.run(p._unload())

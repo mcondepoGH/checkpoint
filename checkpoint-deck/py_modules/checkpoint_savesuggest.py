@@ -147,8 +147,9 @@ class SaveSuggester:
         log: Callable[[str], None] = _noop,
         lookup: Optional[LutrisSteamLookup] = None,
         lookup_enabled: Callable[[], bool] = lambda: True,
+        bundled_dir: Any = None,
     ) -> None:
-        self.store = ManifestStore(settings_dir, log)
+        self.store = ManifestStore(settings_dir, log, bundled_dir)
         self._home = home
         self._log = log
         self._api = lookup

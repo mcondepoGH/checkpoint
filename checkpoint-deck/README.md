@@ -163,7 +163,21 @@ pnpm i
 pnpm run zip                   # compila y empaqueta en un paso: crea out/Checkpoint.zip
 ```
 
-Sin pnpm: `npm i && npm run zip` (`npm run build` y `bash scripts/package.sh` por separado también valen). Si falta `dist/index.js` o `py_modules/`, el empaquetado se detiene con un mensaje claro. El zip no se guarda en el repositorio; lleva una carpeta `Checkpoint/` con `dist/index.js` (sin sourcemap), `main.py`, `plugin.json`, `package.json`, `py_modules/`, `LICENSE` y este `README.md`.
+Sin pnpm: `npm i && npm run zip` (`npm run build` y `bash scripts/package.sh` por separado también valen). Si falta `dist/index.js` o `py_modules/`, el empaquetado se detiene con un mensaje claro. El zip no se guarda en el repositorio; lleva una carpeta `Checkpoint/` con `dist/index.js` (sin sourcemap), `main.py`, `plugin.json`, `package.json`, `py_modules/`, `data/save_manifest.json`, `LICENSE` y este `README.md`.
+
+### Manifiesto de rutas de guardado (`save_manifest.json`)
+
+«Sugerencias de guardado» necesita el manifiesto propio (Steam y Lutris, ~2 MB). **No se commitea**: se genera a partir del manifiesto de Ludusavi y se mete en el zip, donde el plugin lo lee de `<plugin>/data/save_manifest.json` (solo lectura). Si existe uno en la carpeta de ajustes de Decky (`save_manifest.json`), tiene prioridad; si no existe o no es válido, se usa el empaquetado.
+
+```bash
+# 1) Descarga manifest.yaml de https://github.com/mtkennerly/ludusavi-manifest y apunta el commit (p. ej. 0b39b91)
+# 2) Genera el JSON (necesita PyYAML, el de backend/requirements.txt); el commit queda en el campo `src` del JSON
+python3 scripts/gen_save_manifest.py manifest.yaml save_manifest.json --commit 0b39b91
+# 3) Empaqueta con él (o SAVE_MANIFEST=save_manifest.json pnpm run zip)
+bash scripts/package.sh --save-manifest save_manifest.json
+```
+
+`package.sh` falla con un mensaje claro si falta el manifiesto o no es válido (JSON `v: 1`, con juegos y `src` = `ludusavi-manifest@<commit>`). Para empaquetar a propósito sin él: `--no-save-manifest` o `SAVE_MANIFEST=none`; avisa, y «Sugerir carpeta» dirá que no hay manifiesto. La imagen Docker del hub NO lo omite: su build genera el manifiesto (ver el README del hub, «Manifiesto del plugin en la imagen Docker»). El generador es una herramienta de desarrollo y no entra al zip.
 
 Pruebas:
 

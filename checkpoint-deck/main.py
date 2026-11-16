@@ -35,6 +35,7 @@ from checkpoint_sync import SyncEngine, protected_dirs
 from checkpoint_version import plugin_dir, read_version
 
 
+BUNDLED_MANIFEST_DIR = "data"  # <plugin>/data/save_manifest.json: lo mete scripts/package.sh; el de ajustes tiene prioridad
 PREFS_FILE = "prefs.json"  # preferencias de la interfaz, aparte de settings.json (que lleva la clave `ckd_`)
 PREF_DEFAULTS: Dict[str, bool] = {
     "show_unconfigured": True,  # mostrar «Sin configurar en el hub»
@@ -63,6 +64,7 @@ class Plugin:
             log=self._log,
             lookup=LutrisSteamLookup(decky.DECKY_PLUGIN_SETTINGS_DIR, log=self._log),
             lookup_enabled=lambda: self._prefs()["lutris_lookup"],
+            bundled_dir=plugin_dir(decky) / BUNDLED_MANIFEST_DIR,  # manifiesto empaquetado en el zip (solo lectura)
         )
         self.jobs = Jobs(
             self._make_engine,
@@ -300,7 +302,7 @@ class Plugin:
         return {"ok": True, "appid": appid, "name": name, "home": str(home), **found}
 
     async def suggest_saves(self) -> Dict[str, Any]:
-        """Carpetas de guardado exactas (del manifiesto propio `save_manifest.json` de la carpeta de ajustes) de TODOS los
+        """Carpetas de guardado exactas (del manifiesto propio `save_manifest.json`: el de la carpeta de ajustes si existe; si no, el empaquetado en `<plugin>/data`) de TODOS los
         juegos de Steam y Lutris instalados que casan: `{ok, manifest, games: [...]}` (ver `checkpoint_savesuggest`). Solo
         lectura; nada se configura sin confirmación. Añade `network_lookups` y `lookups_pending` (consultas a lutris.net). Sin manifiesto: `{ok: False, error: "no_manifest"}`."""
         return await asyncio.to_thread(self.saves.all)

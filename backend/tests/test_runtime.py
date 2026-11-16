@@ -90,3 +90,16 @@ def test_rutas_por_defecto_nativo_sin_rutas_de_docker(monkeypatch, tmp_path):
 def test_dockerfile_fija_runtime_docker():
     df = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text()
     assert "CHECKPOINT_RUNTIME=docker" in df and "IN_DOCKER" not in df
+
+
+def test_dockerfile_genera_manifiesto_de_guardado():
+    raiz = Path(__file__).resolve().parents[2]
+    df = (raiz / "Dockerfile").read_text()
+    assert "SAVE_MANIFEST=none" in df  # solo en la rama de SKIP_SAVE_MANIFEST=1
+    assert "AS savemanifest" in df and "COPY --from=savemanifest" in df
+    assert "SAVE_MANIFEST=/savemanifest/save_manifest.json" in df and "ARG LUDUSAVI_MANIFEST_COMMIT=" in df
+    # el generador y sus correcciones llegan a la etapa: existen y .dockerignore no los excluye
+    for f in ("gen_save_manifest.py", "save_overrides.json"):
+        assert (raiz / "checkpoint-deck" / "scripts" / f).is_file() and f in df
+    ignore = (raiz / ".dockerignore").read_text().split()
+    assert not any(x.startswith("checkpoint-deck/scripts") or x == "checkpoint-deck" for x in ignore)
