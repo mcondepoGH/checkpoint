@@ -724,18 +724,21 @@ npm run build                                    # producción
 
 ### Pruebas: ciclo rápido local
 
-Para iterar (sin cobertura, sin caché de pytest y con el directorio temporal en `tmpfs`; `/dev/shm` suele ser de solo 64 MB, de sobra para el backend):
+`pytest` a secas ya usa lo seguro por defecto (`addopts` en `backend/pytest.ini` y `checkpoint-deck/pytest.ini`): `-p no:cacheprovider -n 2`. Necesita `pytest-xdist` (en `requirements-dev.txt`; en el plugin, `pip install pytest pytest-xdist`).
 
 ```bash
 cd backend
-python -m pytest -p no:cacheprovider --basetemp=/dev/shm/ck-pytest -m "not slow" -n 2 -q   # ciclo rápido
-python -m pytest -p no:cacheprovider --basetemp=/dev/shm/ck-pytest -q                      # todo, en serie
+python -m pytest -q                                                       # por defecto: todo, -n 2, sin caché
+python -m pytest -q -m "not slow" --basetemp=/dev/shm/ck-pytest           # ciclo rápido (más rápido aún)
+python -m pytest -q -n 0                                                  # en serie
+python -m pytest -n 0 --cov=app --cov-fail-under=90                       # cobertura, como CI
 ```
 
-- `-m "not slow"` omite los pocos tests marcados `slow` (esperas reales de los temporizadores del vigilante, análisis de todo el código); CI los corre todos.
-- `-n 2` usa `pytest-xdist` (en `requirements-dev.txt`) con dos procesos: no uses `-n auto` en el NAS (4 núcleos sin AVX2, comparte CPU con el resto del stack). Cada test escribe solo en su `tmp_path`, así que el paralelo da los mismos aprobados que el serie; si un fallo aparece solo en paralelo, repite en serie antes de darlo por bueno.
-- CI no cambia: `pytest --cov=app --cov-fail-under=90` en serie y con todos los tests.
-- En `checkpoint-deck/` no uses `--basetemp=/dev/shm/...`: el plugin rechaza rutas bajo `/dev` y fallan unos 125 tests; deja el directorio temporal por defecto (`pytest -p no:cacheprovider -q`, o `-n 2` con `pytest-xdist` instalado: 44 s a 28 s en el NAS, mismos aprobados).
+- `-m "not slow"` NO es por defecto: omite los pocos tests marcados `slow` (esperas reales de los temporizadores del vigilante, análisis de todo el código) y CI debe correr todos.
+- `--basetemp=/dev/shm/ck-pytest` NO es por defecto: `/dev/shm` suele ser de solo 64 MB, de sobra para el backend pero no para compartirlo con el plugin; pásalo a mano solo en el backend.
+- `-n 2` usa `pytest-xdist` con dos procesos: no uses `-n auto` en el NAS (4 núcleos sin AVX2, comparte CPU con el resto del stack). Cada test escribe solo en su `tmp_path`, así que el paralelo da los mismos aprobados que el serie; si un fallo aparece solo en paralelo, repite con `-n 0` antes de darlo por bueno.
+- CI no cambia de comportamiento: `pytest -n 0 --cov=app --cov-fail-under=90` en serie, con todos los tests y con cobertura (`-n 0` anula el `-n 2` de `addopts`).
+- En `checkpoint-deck/` no uses `--basetemp=/dev/shm/...`: el plugin rechaza rutas bajo `/dev` y fallan unos 125 tests; deja el directorio temporal por defecto (`pytest -q`: 44 s a 28 s en el NAS con `-n 2`, mismos aprobados; en serie, `-n 0`).
 
 ### Formato, lint y auditorías
 

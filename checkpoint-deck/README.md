@@ -168,7 +168,7 @@ Sin pnpm: `npm i && npm run zip` (`npm run build` y `bash scripts/package.sh` po
 Pruebas:
 
 ```bash
-pip install pytest            # pruebas de Python (biblioteca estándar en el plugin)
+pip install pytest pytest-xdist   # pruebas de Python; xdist porque pytest.ini usa -n 2 (en serie: pytest -n 0)
 pytest -q                     # desde checkpoint-deck/ (con el entorno del hub, también las pruebas contra el hub real)
 pnpm run typecheck            # tipos de TypeScript
 ```
