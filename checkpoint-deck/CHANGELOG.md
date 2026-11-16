@@ -1,5 +1,21 @@
 # Registro de cambios del plugin
 
+## 1.3.0 - 2026-11-16
+
+`checkpointProtocol: 1` (sin cambios). Con semver, `1.3.0` es mayor que `1.2.1`.
+
+### Novedades
+
+- **Panel por pestañas** (Inicio, Juegos, Sugerencias, Pendientes, Ajustes y Versión) en lugar de una sola lista larga. Sin vincular solo están activas Inicio, Ajustes y Versión. L1 / R1 cambian de pestaña (sin verificar en una Deck real). Punto en la pestaña cuando hay algo: conflicto o error en Juegos, número de juegos sin configurar en Pendientes y actualización en Versión.
+- **Inicio:** tarjeta de estado con insignia de forma, color y texto (sin vincular, esperando aceptación, sin conexión, plugin antiguo, juego abierto, sincronizando, conflicto, con errores, todo al día), hub, última sincronización, «Sincronizar todo», juegos sin configurar, último aviso y «Probar conexión».
+- **Avisos fijos bajo las pestañas** (máximo 2, por prioridad) y **toasts con icono por nivel** (éxito, info, aviso, error; Decky solo deja controlar título, cuerpo, icono y duración; el cuerpo sigue en 45 caracteres como máximo).
+- **«Sincronizar todo» global** (Inicio y Juegos): progreso «Juego i/n» con la lista por juego y «Cancelar»; resumen «n subidos, n bajados, n conflictos» en toast y banner; los conflictos y errores no frenan al resto; «Sincronización interrumpida» con los juegos que quedaron sin sincronizar y «Reintentar» o «Probar conexión»; con un juego abierto, «Sincronizar los demás juegos». Una Deck recién vinculada pide confirmar antes la primera sincronización, con el recuento de lo que baja y lo que sube. La tarea `sync_all` deja ahora `plan` y `results` (por juego) en `get_sync_state`.
+- **Juegos del hub:** carpeta configurada (callable `get_game_paths`, aparte del estado: este sigue sin rutas), insignia de estado, última sincronización (`last_at`, recordada en `lastsync.json`, también al abrir y cerrar un juego), «Ver detalle» (`game_detail`: tamaño, ficheros y fecha de la carpeta medidos en la Deck y la última copia). El historial del hub no se muestra: el hub no se lo da a un dispositivo.
+- **«Hay una carpeta distinta sugerida»** para juegos de Steam ya añadidos (`suggest_changes`), con «Ver y cambiar carpeta» e «Ignorar la sugerencia» (`ignore_suggestion`, en `ignored.json`). **«Cambiar carpeta» de un juego ya configurado queda para la fase 2** (necesita backend y hub): el botón sale desactivado con «Próximamente».
+- **Desvincular** pide confirmación.
+- **Versión:** tarjeta instalada → disponible, comprobación automática (a los 20 s y cada 6 h, vinculada), un solo toast por versión nueva, punto en la pestaña y toast «Checkpoint actualizado a X.Y.Z» tras actualizar (`ack_version`). El plugin sigue sin instalarse solo: los tres pasos y «Copiar dirección» no cambian. `get_compat` expone si el plugin es demasiado antiguo para el hub.
+- Los interruptores «Mostrar juegos sin configurar» y «Consultar lutris.net…» están también en Ajustes.
+
 ## 1.2.1 - 2026-11-16
 
 `checkpointProtocol: 1` (sin cambios). Con semver, `1.2.1` es mayor que `1.2.0`.

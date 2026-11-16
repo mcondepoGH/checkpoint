@@ -58,6 +58,7 @@ export interface UpdateInfo {
   hub_url?: string;
   reason?: string | null;
   error?: string;
+  compat?: string | null; // compatibilidad vista en el ping de la comprobación
 }
 
 export const UPDATE_ERRORS: Record<string, string> = {
@@ -407,3 +408,216 @@ export function saveConfirm(name: string, path: string): SaveConfirm {
     ok: SAVES_ADD,
   };
 }
+
+
+// ---- panel por pestañas (1.3.0): navegación, estado, avisos fijos, resumen de «Sincronizar todo», detalle y versión ----
+export type TabId = "home" | "games" | "sugg" | "pend" | "set" | "ver";
+export const TAB_LABELS: Record<TabId, string> = {
+  home: "Inicio",
+  games: "Juegos",
+  sugg: "Sugerencias",
+  pend: "Pendientes",
+  set: "Ajustes",
+  ver: "Versión",
+};
+export const TAB_ORDER: TabId[] = ["home", "games", "sugg", "pend", "set", "ver"];
+export const TAB_DOT_ATTENTION = "requiere atención";
+export const TAB_DOT_UPDATE = "actualización disponible";
+export const tabDotCount = (n: number): string => (n === 1 ? "1 pendiente" : `${n} pendientes`);
+export const TABS_HINT = "L1 / R1 cambian de sección";
+
+// Estado del dispositivo (insignia con forma, color y texto; la forma no depende del color)
+export type Tone = "ok" | "info" | "warn" | "err" | "nf";
+export const TONE_ICON: Record<Tone, string> = { ok: "✓", info: "i", warn: "!", err: "✕", nf: "○" };
+export const HOME_STATUS = {
+  unlinked: "Sin vincular",
+  waiting: "Esperando aceptación",
+  offline: "Sin conexión",
+  outdated: "Plugin antiguo",
+  playing: "Juego abierto",
+  syncing: "Sincronizando",
+  conflict: "Conflicto",
+  error: "Con errores",
+  ok: "Todo al día",
+} as const;
+export const GAME_BADGES: Record<string, string> = {
+  up_to_date: "Al día",
+  upload: "Por subir",
+  download: "Por bajar",
+  conflict: "Conflicto",
+  error: "Error",
+  disabled: "Desactivado",
+  unknown: "Sin comprobar",
+  no_path: "Sin ruta",
+  missing_dir: "Carpeta no encontrada",
+};
+export const OPEN_NOW = "Abierto ahora";
+export const HOME_HUB = (url: string): string => `Hub: ${url}`;
+export const HOME_LAST_SYNC = (when: string): string => `Última sincronización: ${when}`;
+export const HOME_NEVER_SYNCED = "Última sincronización: ninguna todavía";
+export const HOME_PENDING_NONE = "Nada pendiente.";
+export const HOME_UNCONF_TITLE = (n: number): string => (n === 1 ? "1 juego sin configurar" : `${n} juegos sin configurar`);
+export const HOME_UNCONF_HELP = "Puede haber carpetas de guardado sugeridas para ellos.";
+export const HOME_SEE_SUGGESTIONS = "Ver sugerencias";
+export const HOME_CONNECTION = "Conexión";
+
+// Avisos fijos bajo las pestañas
+export const BANNER = {
+  unlinkedTitle: "Sin vincular.",
+  unlinkedText: "Primero vincula la Deck con el hub.",
+  goHome: "Ir a Inicio",
+  cutTitle: "Sincronización interrumpida.",
+  cutText: (left: number): string =>
+    `Quedaron ${left === 1 ? "1 juego" : `${left} juegos`} sin sincronizar. Lo ya subido o bajado está a salvo; ningún juego se quedó a medias.`,
+  retry: "Reintentar",
+  ping: "Probar conexión",
+  doneTitle: "Sincronización terminada.",
+  conflictHint: " Resuelve el conflicto en Juegos.",
+  errorHint: " Reintenta el juego con error.",
+  close: "Cerrar",
+  outdatedTitle: "Plugin demasiado antiguo.",
+  howToUpdate: "Ver cómo actualizar",
+  offlineTitle: "Sin conexión con el hub.",
+  offlineText: "El cierre de un juego queda en cola y se reintenta cada minuto.",
+  playingTitle: (name: string): string => `${name} está abierto.`,
+  playingText: "No se sincroniza a mano: se sincroniza solo al cerrarlo.",
+  conflictTitle: (name: string): string => `Conflicto en ${name}.`,
+  conflictText: "Cambios en los dos lados. No se toca nada hasta que elijas.",
+  resolve: "Resolver",
+  failedTitle: "Falló la sincronización.",
+  newDeviceTitle: "Dispositivo nuevo en el hub.",
+  newDeviceText: "Tus guardados del hub aún no están en esta Deck. Sincroniza para traerlos.",
+  updateTitle: (latest: string): string => `Actualización disponible: ${latest}`,
+  updateText: (cur: string): string => `Instalada: ${cur}.`,
+};
+export const NEED_LINK = "Primero vincula la Deck con el hub.";
+
+// «Sincronizar todo»
+export const SYNC_ALL = "Sincronizar todo";
+export const SYNC_REST = "Sincronizar los demás juegos";
+export const SYNC_PROGRESS_TITLE = "Sincronizando";
+export const SYNC_CANCEL = "Cancelar";
+export const SYNC_PER_GAME = "Por juego";
+export const SYNC_ROW = { done_up: "✓ subido", done_down: "✓ bajado", done_ok: "✓ al día", run: "… en curso", wait: "· en espera", fail: "✕ error", conflict: "! conflicto", skip: "· abierto: se sincroniza al cerrar", left: "· sin sincronizar" } as const;
+export const SYNC_BLOCKED = {
+  playing: (name: string): string => `${name} está abierto: se sincroniza solo al cerrarlo.`,
+  offline: "Sin conexión: no se puede sincronizar.",
+  outdated: "Actualiza el plugin para volver a sincronizar.",
+  busy: "Hay una tarea en marcha.",
+};
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+export function pendingParts(c: { upload: number; download: number; conflict: number; error: number }): string[] {
+  const p: string[] = [];
+  if (c.upload) p.push(`${c.upload} por subir`);
+  if (c.download) p.push(`${c.download} por bajar`);
+  if (c.conflict) p.push(`${c.conflict} en conflicto`);
+  if (c.error) p.push(`${c.error} con error`);
+  return p;
+}
+export interface TallyText {
+  up: number;
+  down: number;
+  conf: number;
+  err: number;
+}
+/** «n subidos, n bajados, n conflictos» (y «n errores» si los hay); «Todo estaba al día» si no pasó nada. */
+export function summaryText(t: TallyText): string {
+  if (!t.up && !t.down && !t.conf && !t.err) return "Todo estaba al día";
+  const base = `${plural(t.up, "subido", "subidos")}, ${plural(t.down, "bajado", "bajados")}, ${plural(t.conf, "conflicto", "conflictos")}`;
+  return t.err ? `${base}, ${plural(t.err, "error", "errores")}` : base;
+}
+/** Lo mismo para un toast: sin partes a cero y recortado a `TOAST_MAX` (Decky corta los cuerpos largos). */
+export function summaryToast(t: TallyText): string {
+  const parts = [
+    t.up ? plural(t.up, "subido", "subidos") : "",
+    t.down ? plural(t.down, "bajado", "bajados") : "",
+    t.conf ? plural(t.conf, "conflicto", "conflictos") : "",
+    t.err ? plural(t.err, "error", "errores") : "",
+  ].filter(Boolean);
+  const text = parts.length ? parts.join(", ") : "Todo estaba al día";
+  const chars = [...text];
+  return chars.length <= TOAST_MAX ? text : `${chars.slice(0, TOAST_MAX - 1).join("")}…`;
+}
+export const SYNC_CUT_TOAST = "Sin conexión: quedó a medias";
+export const SYNC_CANCELLED_TOAST = "Sincronización cancelada";
+
+// Primera sincronización de un dispositivo recién vinculado
+export const FIRST_TITLE = "Dispositivo nuevo en el hub";
+export const FIRST_TEXT =
+  "Esta Deck se acaba de vincular. Antes de sincronizar se comprueba qué juegos tienen algo que bajar o subir; si un juego tiene datos distintos en los dos lados, queda como conflicto y no se toca.";
+export const FIRST_CHECKING = "Comprobando qué se bajaría y qué se subiría…";
+export interface FirstPlan {
+  down: number;
+  up: number;
+  conflicts: number;
+  skipped: number;
+}
+export function firstConfirm(p: FirstPlan): { title: string; description: string; ok: string } {
+  const lines = [
+    `Se bajan del hub: ${plural(p.down, "juego", "juegos")}`,
+    `Se suben al hub: ${plural(p.up, "juego", "juegos")}`,
+    `En conflicto (no se tocan): ${plural(p.conflicts, "juego", "juegos")}`,
+  ];
+  if (p.skipped) lines.push(`Se saltan (desactivados o sin carpeta): ${plural(p.skipped, "juego", "juegos")}`);
+  return {
+    title: "Sincronizar esta Deck por primera vez",
+    description: `${lines.join("\n")}\nTus carpetas actuales se guardan como copia antes de sustituirlas.`,
+    ok: SYNC_ALL,
+  };
+}
+
+// Desvincular
+export const UNLINK_CONFIRM = {
+  title: "¿Desvincular esta Deck?",
+  description: "Se borra la clave de esta Deck. Para que deje de valer, revócala también en el hub (Dispositivos).",
+  ok: "Desvincular",
+};
+export const UNLINK_TOAST = "Clave borrada de la Deck. Para que deje de valer, revócala también en el hub.";
+export const LINKED_TOAST = (device: string): string => {
+  const room = TOAST_MAX - "Vinculado: ".length;
+  const chars = [...device];
+  return `Vinculado: ${chars.length <= room ? device : `${chars.slice(0, room - 1).join("")}…`}`;
+};
+
+// «Juegos en el hub» (tarjetas)
+export const GAME_FOLDER = "Carpeta configurada";
+export const GAME_LAST_SYNC = (when: string): string => `Última sincronización: ${when}`;
+export const GAME_OPEN_HINT = "Se sincroniza solo al cerrar el juego.";
+export const GAME_DETAIL = "Ver detalle";
+export const GAME_BACK = "Volver";
+export const GAME_ENABLED = "Activado en el hub";
+export const GAME_ENABLED_HELP = "Desactivado no se sincroniza.";
+export const DETAIL_SIZE = "Tamaño";
+export const DETAIL_LAST_COPY = "Última copia";
+export const DETAIL_NO_COPY = "Sin sincronizar desde que se vinculó esta Deck";
+export const DETAIL_FOLDER_MISSING = "La carpeta no existe en esta Deck.";
+export const DETAIL_LOADING = "Midiendo la carpeta…";
+export const DETAIL_ERROR = "No se pudo leer la carpeta.";
+export const DETAIL_HISTORY_NOTE = "El historial completo está en el hub (Versiones).";
+export const CHANGED_TITLE = "Hay una carpeta distinta sugerida.";
+export const CHANGED_VIEW = "Ver y cambiar carpeta";
+export const CHANGED_IGNORE = "Ignorar la sugerencia";
+export const CHANGE_FOLDER = "Cambiar carpeta";
+export const COMING_SOON = "Próximamente";
+export const CHANGE_FOLDER_HELP = "Hoy el plugin no cambia la carpeta de un juego ya añadido: solo configura juegos nuevos. Llegará en una versión próxima.";
+
+// Pendientes (sin configurar)
+export const PEND_TITLE = "Sin configurar en el hub";
+export const PEND_NONE = "No queda ningún juego por configurar.";
+export const PEND_SEE_SUGGESTION = "Ver sugerencia";
+export const PEND_SHOW_LIST = "Mostrar la lista";
+export const PEND_HIDDEN_HELP = "También en Ajustes: «Mostrar juegos sin configurar».";
+
+// Versión
+export const VER_TITLE = "Actualizaciones";
+export const VER_INSTALLED = "Instalada";
+export const VER_AVAILABLE = "Disponible";
+export const VER_PLUGIN = "Versión del plugin";
+export const VER_CHECK = "Buscar actualizaciones";
+export const VER_CHECKING = "Comprobando…";
+export const VER_HOW = "Cómo actualizar";
+export const VER_NOT_SELF = "El plugin no se instala solo: lo hace Decky con «Instalar plugin desde URL».";
+export const VER_AUTO_TOAST = (latest: string): string => toastLine("Actualización", latest);
+export const UPDATED_TOAST = (cur: string): string => `Checkpoint actualizado a ${cur}`;

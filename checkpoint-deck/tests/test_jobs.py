@@ -381,3 +381,54 @@ def test_unconfigured_marks_shortcuts_with_their_origin():
 
     s = asyncio.run(go())
     assert s["unconfigured"] == [{"appid": 30, "name": "Treinta"}, {"appid": 3_000_000_001, "name": "Atajo", "source": "shortcut"}]
+
+
+def test_sync_all_leaves_plan_and_results_per_game_and_calls_on_synced():
+    async def go():
+        eng = FakeEngine()
+        eng.states = {}
+        seen = []
+        j = Jobs(lambda: eng, lambda: ("ok", {}), log=lambda m: None, on_synced=lambda g, r: seen.append((g, r["state"])), last_at=lambda g: {"at": 77} if g == "g1" else None)
+        j.start("sync_all")
+        s = await settle(j)
+        return s, seen, j
+
+    s, seen, j = asyncio.run(go())
+    assert s["plan"] == ["g1", "g2"]
+    assert s["results"] == {"g1": {"state": "uploaded", "files": 12}, "g2": {"state": "uploaded", "files": 12}}
+    assert seen == [("g1", "uploaded"), ("g2", "uploaded")]
+    rows = {g["id"]: g for g in s["games"]}
+    assert rows["g1"]["last_at"] == 77 and "last_at" not in rows["g2"]
+    assert "path" not in rows["g1"]  # la ruta no va en el estado: se pide aparte
+    assert j.paths() == {"g1": "/x/1", "g2": "/x/2"}
+
+
+def test_sync_all_keeps_going_after_a_conflict_or_error_and_check_leaves_no_results():
+    async def go():
+        eng = FakeEngine()
+        out = {"g1": {"state": "conflict"}, "g2": {"state": "error", "code": "game_running"}}
+        eng.sync_game = lambda game, games=None, progress=None: {"game": game, **out[game]}
+        j = Jobs(lambda: eng, lambda: ("ok", {}), log=lambda m: None)
+        j.start("sync_all")
+        s = await settle(j)
+        j.start("check")
+        return s, await settle(j)
+
+    s, s2 = asyncio.run(go())
+    assert s["results"] == {"g1": {"state": "conflict"}, "g2": {"state": "error", "code": "game_running"}}
+    assert s2["results"] == {} and s2["plan"] == []  # una tarea nueva limpia lo anterior
+
+
+def test_a_failing_on_synced_callback_never_breaks_the_task():
+    async def go():
+        eng = FakeEngine()
+
+        def boom(_g, _r):
+            raise OSError("disco lleno")
+
+        j = Jobs(lambda: eng, lambda: ("ok", {}), log=lambda m: None, on_synced=boom)
+        j.start("sync_game", "g1")
+        return await settle(j)
+
+    s = asyncio.run(go())
+    assert s["error"] is None and {g["id"]: g["state"] for g in s["games"]}["g1"] == "up_to_date"

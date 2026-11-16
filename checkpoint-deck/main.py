@@ -15,6 +15,7 @@ import decky  # lo inyecta el cargador
 import checkpoint_browse
 import checkpoint_steam
 import checkpoint_update
+import checkpoint_uistate
 from checkpoint_hub import (
     DeviceNameError,
     HubNetworkError,
@@ -66,12 +67,16 @@ class Plugin:
             lookup_enabled=lambda: self._prefs()["lutris_lookup"],
             bundled_dir=plugin_dir(decky) / BUNDLED_MANIFEST_DIR,  # manifiesto empaquetado en el zip (solo lectura)
         )
+        self.stamps = checkpoint_uistate.Stamps(decky.DECKY_PLUGIN_SETTINGS_DIR, log=self._log)  # última sincronización por juego
+        self.ignored = checkpoint_uistate.Ignored(decky.DECKY_PLUGIN_SETTINGS_DIR, log=self._log)  # carpetas sugeridas descartadas
         self.jobs = Jobs(
             self._make_engine,
             self._scan_and_send,
             log=self._log,
             library=lambda: self._installed,
             shortcuts=lambda: self._shortcut_ids,
+            on_synced=self.stamps.record,
+            last_at=self.stamps.get,
         )
         # Avisos automáticos de abrir y cerrar: su motor NO rechaza el juego abierto (es justo el que sincroniza)
         self.notices = Notices()
@@ -80,6 +85,7 @@ class Plugin:
             decky.DECKY_PLUGIN_SETTINGS_DIR,
             self.notices,
             log=self._log,
+            stamp=self.stamps.record,
         )
         self.auto_runner = AutoRunner(self.auto, log=self._log)
         self.auto_runner.start()
@@ -141,6 +147,16 @@ class Plugin:
 
     def _outdated(self) -> bool:
         return self._compat == "plugin_outdated"
+
+    async def get_compat(self) -> Dict[str, Any]:
+        """Última compatibilidad con el hub vista en un ping (`plugin_outdated`, `hub_old`...); None si aún no hay ping."""
+        return {"compat": self._compat}
+
+    async def ack_version(self) -> Dict[str, Any]:
+        """Recuerda la versión instalada y dice la anterior: la interfaz avisa «Checkpoint actualizado a X.Y.Z» si cambió
+        (`previous` es None la primera vez: sin aviso)."""
+        cur = read_version(plugin_dir(decky))["version"]
+        return {"ok": True, **checkpoint_uistate.ack_version(decky.DECKY_PLUGIN_SETTINGS_DIR, cur)}
 
     def _blocked_state(self) -> Dict[str, Any]:
         return {**self.jobs.snapshot(), "error": "plugin_outdated", "error_params": {}}
@@ -366,6 +382,41 @@ class Plugin:
         if self._outdated():
             return self._failure("plugin_outdated")
         return await asyncio.to_thread(self._apply_target, source, ident, path)
+
+    def _changed_suggestions(self) -> Dict[str, Any]:
+        r = self.saves.all()
+        if not r.get("ok"):
+            return {"ok": False, "error": str(r.get("error", "unexpected"))}
+        paths = self.jobs.paths()
+        rows = [{**g, "path": paths.get(g["id"])} for g in self.jobs.snapshot()["games"]]
+        return {"ok": True, "items": checkpoint_uistate.changed_suggestions(rows, r.get("games", []), self.ignored)}
+
+    async def get_game_paths(self) -> Dict[str, Any]:
+        """Carpeta configurada en el hub de cada juego de esta Deck (id -> ruta o None), para mostrarla en «Juegos». Solo lectura."""
+        return {"ok": True, "paths": self.jobs.paths()}
+
+    async def suggest_changes(self) -> Dict[str, Any]:
+        """Juegos YA añadidos al hub (de Steam) cuya mejor carpeta segura del manifiesto no es la configurada:
+        `{ok, items: [{game, name, path, size, files, mtime}]}`. Solo lectura; lo ignorado (`ignore_suggestion`) no sale.
+        Cambiar la carpeta de un juego ya configurado NO existe todavía (fase 2): esto solo avisa."""
+        return await asyncio.to_thread(self._changed_suggestions)
+
+    async def ignore_suggestion(self, game: str, path: str) -> Dict[str, Any]:
+        """Recuerda que el usuario descartó la carpeta sugerida `path` para ese juego (otra ruta nueva volvería a avisar)."""
+        if not any(g["id"] == game for g in self.jobs.snapshot()["games"]):
+            return self._failure("unknown_game")
+        return {"ok": True} if self.ignored.add(game, path) else self._failure("bad_args")
+
+    async def game_detail(self, game: str) -> Dict[str, Any]:
+        """Detalle de un juego del hub para «Ver detalle»: carpeta configurada, su tamaño, ficheros y fecha (medidos en la
+        Deck, solo lectura) y la última sincronización correcta de este dispositivo. El historial del hub no se pide
+        (el hub no lo da a un dispositivo)."""
+        row = next((g for g in self.jobs.snapshot()["games"] if g["id"] == game), None)
+        if row is None:
+            return self._failure("unknown_game")
+        path = self.jobs.paths().get(game)
+        info = await asyncio.to_thread(checkpoint_uistate.folder_info, path, Path.home())
+        return {"ok": True, "game": game, "path": path, "folder": info, "last": self.stamps.get(game)}
 
     async def picker_start(self, path: str = "") -> Dict[str, Any]:
         """Ruta segura con la que abrir el selector de carpetas de Decky: `path` si existe, es carpeta y se puede leer; si no, el

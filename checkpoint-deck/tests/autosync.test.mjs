@@ -246,7 +246,7 @@ test('el bombeo entrega y recuerda los avisos nuevos como último aviso', { skip
   const stop = startNoticePump(take, (t) => shown.push(t), () => assert.fail('sin problemas'), 2000, timers, () => new Date(2026, 0, 1, 9, 5));
   await new Promise((r) => setImmediate(r));
   stop();
-  assert.deepEqual(shown, [{ title: 'Checkpoint', body: 'Uno: al día', level: 'info' }]);
+  assert.deepEqual(shown, [{ title: 'Checkpoint', body: 'Uno: al día', level: 'info', kind: 'ok', code: 'up_to_date' }]);
   assert.deepEqual(getLastNotice(), { time: '09:05', text: 'Uno: al día' });
 });
 
@@ -282,4 +282,49 @@ test('si onRaw lanza, no se rompe el escuchador ni el envío', { skip }, async (
   startGameWatch(s.client, (a, r) => sent.push([a, r]), () => assert.fail('sin problemas'), () => { throw new Error('diag'); });
   s.cb({ unAppID: 5, bRunning: true });
   assert.deepEqual(sent, [[5, true]]);
+});
+
+test('noticeKind: éxito separado de info; avisos y errores por su nivel', { skip }, async () => {
+  const { noticeKind, toastDuration } = await load();
+  const k = (code, level = 'info') => noticeKind({ code, level });
+  assert.equal(k('uploaded'), 'ok');
+  assert.equal(k('downloaded'), 'ok');
+  assert.equal(k('up_to_date'), 'ok');
+  assert.equal(k('joined'), 'ok');
+  assert.equal(k('no_path'), 'info');
+  assert.equal(k('missing_dir'), 'info');
+  assert.equal(k('conflict', 'warning'), 'warn');
+  assert.equal(k('queued', 'warning'), 'warn');
+  assert.equal(k('sync_failed', 'error'), 'error');
+  assert.equal(k('uploaded', 'error'), 'error'); // el nivel del backend manda
+  assert.equal(toastDuration('ok'), 6000);
+  assert.equal(toastDuration('warn'), 12000);
+  assert.equal(toastDuration('error'), 12000);
+});
+
+test('RunningApps: avisa solo cuando cambia y se puede dejar de escuchar', { skip }, async () => {
+  const { RunningApps } = await load();
+  const r = new RunningApps();
+  let n = 0;
+  const off = r.subscribe(() => n++);
+  r.set(5, true);
+  r.set(5, true); // repetido: sin aviso
+  assert.equal(n, 1);
+  assert.deepEqual([...r.snapshot()], [5]);
+  r.set(6, false); // nunca estuvo abierto: sin aviso
+  assert.equal(n, 1);
+  r.set(5, false);
+  assert.equal(n, 2);
+  assert.equal(r.snapshot().size, 0);
+  off();
+  r.set(7, true);
+  assert.equal(n, 2);
+});
+
+test('noticeText lleva el icono (kind) y el código del aviso', { skip }, async () => {
+  const { noticeText } = await load();
+  const t = noticeText({ id: 1, code: 'uploaded', game: 'Uno', level: 'info', params: {} });
+  assert.equal(t.kind, 'ok');
+  assert.equal(t.code, 'uploaded');
+  assert.equal(noticeText({ id: 1, code: 'queued', game: null, level: 'warning', params: {} }).kind, 'warn');
 });

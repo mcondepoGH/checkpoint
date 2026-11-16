@@ -3,7 +3,7 @@
 Tipos: `refresh` (buscar juegos de Steam, enviarlos al hub y listar los del hub y los instalados que aún no tienen juego
 en el hub: `unconfigured`), `check` (lista de juegos con su estado), `check_one`,
 `sync_game`, `resolve` (resolver un conflicto de datos y sincronizar) y `sync_all`. El trabajo bloqueante corre en un hilo (`asyncio.to_thread`); `close()` lo cancela y espera.
-`snapshot()` es lo único que ve la interfaz: nunca lleva la ruta de los saves ni claves.
+`snapshot()` es lo único que ve la interfaz: nunca lleva claves ni rutas (las carpetas se piden aparte, con `paths()`). Cada juego lleva `last_at` (época de su última sincronización correcta); `sync_all` deja además `plan` y `results` (id -> `{state, code?, files?}`).
 """
 
 import asyncio
@@ -27,8 +27,11 @@ class Jobs:
         log: Callable[[str], None] = lambda _m: None,
         library: Callable[[], List[Tuple[int, str]]] = lambda: [],
         shortcuts: Callable[[], Set[int]] = lambda: set(),
+        on_synced: Callable[[str, Dict[str, Any]], None] = lambda _g, _r: None,
+        last_at: Callable[[str], Optional[Dict[str, Any]]] = lambda _g: None,
     ):
         self._make_engine, self._refresh, self._log, self._library = make_engine, refresh, log, library
+        self._on_synced, self._last_at = on_synced, last_at  # sellos de «última sincronización» (los guarda main.py)
         self._shortcuts_of = shortcuts  # appids de la biblioteca que son atajos de Steam (juegos que no son de Steam)
         self._shortcuts: Set[int] = set()
         self._installed: Optional[List[Tuple[int, str]]] = None  # None = aún no se ha buscado en Steam
@@ -37,6 +40,7 @@ class Jobs:
         self._task: Optional["asyncio.Task[None]"] = None
         self._engine: Any = None
         self._games: List[Dict[str, Any]] = []
+        self._paths: Dict[str, Optional[str]] = {}
         self._reset_run()
 
     def _reset_run(self) -> None:
@@ -53,6 +57,8 @@ class Jobs:
             "error_params": {},
             "error_detail": None,
             "summary": None,
+            "plan": [],  # sync_all: ids de los juegos que se van a recorrer, en orden
+            "results": {},  # sync_all: id -> {state, code?, files?} de lo ya hecho (se conserva hasta la siguiente tarea)
         }
 
     # ---- lectura
@@ -60,15 +66,24 @@ class Jobs:
         with self._lock:
             out = dict(self._s)
             out["error_params"] = dict(out["error_params"])
+            out["plan"] = list(out["plan"])
+            out["results"] = {k: dict(v) for k, v in out["results"].items()}
             out["games"] = [dict(g) for g in self._games]
             out["unconfigured"] = [dict(u) for u in self._unconfigured]
         return out
+
+    def paths(self) -> Dict[str, Optional[str]]:
+        """id -> carpeta que el usuario configuró en el hub para este dispositivo (None sin ruta). Aparte del `snapshot`."""
+        with self._lock:
+            return dict(self._paths)
 
     # ---- arranque
     def start(self, kind: str, game: Optional[str] = None, winner: Optional[str] = None) -> Dict[str, Any]:
         with self._lock:
             if self._s["running"]:
                 snap = dict(self._s)
+                snap["plan"] = list(snap["plan"])
+                snap["results"] = {k: dict(v) for k, v in snap["results"].items()}
                 snap["games"] = [dict(g) for g in self._games]
                 snap["unconfigured"] = [dict(u) for u in self._unconfigured]
                 snap["busy"] = True
@@ -169,6 +184,8 @@ class Jobs:
 
     def _each(self, eng: Any, games: List[Dict[str, Any]], fn: Callable[[Dict[str, Any], int, int], None]) -> None:
         n = len(games)
+        if self._s["kind"] == "sync_all":
+            self._set(plan=[g["id"] for g in games])
         for i, g in enumerate(games):
             if eng.cancelled:
                 break
@@ -183,6 +200,7 @@ class Jobs:
     def _merge(self, games: List[Dict[str, Any]]) -> None:
         with self._lock:
             old = {g["id"]: g for g in self._games}
+            self._paths = {g["id"]: g.get("path") if isinstance(g.get("path"), str) else None for g in games}
             self._games = []
             for g in games:
                 enabled = g.get("enabled", True) is not False
@@ -198,6 +216,7 @@ class Jobs:
                         "appid": g.get("steam_appid"),
                         "enabled": enabled,
                         "state": state,
+                        **({"last_at": st["at"]} if (st := self._last_at(g["id"])) else {}),
                         **{k: old[g["id"]][k] for k in ("code", "params", "last") if g["id"] in old and k in old[g["id"]]},
                     }
                 )
@@ -227,6 +246,8 @@ class Jobs:
     def add_game(self, game: Dict[str, Any]) -> None:
         """Un juego recién creado en el hub: pasa de «sin configurar» a la lista. Sin ruta (no sale del plugin)."""
         with self._lock:
+            if isinstance(game.get("path"), str):
+                self._paths[game["id"]] = game["path"]
             if all(g["id"] != game["id"] for g in self._games):
                 on = game.get("enabled") is not False  # un juego del hub desactivado al que nos unimos sigue desactivado
                 self._games.append(
@@ -241,10 +262,20 @@ class Jobs:
             self._recount()
 
     def _apply(self, res: Dict[str, Any], synced: bool = False) -> None:
+        gid = res.get("game")
+        if synced:
+            try:
+                self._on_synced(gid, res)
+            except Exception:  # noqa: BLE001  (el sello es accesorio: nunca rompe la tarea)
+                self._log("tarea: no se pudo guardar la hora de sincronización")
         with self._lock:
-            e = next((g for g in self._games if g["id"] == res.get("game")), None)
+            if synced and self._s["kind"] == "sync_all" and isinstance(gid, str):
+                self._s["results"][gid] = {k: v for k, v in res.items() if k in ("state", "code", "files")}
+            e = next((g for g in self._games if g["id"] == gid), None)
             if e is None:
                 return
+            if synced and (st := self._last_at(gid)):
+                e["last_at"] = st["at"]
             for k in ("code", "params"):
                 e.pop(k, None)
             state = res["state"]

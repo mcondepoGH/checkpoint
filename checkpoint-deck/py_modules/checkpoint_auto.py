@@ -75,8 +75,10 @@ class AutoSync:
         state_dir: str,
         notices: Notices,
         log: Callable[[str], None] = lambda _m: None,
+        stamp: Callable[[str, Dict[str, Any]], None] = lambda _g, _r: None,
     ):
         self._make_engine, self._dir, self._notices, self._log = make_engine, state_dir, notices, log
+        self._stamp = stamp  # «última sincronización» del juego (solo estado y nº de ficheros)
         self._lock = threading.Lock()
         self._running: Dict[int, float] = {}  # appid -> momento (monotonic) en que se marcó abierto
         s = load_settings(state_dir, STATE_FILE)
@@ -155,6 +157,12 @@ class AutoSync:
                 self._pending.pop(game_id, None)
             self._save()
 
+    def _safe_stamp(self, game_id: str, res: Dict[str, Any]) -> None:
+        try:
+            self._stamp(game_id, res)
+        except Exception:  # noqa: BLE001  (accesorio: nunca rompe la sincronización)
+            self._log("auto: no se pudo guardar la hora de sincronización")
+
     # ---- avisos de un resultado de sincronización
     def _report(self, res: Dict[str, Any], name: str) -> None:
         state = res.get("state")
@@ -204,6 +212,7 @@ class AutoSync:
             self._log(f"auto: abrir appid {appid} ({g['id']}): juego desactivado; no se hace nada")
             return
         res = eng.sync_game(g["id"], games)
+        self._safe_stamp(g["id"], res)
         self._log(f"auto: abierto appid {appid} ({g['id']}): {res.get('state')} {res.get('code') or ''}".rstrip())
         if res.get("state") == "error" and res.get("code") == "connection":
             self._notices.add("offline_open", g["name"], "warning")
@@ -257,6 +266,7 @@ class AutoSync:
     def _finish(self, eng: Any, game_id: str, name: str, games: Optional[List[Dict[str, Any]]]) -> None:
         """Sube lo que toque y avisa del cierre. Si falla por red o hub ocupado, el cierre queda en la cola."""
         res = eng.sync_game(game_id, games)
+        self._safe_stamp(game_id, res)
         self._log(f"auto: cierre de {game_id}: {res.get('state')} {res.get('code') or ''}".rstrip())
         if res.get("state") == "error" and res.get("code") in RETRY_CODES:
             self._queue(game_id, name)

@@ -78,6 +78,8 @@ export interface Toast {
   title: string;
   body: string;
   level: Notice["level"];
+  kind: ToastKind; // icono del toast (éxito separado de info)
+  code: string;
 }
 
 /** Cuerpo del toast: corto (máx. `TOAST_MAX` caracteres, sin punto final); Decky corta los largos. Los detalles de un
@@ -113,7 +115,7 @@ export function noticeText(n: Notice): Toast {
         return line("aviso de Checkpoint");
     }
   })();
-  return { title: "Checkpoint", body, level: n.level };
+  return { title: "Checkpoint", body, level: n.level, kind: noticeKind(n), code: n.code };
 }
 
 type Timers = { setInterval: (f: () => void, ms: number) => unknown; clearInterval: (id: unknown) => void };
@@ -161,4 +163,35 @@ export function startNoticePump(
   };
   const id = timers.setInterval(tick, ms);
   return () => timers.clearInterval(id);
+}
+
+// ---- nivel visual del toast (icono) y juegos abiertos ----
+export type ToastKind = "ok" | "info" | "warn" | "error";
+const OK_CODES = new Set(["uploaded", "downloaded", "up_to_date", "joined"]);
+/** Los toasts de Decky solo admiten título, cuerpo, icono y duración: el nivel se dice con el icono. «Éxito» se separa de «info». */
+export function noticeKind(n: Pick<Notice, "code" | "level">): ToastKind {
+  if (n.level === "error") return "error";
+  if (n.level === "warning") return "warn";
+  return OK_CODES.has(n.code) ? "ok" : "info";
+}
+/** Duración en ms: lo informativo y lo conseguido, poco; los avisos y fallos, más. */
+export const toastDuration = (k: ToastKind): number => (k === "ok" || k === "info" ? 6000 : 12000);
+
+/** Juegos de Steam abiertos ahora (según los eventos de `startGameWatch`), con suscripción para refrescar el panel. */
+export class RunningApps {
+  private apps = new Set<number>();
+  private subs = new Set<() => void>();
+  set(appid: number, running: boolean): void {
+    const had = this.apps.has(appid);
+    if (running) this.apps.add(appid);
+    else this.apps.delete(appid);
+    if (had !== running) this.subs.forEach((f) => f());
+  }
+  snapshot(): ReadonlySet<number> {
+    return new Set(this.apps);
+  }
+  subscribe(f: () => void): () => void {
+    this.subs.add(f);
+    return () => this.subs.delete(f);
+  }
 }

@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { MutableRefObject, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   ButtonItem,
   ConfirmModal,
   DialogButton,
   Field,
+  Focusable,
+  GamepadButton,
   PanelSection,
   PanelSectionRow,
   TextField,
@@ -17,8 +19,102 @@ import { CrashItem, CrashWatch, startCrashWatch } from "./crashwatch";
 import { copyText } from "./clipboard";
 import { drafts } from "./drafts";
 import { CardKind, SaveGame, bestPath, cardKind, gameKey, otherPaths, unconfiguredOnly } from "./suggestions";
-import { Notice, getLastNotice, startGameWatch, startNoticePump } from "./autosync";
+import { Notice, RunningApps, ToastKind, getLastNotice, startGameWatch, startNoticePump } from "./autosync";
 import {
+  Banner,
+  Level,
+  SyncGate,
+  TabInput,
+  Tally,
+  VersionNotifier,
+  banners,
+  canSyncRest,
+  conflictGames,
+  countStates,
+  errorGames,
+  firstPlan,
+  gameBadge,
+  hasUpdate,
+  homeStatus,
+  latestSync,
+  playingGame,
+  progressRows,
+  stepTab,
+  summaryLevel,
+  syncBlockReason,
+  tabDisabled,
+  tabDot,
+  tally,
+  updatedTo,
+  whenText,
+} from "./panel";
+import { BannerList, Bar, MONO, MUTED, RunList, StatusBadge, TONE_COLOR, TabBar, WRAP, showToast } from "./ui";
+import {
+  BANNER,
+  CHANGED_IGNORE,
+  CHANGED_TITLE,
+  CHANGED_VIEW,
+  CHANGE_FOLDER,
+  CHANGE_FOLDER_HELP,
+  COMING_SOON,
+  DETAIL_ERROR,
+  DETAIL_FOLDER_MISSING,
+  DETAIL_HISTORY_NOTE,
+  DETAIL_LAST_COPY,
+  DETAIL_LOADING,
+  DETAIL_NO_COPY,
+  DETAIL_SIZE,
+  FIRST_CHECKING,
+  FIRST_TEXT,
+  FIRST_TITLE,
+  GAME_BACK,
+  GAME_DETAIL,
+  GAME_ENABLED,
+  GAME_ENABLED_HELP,
+  GAME_FOLDER,
+  GAME_LAST_SYNC,
+  GAME_OPEN_HINT,
+  HOME_CONNECTION,
+  HOME_HUB,
+  HOME_NEVER_SYNCED,
+  HOME_LAST_SYNC,
+  HOME_PENDING_NONE,
+  HOME_SEE_SUGGESTIONS,
+  HOME_STATUS,
+  HOME_UNCONF_HELP,
+  HOME_UNCONF_TITLE,
+  LINKED_TOAST,
+  OPEN_NOW,
+  PEND_HIDDEN_HELP,
+  PEND_NONE,
+  PEND_SEE_SUGGESTION,
+  PEND_SHOW_LIST,
+  PEND_TITLE,
+  SYNC_ALL,
+  SYNC_CANCEL,
+  SYNC_CANCELLED_TOAST,
+  SYNC_CUT_TOAST,
+  SYNC_PER_GAME,
+  SYNC_PROGRESS_TITLE,
+  SYNC_REST,
+  TabId,
+  UNLINK_CONFIRM,
+  UNLINK_TOAST,
+  UPDATED_TOAST,
+  VER_AUTO_TOAST,
+  VER_AVAILABLE,
+  VER_CHECK,
+  VER_CHECKING,
+  VER_HOW,
+  VER_INSTALLED,
+  VER_NOT_SELF,
+  VER_PLUGIN,
+  VER_TITLE,
+  firstConfirm,
+  formatDate,
+  formatSize,
+  pendingParts,
+  summaryToast,
   BROWSE_HELP,
   BROWSE_LABEL,
   CHECK_HELP,
@@ -146,6 +242,7 @@ interface GameRow {
   appid: number | null;
   enabled: boolean;
   state: GameStatus;
+  last_at?: number; // época de la última sincronización correcta (la recuerda el plugin)
   code?: string;
   params?: Record<string, unknown>;
   last?: { state: string; files?: number; code?: string };
@@ -170,6 +267,8 @@ interface SyncState {
     unchanged: number;
     ignored: number;
   } | null;
+  plan?: string[]; // sync_all: ids de los juegos que se recorren, en orden
+  results?: Record<string, { state: string; code?: string; files?: number }>; // sync_all: lo hecho por juego
   games: GameRow[];
   unconfigured: { appid: number; name: string; source?: string }[]; // instalados en la Deck sin juego en el hub (tras buscar)
 }
@@ -206,6 +305,27 @@ interface Toggled extends GameFailure {
   enabled?: boolean;
 }
 
+// Carpeta distinta sugerida para un juego ya añadido (`suggest_changes`) y detalle de un juego (`game_detail`)
+interface ChangedItem {
+  game: string;
+  name: string;
+  path: string;
+  size?: number | null;
+  files?: number | null;
+  mtime?: number | null;
+}
+interface GameDetailData {
+  ok: boolean;
+  path?: string | null;
+  folder?: { exists: boolean; size?: number | null; files?: number | null; mtime?: number | null; truncated?: boolean };
+  last?: { at: number; state: string; files?: number } | null;
+}
+
+const EMPTY_SYNC: SyncState = {
+  running: false, kind: null, game: null, phase: null, done: 0, total: 0, index: 0, count: 0, error: null, error_params: {}, error_detail: null,
+  summary: null, plan: [], results: {}, games: [], unconfigured: [],
+};
+
 const getSyncState = callable<[], SyncState>("get_sync_state");
 const refreshLibrary = callable<[], SyncState>("refresh_library");
 const listGames = callable<[], SyncState>("list_games");
@@ -225,6 +345,12 @@ const setPref = callable<[key: string, value: boolean], { ok: boolean; show_unco
 const suggestSaves = callable<[], SaveResult>("suggest_saves");
 const resolveSaveTarget = callable<[source: string, ident: number | string], SaveTarget>("resolve_save_target");
 const applySaveSuggestion = callable<[source: string, ident: number | string, path: string], SaveApplied>("apply_save_suggestion");
+const getCompat = callable<[], { compat: string | null }>("get_compat");
+const ackVersion = callable<[], { ok: boolean; current?: string | null; previous?: string | null }>("ack_version");
+const getGamePaths = callable<[], { ok: boolean; paths: Record<string, string | null> }>("get_game_paths");
+const suggestChanges = callable<[], { ok: boolean; error?: string; items?: ChangedItem[] }>("suggest_changes");
+const ignoreSuggestion = callable<[game: string, path: string], { ok: boolean; error?: string }>("ignore_suggestion");
+const gameDetail = callable<[game: string], GameDetailData>("game_detail");
 const reportError = callable<[message: string], { ok: boolean }>("report_error");
 
 // ---- captura de fallos (mismo patrón que el hub: crashwatch + avisos con detalles saneados) ----
@@ -370,86 +496,6 @@ function describePing(p: Ping): string {
 }
 
 // Texto que se parte en varias líneas (direcciones y rutas largas) en vez de cortarse
-const WRAP = { whiteSpace: "normal", overflowWrap: "anywhere", wordBreak: "break-all" } as const;
-
-function Updates() {
-  const [version, setVersion] = useState<string | null>(null);
-  const [text, setText] = useState<string | null>(null);
-  const [info, setInfo] = useState<UpdateInfo | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [copied, setCopied] = useState<boolean | null>(null);
-  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
-  const copy = async (url: string) => {
-    const ok = await copyText(url);
-    setCopied(ok);
-    if (copyTimer.current) clearTimeout(copyTimer.current);
-    copyTimer.current = setTimeout(() => setCopied(null), 6000);
-  };
-  const offer = info?.state === "available" && !info.reason && !!info.hub_url;
-
-  useEffect(() => {
-    getVersion().then((v) => setVersion(v.version)).catch(capture("versión del plugin"));
-  }, []);
-
-  const check = async () => {
-    setBusy(true);
-    setText("Comprobando…");
-    try {
-      const u = await checkUpdate();
-      setInfo(u);
-      setText(describeUpdate(u));
-    } catch (e) {
-      capture("buscar actualizaciones")(e as Error);
-      setText(describeUpdate({ state: "error", error: "unexpected" }));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <PanelSection title="Actualizaciones">
-      <PanelSectionRow>
-        <Field label="Versión del plugin">{version ?? "?"}</Field>
-      </PanelSectionRow>
-      <PanelSectionRow>
-        <ButtonItem layout="below" disabled={busy} onClick={check}>
-          Buscar actualizaciones
-        </ButtonItem>
-      </PanelSectionRow>
-      {text && (
-        <PanelSectionRow>
-          <div style={WRAP}>{text}</div>
-        </PanelSectionRow>
-      )}
-      {offer && info?.hub_url && (
-        <>
-          <PanelSectionRow>
-            <div style={WRAP}>{UPDATE_STEPS[0]}</div>
-          </PanelSectionRow>
-          <PanelSectionRow>
-            <div style={WRAP}>{UPDATE_STEPS[1]}</div>
-          </PanelSectionRow>
-          <PanelSectionRow>
-            <div style={{ ...WRAP, fontFamily: "monospace", userSelect: "all" }}>{pluginUrl(info.hub_url)}</div>
-          </PanelSectionRow>
-          <PanelSectionRow>
-            <ButtonItem
-              layout="below"
-              description={copied === null ? undefined : copied ? COPY_OK : COPY_FAIL}
-              onClick={() => copy(pluginUrl(info.hub_url!))}
-            >
-              {COPY_BUTTON}
-            </ButtonItem>
-          </PanelSectionRow>
-          <PanelSectionRow>
-            <div style={WRAP}>{UPDATE_STEPS[2]}</div>
-          </PanelSectionRow>
-        </>
-      )}
-    </PanelSection>
-  );
-}
 
 const GAME_STATES: Record<Exclude<GameStatus, "error">, string> = {
   unknown: "Sin comprobar",
@@ -960,61 +1006,508 @@ function SaveSuggestions({ sync, setSync, editing, openForm, closeForm }: Sugges
   );
 }
 
-function Games() {
-  const [sync, setSync] = useState<SyncState | null>(null);
-  const [toggleError, setToggleError] = useState<string | null>(null);
-  const [showUnconfigured, setShowUnconfigured] = useState(true); // se recuerda en prefs.json (main.py)
-  const started = useRef(false);
-  const [editing, setEditing] = useState<Record<number, number>>({}); // formularios «Configurar» abiertos desde las sugerencias (appid -> remontaje)
 
-  // «Revisar y añadir» / «Añadir manualmente»: abre el formulario del juego sin configurar con nombre y carpeta (vacía) y lo remonta; no guarda nada.
-  const openForm = (appid: number, name: string, path: string) => {
-    drafts.set(appid, { open: true, gname: name, path, sug: path ? { ok: true, appid, name, path, candidates: [path], source: "manifest" } : null });
-    setEditing((r) => ({ ...r, [appid]: (r[appid] ?? 0) + 1 }));
-  };
-  const closeForm = (appid: number) =>
-    setEditing((r) => {
-      const { [appid]: _, ...rest } = r;
-      return rest;
-    });
 
-  const poll = useCallback(async () => {
-    const s = await getSyncState();
-    setSync(s);
-    // La primera vez que se abre el panel, se comprueba el estado de los juegos
-    if (!started.current && !s.running && s.games.length === 0 && !s.error) {
-      started.current = true;
-      setSync(await listGames());
-    }
-  }, []);
-
+// ============================================================================================================
+// Panel por pestañas (1.3.0). Todo lo que debe seguir vivo con el plugin cargado (no solo con el panel abierto) vive en
+// este almacén de módulo; los componentes lo leen con `useShared`.
+// ============================================================================================================
+interface Shared {
+  tab: TabId;
+  online: boolean; // última noticia de conexión con el hub (ping, tarea o aviso del backend)
+  compat: string | null; // `plugin_outdated` = este plugin no vale para el hub
+  update: UpdateInfo | null; // última comprobación de versión (manual o automática)
+  version: string | null;
+  firstSync: boolean; // esta Deck se acaba de vincular en esta sesión: falta la primera sincronización
+  summary: Tally | null; // resumen de la última «Sincronizar todo» (banner hasta cerrarlo)
+}
+const shared: Shared = { tab: "home", online: true, compat: null, update: null, version: null, firstSync: false, summary: null };
+const sharedListeners = new Set<() => void>();
+function setShared(p: Partial<Shared>): void {
+  Object.assign(shared, p);
+  sharedListeners.forEach((f) => f());
+}
+function useShared(): Shared {
+  const [, tick] = useState(0);
   useEffect(() => {
+    const f = () => tick((n) => n + 1);
+    sharedListeners.add(f);
+    return () => {
+      sharedListeners.delete(f);
+    };
+  }, []);
+  return shared;
+}
+
+const runningApps = new RunningApps(); // juegos de Steam abiertos ahora (los eventos de `startGameWatch`)
+const versionNotifier = new VersionNotifier();
+
+// ---- versión: aviso automático y «Checkpoint actualizado a X» ----
+function applyUpdate(u: UpdateInfo, auto: boolean): void {
+  setShared({ update: u, ...(u.compat ? { compat: u.compat } : {}) });
+  if (auto && hasUpdate(u) && versionNotifier.shouldToast(u.latest)) showToast("info", VER_AUTO_TOAST(u.latest ?? "?"));
+}
+async function autoCheckUpdate(): Promise<void> {
+  const s = await getState();
+  if (s.status !== "linked") return;
+  applyUpdate(await checkUpdate(), true);
+}
+async function announceVersion(): Promise<void> {
+  const r = await ackVersion();
+  setShared({ version: r.current ?? null });
+  const to = updatedTo(r.previous, r.current);
+  if (to) showToast("ok", UPDATED_TOAST(to));
+}
+
+// ---- vinculación recién hecha: toast y primera sincronización pendiente ----
+let pairTimer: ReturnType<typeof setInterval> | null = null;
+function stopPairWatch(): void {
+  if (pairTimer) clearInterval(pairTimer);
+  pairTimer = null;
+}
+/** Mientras se espera la aceptación en el hub; al aceptarse avisa y, si la Deck no estaba vinculada antes, marca la primera sincronización. */
+function trackPairing(wasLinked: boolean): void {
+  if (pairTimer) return;
+  pairTimer = setInterval(() => {
+    getState()
+      .then((s) => {
+        if (s.status === "waiting") return;
+        stopPairWatch();
+        if (s.status !== "linked") return;
+        setShared({ online: true, ...(wasLinked ? {} : { firstSync: true, summary: null }) });
+        showToast("ok", LINKED_TOAST(s.device ?? s.device_name));
+      })
+      .catch(capture("estado de la vinculación"));
+  }, 1500);
+}
+
+// ---- «Sincronizar todo»: resultado al terminar (toast y banner), aunque el panel esté cerrado ----
+let runWatch: ReturnType<typeof setInterval> | null = null;
+let userCancelled = false;
+function stopRunWatch(): void {
+  if (runWatch) clearInterval(runWatch);
+  runWatch = null;
+}
+function finishRun(s: SyncState): void {
+  const plan = s.plan ?? [];
+  const results = s.results ?? {};
+  if (userCancelled) {
+    userCancelled = false;
+    setShared({ summary: null });
+    showToast("info", SYNC_CANCELLED_TOAST);
+    return;
+  }
+  if (s.error === "plugin_outdated") {
+    setShared({ compat: "plugin_outdated" });
+    showToast("error", HOME_STATUS.outdated);
+    return;
+  }
+  if (plan.length === 0) {
+    if (s.error === "connection") setShared({ online: false });
+    if (s.error) showToast(s.error === "connection" ? "warn" : "error", s.error === "connection" ? HOME_STATUS.offline : BANNER.failedTitle.replace(/\.$/, ""));
+    return;
+  }
+  const t = tally(plan, results);
+  const offline = Object.values(results).some((r) => r.code === "connection");
+  setShared({ summary: t, online: !offline, ...(t.interrupted ? {} : { firstSync: false }) });
+  if (t.interrupted) showToast("warn", SYNC_CUT_TOAST);
+  else showToast(LEVEL_KIND[summaryLevel(t)], summaryToast(t));
+}
+function watchRun(): void {
+  if (runWatch) return;
+  runWatch = setInterval(() => {
+    getSyncState()
+      .then((s) => {
+        if (s.running) return;
+        stopRunWatch();
+        finishRun(s);
+      })
+      .catch(capture("seguimiento de la sincronización"));
+  }, 1000);
+}
+const LEVEL_KIND: Record<Level, ToastKind> = { ok: "ok", info: "info", warn: "warn", error: "error" };
+/** Lanza `sync_all` (también «los demás juegos»: el backend deja el juego abierto como «game_running», que no cuenta como error). */
+function startAll(): Promise<SyncState> {
+  userCancelled = false;
+  setShared({ summary: null });
+  const p = syncAll();
+  watchRun();
+  return p;
+}
+function cancelAll(): Promise<SyncState> {
+  userCancelled = true;
+  return cancelSync();
+}
+
+// ---- estado de la tarea de fondo, compartido por todas las pestañas (una sola consulta por segundo) ----
+function useSync(enabled: boolean): [SyncState | null, (s: SyncState) => void, MutableRefObject<boolean>] {
+  const [sync, setSync] = useState<SyncState | null>(null);
+  const started = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!enabled) return;
+    const poll = async () => {
+      const s = await getSyncState();
+      if (!mounted.current) return;
+      setSync(s);
+      // La primera vez que se abre el panel, se comprueba el estado de los juegos
+      if (!started.current && !s.running && s.games.length === 0 && !s.error) {
+        started.current = true;
+        const l = await listGames();
+        if (mounted.current) setSync(l);
+      }
+    };
     poll().catch(capture("estado de los juegos"));
     const t = setInterval(() => poll().catch(capture("estado de los juegos")), 1000);
     return () => clearInterval(t);
-  }, [poll]);
+  }, [enabled]);
+  return [sync, setSync, mounted];
+}
 
+async function waitIdle(mounted: MutableRefObject<boolean>): Promise<SyncState | null> {
+  for (let i = 0; i < 600 && mounted.current; i++) {
+    const s = await getSyncState();
+    if (!s.running) return s;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return null;
+}
+
+interface Ctx {
+  state: State;
+  sync: SyncState;
+  setSync: (s: SyncState) => void;
+  sh: Shared;
+  playing: string | null;
+  outdated: boolean;
+  online: boolean;
+  gate: SyncGate;
+  preparing: boolean;
+  setTab: (t: TabId) => void;
+  syncAllClick: () => void;
+  syncRestClick: () => void;
+  cancel: () => void;
+  run: (f: () => Promise<SyncState>) => () => void;
+  names: Record<string, string>;
+}
+
+// Tarjeta de una tarea en marcha: texto, barra, lista por juego (solo en «Sincronizar todo») y Cancelar
+function RunCard({ ctx }: { ctx: Ctx }) {
+  const { sync } = ctx;
+  const pct = sync.total > 0 ? (sync.done / sync.total) * 100 : 0;
+  const all = sync.kind === "sync_all" && (sync.plan?.length ?? 0) > 1;
+  return (
+    <PanelSection title={SYNC_PROGRESS_TITLE}>
+      <PanelSectionRow>
+        <div style={WRAP}>{progressText(sync, sync.games)}</div>
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <Bar pct={pct} />
+      </PanelSectionRow>
+      {all && (
+        <PanelSectionRow>
+          <div style={{ width: "100%" }}>
+            <div style={MUTED}>{SYNC_PER_GAME}</div>
+            <RunList rows={progressRows(sync.plan ?? [], sync.results ?? {}, sync.game, ctx.names, false)} />
+          </div>
+        </PanelSectionRow>
+      )}
+      <PanelSectionRow>
+        <ButtonItem layout="below" onClick={ctx.cancel}>
+          {SYNC_CANCEL}
+        </ButtonItem>
+      </PanelSectionRow>
+    </PanelSection>
+  );
+}
+
+// «Sincronizar todo» + qué hay pendiente + «Sincronizar los demás juegos» si hay un juego abierto
+function SyncBlock({ ctx }: { ctx: Ctx }) {
+  const why = syncBlockReason(ctx.gate);
+  const c = countStates(ctx.sync.games);
+  const parts = pendingParts(c);
+  const syncable = ctx.sync.games.some((g) => g.enabled);
+  return (
+    <PanelSection>
+      <PanelSectionRow>
+        <ButtonItem layout="below" disabled={!!why || ctx.preparing || !syncable} onClick={ctx.syncAllClick} description={why ?? (parts.length ? parts.join(" · ") : HOME_PENDING_NONE)}>
+          {ctx.preparing ? FIRST_CHECKING : SYNC_ALL}
+        </ButtonItem>
+      </PanelSectionRow>
+      {canSyncRest(ctx.gate) && (
+        <PanelSectionRow>
+          <ButtonItem layout="below" onClick={ctx.syncRestClick}>
+            {SYNC_REST}
+          </ButtonItem>
+        </PanelSectionRow>
+      )}
+    </PanelSection>
+  );
+}
+
+// ---- Inicio ----
+function HomeTab({ ctx, form }: { ctx: Ctx; form: ReactNode }) {
+  const { state, sync, sh } = ctx;
+  const [ping, setPing] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState(getLastNotice());
   useEffect(() => {
-    getPrefs()
-      .then((r) => {
-        if (r?.ok && typeof r.show_unconfigured === "boolean") setShowUnconfigured(r.show_unconfigured);
-      })
-      .catch(capture("preferencias"));
+    const t = setInterval(() => setNotice(getLastNotice()), 1000);
+    return () => clearInterval(t);
   }, []);
+  const check = async () => {
+    setBusy(true);
+    setPing(VER_CHECKING);
+    try {
+      const p = await testConnection();
+      setPing(describePing(p));
+      setShared({ ...(p.result === "connection" ? { online: false } : p.result === "ok" ? { online: true } : {}), ...(p.compat ? { compat: p.compat } : {}) });
+    } catch (e) {
+      capture("probar la conexión")(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const badge = homeStatus({
+    link: state.status,
+    online: ctx.online,
+    outdated: ctx.outdated,
+    playing: ctx.playing,
+    running: sync.running,
+    conflicts: conflictGames(sync.games).length,
+    errors: errorGames(sync.games).length,
+  });
+  const pend = sync.unconfigured.length;
+  return (
+    <>
+      <CrashNotices />
+      <PanelSection title="Dispositivo">
+        <PanelSectionRow>
+          <Field label={state.device ?? state.device_name} description={describe(state)} focusable>
+            <StatusBadge badge={badge} />
+          </Field>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <div style={MUTED}>{HOME_HUB(state.hub_url)}</div>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <div style={MUTED}>{(() => { const at = latestSync(sync.games); return at === null ? HOME_NEVER_SYNCED : HOME_LAST_SYNC(whenText(at)); })()}</div>
+        </PanelSectionRow>
+      </PanelSection>
+      {sync.running ? <RunCard ctx={ctx} /> : sh.firstSync && !sh.summary ? (
+        <PanelSection title={FIRST_TITLE}>
+          <PanelSectionRow>
+            <div style={WRAP}>{FIRST_TEXT}</div>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <ButtonItem layout="below" disabled={!!syncBlockReason(ctx.gate) || ctx.preparing} onClick={ctx.syncAllClick} description={syncBlockReason(ctx.gate) ?? undefined}>
+              {ctx.preparing ? FIRST_CHECKING : SYNC_ALL}
+            </ButtonItem>
+          </PanelSectionRow>
+        </PanelSection>
+      ) : <SyncBlock ctx={ctx} />}
+      {pend > 0 && (
+        <PanelSection title={HOME_UNCONF_TITLE(pend)}>
+          <PanelSectionRow>
+            <div style={WRAP}>{HOME_UNCONF_HELP}</div>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <ButtonItem layout="below" onClick={() => ctx.setTab("sugg")}>
+              {HOME_SEE_SUGGESTIONS}
+            </ButtonItem>
+          </PanelSectionRow>
+        </PanelSection>
+      )}
+      <PanelSection title="Avisos">
+        <PanelSectionRow>
+          <div style={WRAP}>{lastNoticeText(notice)}</div>
+        </PanelSectionRow>
+      </PanelSection>
+      <PanelSection title={HOME_CONNECTION}>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={busy} onClick={check}>
+            Probar conexión
+          </ButtonItem>
+        </PanelSectionRow>
+        {ping && (
+          <PanelSectionRow>
+            <div role="status" style={WRAP}>{ping}</div>
+          </PanelSectionRow>
+        )}
+      </PanelSection>
+      {form}
+    </>
+  );
+}
 
-  const changeShowUnconfigured = (on: boolean) => {
-    setShowUnconfigured(on);
-    setPref("show_unconfigured", on)
+// ---- Juegos ----
+type Changed = ChangedItem;
+
+function GameDetail({ ctx, g, changed, onBack, onIgnore, toggle }: { ctx: Ctx; g: GameRow; changed: Changed | undefined; onBack: () => void; onIgnore: (c: Changed) => void; toggle: (g: GameRow, on: boolean) => void }) {
+  const [d, setD] = useState<GameDetailData | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    gameDetail(g.id)
       .then((r) => {
-        if (!r.ok) setShowUnconfigured(!on);
+        if (live) (r.ok ? setD(r) : setFailed(true));
       })
       .catch((e) => {
-        capture("guardar la preferencia")(e);
-        setShowUnconfigured(!on);
+        capture("detalle del juego")(e);
+        if (live) setFailed(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, [g.id]);
+  const busy = ctx.sync.running;
+  const badge = gameBadge(g.state, g.enabled);
+  const f = d?.folder;
+  const can = !busy && g.enabled && ctx.playing !== g.name && !syncBlockReason({ ...ctx.gate, playing: null }) && ["unknown", "up_to_date", "upload", "download", "error"].includes(g.state);
+  return (
+    <>
+      <PanelSection title={g.name}>
+        <PanelSectionRow>
+          <Field label={badge.label} description={g.enabled ? gameText(g) : "Desactivado"} focusable>
+            <StatusBadge badge={badge} />
+          </Field>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ToggleField label={GAME_ENABLED} description={GAME_ENABLED_HELP} checked={g.enabled} disabled={busy} onChange={(on: boolean) => toggle(g, on)} />
+        </PanelSectionRow>
+      </PanelSection>
+      <PanelSection title={GAME_FOLDER}>
+        <PanelSectionRow>
+          <div style={MONO}>{d?.path ?? "—"}</div>
+        </PanelSectionRow>
+        {!d && !failed && <PanelSectionRow>{DETAIL_LOADING}</PanelSectionRow>}
+        {failed && <PanelSectionRow>{DETAIL_ERROR}</PanelSectionRow>}
+        {d && f && !f.exists && <PanelSectionRow>{DETAIL_FOLDER_MISSING}</PanelSectionRow>}
+        {f?.exists && (
+          <PanelSectionRow>
+            <Field label={DETAIL_SIZE} focusable>
+              {`${formatSize(f.size)} · ${f.files ?? 0}${f.truncated ? "+" : ""} ${f.files === 1 && !f.truncated ? "fichero" : "ficheros"}`}
+            </Field>
+          </PanelSectionRow>
+        )}
+        {f?.exists && (
+          <PanelSectionRow>
+            <Field label="Modificada" focusable>
+              {formatDate(f.mtime)}
+            </Field>
+          </PanelSectionRow>
+        )}
+        {d && (
+          <PanelSectionRow>
+            <Field label={DETAIL_LAST_COPY} focusable>
+              {d.last ? whenText(d.last.at) : DETAIL_NO_COPY}
+            </Field>
+          </PanelSectionRow>
+        )}
+        <PanelSectionRow>
+          <div style={MUTED}>{DETAIL_HISTORY_NOTE}</div>
+        </PanelSectionRow>
+      </PanelSection>
+      {changed && (
+        <PanelSection>
+          <PanelSectionRow>
+            <div style={{ ...WRAP, borderLeft: `4px solid ${TONE_COLOR.info}`, paddingLeft: 8 }}>
+              <b>{CHANGED_TITLE}</b>
+              <div style={MONO}>{changed.path}</div>
+              <div style={MUTED}>{`${formatSize(changed.size)} · ${changed.files ?? 0} ficheros · ${formatDate(changed.mtime)}`}</div>
+            </div>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <ButtonItem layout="below" onClick={() => onIgnore(changed)}>
+              {CHANGED_IGNORE}
+            </ButtonItem>
+          </PanelSectionRow>
+        </PanelSection>
+      )}
+      <PanelSection>
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled={!can} onClick={ctx.run(() => syncGame(g.id))}>
+            Sincronizar
+          </ButtonItem>
+        </PanelSectionRow>
+        {/* FASE 2: cambiar la carpeta de un juego ya configurado necesita backend y hub; el hueco queda desactivado a propósito */}
+        <PanelSectionRow>
+          <ButtonItem layout="below" disabled description={CHANGE_FOLDER_HELP} onClick={() => undefined}>
+            {`${CHANGE_FOLDER} · ${COMING_SOON}`}
+          </ButtonItem>
+        </PanelSectionRow>
+        <PanelSectionRow>
+          <ButtonItem layout="below" onClick={onBack}>
+            {GAME_BACK}
+          </ButtonItem>
+        </PanelSectionRow>
+      </PanelSection>
+    </>
+  );
+}
+
+function GamesTab({ ctx }: { ctx: Ctx }) {
+  const { sync, setSync } = ctx;
+  const [toggleError, setToggleError] = useState<string | null>(null);
+  const [paths, setPaths] = useState<Record<string, string | null>>({});
+  const [changes, setChanges] = useState<Record<string, Changed>>({});
+  const [detail, setDetail] = useState<string | null>(null);
+  const busy = sync.running;
+
+  // Carpetas configuradas (se piden aparte: el estado de la tarea no lleva rutas) y carpetas distintas sugeridas
+  const ids = sync.games.map((g) => g.id).join(",");
+  const askedChanges = useRef("");
+  useEffect(() => {
+    if (busy || ids === "") return;
+    let live = true;
+    getGamePaths()
+      .then((r) => {
+        if (live && r.ok) setPaths(r.paths);
+      })
+      .catch(capture("carpetas de los juegos"));
+    if (askedChanges.current === ids) return () => { live = false; }; // el escaneo del manifiesto es lo más caro: una vez por lista de juegos
+    askedChanges.current = ids;
+    suggestChanges()
+      .then((r) => {
+        if (live && r.ok) setChanges(Object.fromEntries((r.items ?? []).map((c) => [c.game, c])));
+      })
+      .catch(capture("carpetas distintas sugeridas"));
+    return () => {
+      live = false;
+    };
+  }, [ids, busy]);
+
+  const toggle = (g: GameRow, on: boolean) => {
+    setToggleError(null);
+    const put = (enabled: boolean) => setSync({ ...sync, games: sync.games.map((x) => (x.id === g.id ? { ...x, enabled } : x)) });
+    put(on); // se refleja ya en pantalla; si el hub no lo acepta se deshace y se explica
+    setGameEnabled(g.id, on)
+      .then((r) => {
+        if (!r.ok) {
+          setToggleError(`${g.name}: ${gameError(r)}`);
+          put(!on);
+        }
+      })
+      .catch((e) => {
+        capture("activar o desactivar un juego")(e);
+        setToggleError(`${g.name}: ${gameError({ error: "unexpected" })}`);
+        put(!on);
       });
   };
 
-  const run = (f: () => Promise<SyncState>) => () => f().then(setSync).catch(capture("acción sobre los juegos"));
+  const ignore = (c: Changed) => {
+    setChanges((m) => {
+      const { [c.game]: _, ...rest } = m;
+      return rest;
+    });
+    ignoreSuggestion(c.game, c.path).catch(capture("ignorar la sugerencia"));
+  };
 
   // Conflicto de datos: pide confirmar (el cambio sobrescribe un lado) y entonces resuelve y sincroniza al momento
   const askResolve = (g: GameRow, winner: "hub" | "device") => {
@@ -1026,104 +1519,57 @@ function Games() {
         strOKButtonText={c.ok}
         strCancelButtonText="Cancelar"
         onOK={() => {
-          run(() => resolveConflict(g.id, winner))();
+          ctx.run(() => resolveConflict(g.id, winner))();
         }}
       />,
     );
   };
 
-  const toggle = (g: GameRow, on: boolean) => {
-    setToggleError(null);
-    // Se refleja ya en pantalla; si el hub no lo acepta se deshace y se explica
-    setSync((s) => (s ? { ...s, games: s.games.map((x) => (x.id === g.id ? { ...x, enabled: on } : x)) } : s));
-    setGameEnabled(g.id, on)
-      .then((r) => {
-        if (!r.ok) {
-          setToggleError(`${g.name}: ${gameError(r)}`);
-          setSync((s) => (s ? { ...s, games: s.games.map((x) => (x.id === g.id ? { ...x, enabled: !on } : x)) } : s));
-        }
-      })
-      .catch((e) => {
-        capture("activar o desactivar un juego")(e);
-        setToggleError(`${g.name}: ${gameError({ error: "unexpected" })}`);
-        setSync((s) => (s ? { ...s, games: s.games.map((x) => (x.id === g.id ? { ...x, enabled: !on } : x)) } : s));
-      });
-  };
+  const open = detail ? sync.games.find((g) => g.id === detail) : undefined;
+  if (open) return <GameDetail ctx={ctx} g={open} changed={changes[open.id]} onBack={() => setDetail(null)} onIgnore={ignore} toggle={toggle} />;
 
-  // Sin fugas: los borradores de juegos que ya no están en «Sin configurar» se descartan (los que siguen no se tocan)
-  const unconfiguredIds = sync?.unconfigured?.map((u) => u.appid);
-  useEffect(() => {
-    if (unconfiguredIds) drafts.prune(unconfiguredIds);
-  }, [unconfiguredIds?.join(",")]);
-
-  if (!sync) {
-    return (
-      <PanelSection title="Juegos">
-        <PanelSectionRow>Cargando…</PanelSectionRow>
-      </PanelSection>
-    );
-  }
-  const busy = sync.running;
-  const canSync = (g: GameRow) =>
-    !busy && g.enabled && ["unknown", "up_to_date", "upload", "download", "error"].includes(g.state);
-  const syncable = sync.games.some(canSync);
-  const unconfigured = unconfiguredView(showUnconfigured, sync.unconfigured.length); // el conteo se sigue calculando
-
+  // Con un juego abierto solo ese no se sincroniza a mano (se sincroniza solo al cerrarlo); el resto sí
+  const canSync = (g: GameRow) => !busy && g.enabled && ctx.playing !== g.name && !syncBlockReason({ ...ctx.gate, playing: null }) && ["unknown", "up_to_date", "upload", "download", "error"].includes(g.state);
   return (
     <>
-      <PanelSection title="Juegos">
+      <PanelSection title="Juegos en el hub">
         <PanelSectionRow>{GAMES_INTRO}</PanelSectionRow>
+      </PanelSection>
+      {busy ? <RunCard ctx={ctx} /> : <SyncBlock ctx={ctx} />}
+      <PanelSection>
         <PanelSectionRow>
-          <ButtonItem layout="below" disabled={busy} onClick={run(refreshLibrary)} description={SEARCH_HELP}>
+          <ButtonItem layout="below" disabled={busy || !ctx.online} onClick={ctx.run(refreshLibrary)} description={SEARCH_HELP}>
             {SEARCH_LABEL}
           </ButtonItem>
         </PanelSectionRow>
         {sync.summary && sync.kind === "refresh" && (
           <PanelSectionRow>
-            Encontrados {sync.summary.found} juegos en la Deck. Asociados ahora: {sync.summary.associated}.
-            Ya estaban asociados: {sync.summary.unchanged}. Pendientes de aceptar en el hub:{" "}
+            Encontrados {sync.summary.found} juegos en la Deck. Asociados ahora: {sync.summary.associated}. Ya estaban asociados: {sync.summary.unchanged}. Pendientes de aceptar en el hub:{" "}
             {sync.summary.suggested}. Sin coincidencia en el hub: {sync.summary.ignored}.
           </PanelSectionRow>
-        )}
-        {busy && (
-          <>
-            <PanelSectionRow>{progressText(sync, sync.games)}</PanelSectionRow>
-            <PanelSectionRow>
-              <ButtonItem layout="below" onClick={() => cancelSync().then(setSync).catch(capture("cancelar"))}>
-                Cancelar
-              </ButtonItem>
-            </PanelSectionRow>
-          </>
         )}
         {!busy && sync.error && <PanelSectionRow>{syncError(sync.error, sync.error_params)}</PanelSectionRow>}
         {!busy && sync.error && sync.error_detail && <PanelSectionRow>Detalle: {sync.error_detail}</PanelSectionRow>}
         <PanelSectionRow>
-          <ButtonItem layout="below" disabled={busy} onClick={run(listGames)} description={CHECK_HELP}>
+          <ButtonItem layout="below" disabled={busy || !ctx.online} onClick={ctx.run(listGames)} description={CHECK_HELP}>
             {CHECK_LABEL}
           </ButtonItem>
         </PanelSectionRow>
-        <PanelSectionRow>
-          <ToggleField
-            label={SHOW_UNCONFIGURED_LABEL}
-            description={SHOW_UNCONFIGURED_HELP}
-            checked={showUnconfigured}
-            onChange={changeShowUnconfigured}
-          />
-        </PanelSectionRow>
       </PanelSection>
-
-      <SaveSuggestions sync={sync} setSync={setSync} editing={editing} openForm={openForm} closeForm={closeForm} />
-
-      <PanelSection title="Juegos en el hub">
+      <PanelSection>
         {sync.games.length === 0 && !busy && !sync.error && (
-          <PanelSectionRow>
-            Ningún juego de esta Deck en el hub. Busca juegos de Steam: podrás configurar aquí los que falten.
-          </PanelSectionRow>
+          <PanelSectionRow>Ningún juego de esta Deck en el hub. Busca juegos de Steam: podrás configurar aquí los que falten.</PanelSectionRow>
         )}
         {sync.games.length > 0 && <PanelSectionRow>{TOGGLE_HELP}</PanelSectionRow>}
         {toggleError && <PanelSectionRow>{toggleError}</PanelSectionRow>}
-        {sync.games.map((g) => (
-          <div key={g.id}>
+      </PanelSection>
+      {sync.games.map((g) => {
+        const badge = gameBadge(g.state, g.enabled);
+        const path = paths[g.id];
+        const ch = changes[g.id];
+        const openNow = ctx.playing === g.name;
+        return (
+          <PanelSection key={g.id}>
             <PanelSectionRow>
               <ToggleField
                 label={g.name}
@@ -1133,7 +1579,26 @@ function Games() {
                 onChange={(on: boolean) => toggle(g, on)}
               />
             </PanelSectionRow>
+            <PanelSectionRow>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {openNow && <StatusBadge badge={{ tone: "info", label: OPEN_NOW }} />}
+                <StatusBadge badge={badge} />
+              </div>
+            </PanelSectionRow>
+            {path && (
+              <PanelSectionRow>
+                <div style={{ width: "100%" }}>
+                  <div style={MUTED}>{GAME_FOLDER}</div>
+                  <div style={MONO}>{path}</div>
+                </div>
+              </PanelSectionRow>
+            )}
             {lastText(g) && <PanelSectionRow>{lastText(g)}</PanelSectionRow>}
+            {g.last_at && (
+              <PanelSectionRow>
+                <div style={MUTED}>{GAME_LAST_SYNC(whenText(g.last_at))}</div>
+              </PanelSectionRow>
+            )}
             {g.enabled && g.state === "conflict" && (
               <>
                 <PanelSectionRow>{RESOLVE_HELP}</PanelSectionRow>
@@ -1146,60 +1611,385 @@ function Games() {
                 ))}
               </>
             )}
+            {ch && (
+              <>
+                <PanelSectionRow>
+                  <div style={{ ...WRAP, borderLeft: `4px solid ${TONE_COLOR.info}`, paddingLeft: 8 }}>
+                    <b>{CHANGED_TITLE}</b>
+                    <div style={MONO}>{ch.path}</div>
+                  </div>
+                </PanelSectionRow>
+                <PanelSectionRow>
+                  <ButtonItem layout="below" onClick={() => setDetail(g.id)}>
+                    {CHANGED_VIEW}
+                  </ButtonItem>
+                </PanelSectionRow>
+                <PanelSectionRow>
+                  <ButtonItem layout="below" onClick={() => ignore(ch)}>
+                    {CHANGED_IGNORE}
+                  </ButtonItem>
+                </PanelSectionRow>
+              </>
+            )}
             <PanelSectionRow>
-              <ButtonItem layout="below" disabled={!canSync(g)} onClick={run(() => syncGame(g.id))}>
+              <ButtonItem layout="below" disabled={!canSync(g) || g.state === "conflict"} onClick={ctx.run(() => syncGame(g.id))}>
                 Sincronizar
               </ButtonItem>
             </PanelSectionRow>
-          </div>
-        ))}
-        {sync.games.length > 1 && (
+            {openNow && <PanelSectionRow>{GAME_OPEN_HINT}</PanelSectionRow>}
+            <PanelSectionRow>
+              <ButtonItem layout="below" onClick={() => setDetail(g.id)}>
+                {GAME_DETAIL}
+              </ButtonItem>
+            </PanelSectionRow>
+          </PanelSection>
+        );
+      })}
+      {sync.games.length > 1 && (
+        <PanelSection>
           <PanelSectionRow>
-            <ButtonItem layout="below" disabled={!syncable} onClick={run(syncAll)}>
-              Sincronizar todo
+            <ButtonItem layout="below" disabled={busy || !!syncBlockReason(ctx.gate) || ctx.preparing} onClick={ctx.syncAllClick}>
+              {SYNC_ALL}
             </ButtonItem>
           </PanelSectionRow>
-        )}
-      </PanelSection>
-
-      {unconfigured.hiddenNote && (
-        <PanelSection>
-          <PanelSectionRow>{unconfigured.hiddenNote}</PanelSectionRow>
-        </PanelSection>
-      )}
-      {unconfigured.showList && (
-        <PanelSection title="Sin configurar en el hub">
-          <PanelSectionRow>{UNCONFIGURED_HELP}</PanelSectionRow>
-          {sync.unconfigured.some((u) => u.source === "shortcut") && <PanelSectionRow>{SHORTCUT_HELP}</PanelSectionRow>}
-          {sync.unconfigured.filter((u) => !(u.appid in editing)).map((u) => (
-            <UnconfiguredGame key={u.appid} appid={u.appid} name={u.name} source={u.source} disabled={busy} onDone={setSync} />
-          ))}
         </PanelSection>
       )}
     </>
   );
 }
 
-// Último aviso entregado por el auto-sync (solo texto: nunca rutas ni claves)
-function AutoPanel() {
-  const [last, setLast] = useState(getLastNotice());
-  useEffect(() => {
-    const t = setInterval(() => setLast(getLastNotice()), 1000);
-    return () => clearInterval(t);
-  }, []);
+// ---- Pendientes (sin configurar en el hub) ----
+function PendTab({ ctx, showUnconfigured, onShow, editing }: { ctx: Ctx; showUnconfigured: boolean; onShow: () => void; editing: Record<number, number> }) {
+  const { sync, setSync } = ctx;
+  const list = sync.unconfigured.filter((u) => !(u.appid in editing));
+  const view = unconfiguredView(showUnconfigured, sync.unconfigured.length);
   return (
-    <PanelSection title="Avisos">
-      <PanelSectionRow>
-        <Field label="Último aviso" focusable />
-      </PanelSectionRow>
-      <PanelSectionRow>
-        <div style={WRAP}>{lastNoticeText(last)}</div>
-      </PanelSectionRow>
+    <PanelSection title={PEND_TITLE}>
+      {view.hiddenNote && (
+        <>
+          <PanelSectionRow>{view.hiddenNote}</PanelSectionRow>
+          <PanelSectionRow>
+            <ButtonItem layout="below" description={PEND_HIDDEN_HELP} onClick={onShow}>
+              {PEND_SHOW_LIST}
+            </ButtonItem>
+          </PanelSectionRow>
+        </>
+      )}
+      {!view.showList && !view.hiddenNote && <PanelSectionRow>{PEND_NONE}</PanelSectionRow>}
+      {view.showList && (
+        <>
+          <PanelSectionRow>{UNCONFIGURED_HELP}</PanelSectionRow>
+          {sync.unconfigured.some((u) => u.source === "shortcut") && <PanelSectionRow>{SHORTCUT_HELP}</PanelSectionRow>}
+          {list.map((u) => (
+            <div key={u.appid}>
+              <UnconfiguredGame appid={u.appid} name={u.name} source={u.source} disabled={sync.running} onDone={setSync} />
+              <PanelSectionRow>
+                <ButtonItem layout="below" onClick={() => ctx.setTab("sugg")}>
+                  {PEND_SEE_SUGGESTION}
+                </ButtonItem>
+              </PanelSectionRow>
+            </div>
+          ))}
+        </>
+      )}
     </PanelSection>
   );
 }
 
+// ---- Versión ----
+function VersionTab({ ctx }: { ctx: Ctx }) {
+  const { sh } = ctx;
+  const [text, setText] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState<boolean | null>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
+  const info = sh.update;
+  const copy = async (url: string) => {
+    const ok = await copyText(url);
+    setCopied(ok);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(null), 6000);
+  };
+  const offer = info?.state === "available" && !info.reason && !!info.hub_url;
+  const avail = hasUpdate(info);
+  const check = async () => {
+    setBusy(true);
+    setText(VER_CHECKING);
+    try {
+      const u = await checkUpdate();
+      applyUpdate(u, true);
+      setText(describeUpdate(u));
+    } catch (e) {
+      capture("buscar actualizaciones")(e as Error);
+      setText(describeUpdate({ state: "error", error: "unexpected" }));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <PanelSection title={VER_TITLE}>
+      {avail ? (
+        <PanelSectionRow>
+          <Focusable style={{ display: "flex", gap: 16, alignItems: "center", justifyContent: "center", width: "100%" }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={MUTED}>{VER_INSTALLED}</div>
+              <b style={{ fontFamily: "monospace" }}>{info?.current ?? sh.version ?? "?"}</b>
+            </div>
+            <span aria-hidden="true">→</span>
+            <div style={{ textAlign: "center" }}>
+              <div style={MUTED}>{VER_AVAILABLE}</div>
+              <b style={{ fontFamily: "monospace", color: TONE_COLOR.info }}>{info?.latest}</b>
+            </div>
+          </Focusable>
+        </PanelSectionRow>
+      ) : (
+        <PanelSectionRow>
+          <Field label={VER_PLUGIN} focusable>
+            {sh.version ?? info?.current ?? "?"}
+          </Field>
+        </PanelSectionRow>
+      )}
+      <PanelSectionRow>
+        <ButtonItem layout="below" disabled={busy} onClick={check}>
+          {VER_CHECK}
+        </ButtonItem>
+      </PanelSectionRow>
+      {(text ?? (info ? describeUpdate(info) : null)) && (
+        <PanelSectionRow>
+          <div role="status" style={WRAP}>{text ?? describeUpdate(info as UpdateInfo)}</div>
+        </PanelSectionRow>
+      )}
+      {ctx.outdated && !avail && (
+        <PanelSectionRow>
+          <div style={{ ...WRAP, color: TONE_COLOR.err }}>{describeCompat("plugin_outdated")}</div>
+        </PanelSectionRow>
+      )}
+      {(offer || ctx.outdated) && info?.hub_url && (
+        <>
+          <PanelSectionRow>
+            <div style={{ ...WRAP, fontWeight: 700 }}>{VER_HOW}</div>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <div style={WRAP}>{UPDATE_STEPS[0]}</div>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <div style={WRAP}>{UPDATE_STEPS[1]}</div>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <div style={{ ...WRAP, fontFamily: "monospace", userSelect: "all" }}>{pluginUrl(info.hub_url)}</div>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <ButtonItem layout="below" description={copied === null ? undefined : copied ? COPY_OK : COPY_FAIL} onClick={() => copy(pluginUrl(info.hub_url!))}>
+              {COPY_BUTTON}
+            </ButtonItem>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <div style={WRAP}>{UPDATE_STEPS[2]}</div>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <div style={MUTED}>{VER_NOT_SELF}</div>
+          </PanelSectionRow>
+        </>
+      )}
+    </PanelSection>
+  );
+}
+
+// ---- Ajustes ----
+function SettingsTab(p: {
+  ctx: Ctx;
+  url: string;
+  setUrl: (v: string) => void;
+  urlError: string | null;
+  name: string;
+  setName: (v: string) => void;
+  nameError: string | null;
+  busy: boolean;
+  saveName: () => void;
+  showUnconfigured: boolean;
+  changeShowUnconfigured: (on: boolean) => void;
+  lookup: boolean;
+  changeLookup: (on: boolean) => void;
+  link: () => void;
+  check: () => void;
+  ping: string | null;
+  askUnlink: () => void;
+}) {
+  const { state } = p.ctx;
+  const waiting = state.status === "waiting";
+  const linked = state.status === "linked";
+  return (
+    <>
+      <PanelSection title="Juegos">
+        <PanelSectionRow>
+          <ToggleField label={SHOW_UNCONFIGURED_LABEL} description={SHOW_UNCONFIGURED_HELP} checked={p.showUnconfigured} onChange={p.changeShowUnconfigured} />
+        </PanelSectionRow>
+      </PanelSection>
+      <PanelSection title={SAVES_TITLE}>
+        <PanelSectionRow>
+          <ToggleField label={SAVES_LOOKUP_LABEL} description={SAVES_LOOKUP_HELP} checked={p.lookup} onChange={p.changeLookup} />
+        </PanelSectionRow>
+      </PanelSection>
+      <PanelSection title="Hub">
+        <PanelSectionRow>
+          <TextField label="Dirección del hub" description="Por ejemplo http://192.168.1.10:8088" value={p.url} disabled={waiting} onChange={(e) => p.setUrl(e.target.value)} />
+        </PanelSectionRow>
+        {p.urlError && <PanelSectionRow>{p.urlError}</PanelSectionRow>}
+      </PanelSection>
+      <PanelSection title="Este dispositivo">
+        <PanelSectionRow>
+          <TextField label="Nombre de este dispositivo" description={NAME_HELP} value={p.name} disabled={waiting} onChange={(e) => p.setName(e.target.value)} />
+        </PanelSectionRow>
+        {p.nameError && <PanelSectionRow>{p.nameError}</PanelSectionRow>}
+        {!waiting && p.name !== state.device_name && (
+          <PanelSectionRow>
+            <ButtonItem layout="below" disabled={p.busy} onClick={p.saveName}>
+              Guardar nombre
+            </ButtonItem>
+          </PanelSectionRow>
+        )}
+        {linked && state.name_changed && (
+          <PanelSectionRow>
+            Has cambiado el nombre, pero el nombre de este dispositivo en el hub se cambia desde el hub: no se renombra solo. La clave sigue valiendo.
+          </PanelSectionRow>
+        )}
+      </PanelSection>
+      <PanelSection title="Vinculación">
+        <PanelSectionRow>
+          <Field label="Estado">{describe(state)}</Field>
+        </PanelSectionRow>
+        {!waiting && (
+          <PanelSectionRow>
+            <ButtonItem layout="below" disabled={p.busy} onClick={p.link}>
+              {linked ? "Volver a vincular" : "Vincular con el hub"}
+            </ButtonItem>
+          </PanelSectionRow>
+        )}
+        {linked && (
+          <>
+            <PanelSectionRow>
+              <ButtonItem layout="below" disabled={p.busy} onClick={p.check}>
+                Probar conexión
+              </ButtonItem>
+            </PanelSectionRow>
+            {p.ping && <PanelSectionRow>{p.ping}</PanelSectionRow>}
+            <PanelSectionRow>
+              <ButtonItem layout="below" disabled={p.busy} onClick={p.askUnlink}>
+                Desvincular
+              </ButtonItem>
+            </PanelSectionRow>
+            <PanelSectionRow>Desvincular solo borra la clave de esta Deck. La revocación real se hace en el hub (Dispositivos).</PanelSectionRow>
+          </>
+        )}
+      </PanelSection>
+    </>
+  );
+}
+
+// ---- Vincular (Inicio sin vincular o esperando) ----
+function PairingForm(p: {
+  state: State;
+  url: string;
+  setUrl: (v: string) => void;
+  urlError: string | null;
+  name: string;
+  setName: (v: string) => void;
+  nameError: string | null;
+  busy: boolean;
+  link: () => void;
+  cancel: () => void;
+}) {
+  const { state } = p;
+  const waiting = state.status === "waiting";
+  return (
+    <PanelSection title={waiting ? "Vinculación" : "Vincular con el hub"}>
+      <PanelSectionRow>
+        <Field label="Estado">{describe(state)}</Field>
+      </PanelSectionRow>
+      {!waiting && (
+        <>
+          <PanelSectionRow>
+            <TextField label="Dirección del hub" description="Por ejemplo http://192.168.1.10:8088" value={p.url} onChange={(e) => p.setUrl(e.target.value)} />
+          </PanelSectionRow>
+          {p.urlError && <PanelSectionRow>{p.urlError}</PanelSectionRow>}
+          <PanelSectionRow>
+            <TextField label="Nombre de este dispositivo" description={NAME_HELP} value={p.name} onChange={(e) => p.setName(e.target.value)} />
+          </PanelSectionRow>
+          {p.nameError && <PanelSectionRow>{p.nameError}</PanelSectionRow>}
+          <PanelSectionRow>
+            <ButtonItem layout="below" disabled={p.busy} onClick={p.link}>
+              Vincular con el hub
+            </ButtonItem>
+          </PanelSectionRow>
+        </>
+      )}
+      {waiting && (
+        <>
+          <PanelSectionRow>
+            <div style={{ textAlign: "center" }}>
+              <div>Comprueba que este código coincide con el del hub y acepta allí:</div>
+              <div style={{ fontSize: "3em", fontWeight: "bold", letterSpacing: "0.15em" }}>{state.code}</div>
+              <div>Caduca en {mmss(state.seconds_left ?? 0)}</div>
+              {state.retrying && <div>Sin conexión con el hub, reintentando…</div>}
+            </div>
+          </PanelSectionRow>
+          <PanelSectionRow>
+            <ButtonItem layout="below" onClick={p.cancel}>
+              Cancelar
+            </ButtonItem>
+          </PanelSectionRow>
+        </>
+      )}
+    </PanelSection>
+  );
+}
+
+// Avisos de Steam y del backend: viven mientras el plugin esté cargado (no solo con el panel abierto)
+let stopAuto: Array<() => void> = [];
+
+function startAuto(): void {
+  if (stopAuto.length) return;
+  const problem = (context: string) => (e: Error) => capture(context)(e);
+  const first = setTimeout(() => autoCheckUpdate().catch(capture("comprobación automática de versión")), 20_000);
+  const every = setInterval(() => autoCheckUpdate().catch(capture("comprobación automática de versión")), 6 * 3600 * 1000);
+  announceVersion().catch(capture("versión instalada"));
+  stopAuto = [
+    () => clearTimeout(first),
+    () => clearInterval(every),
+    stopPairWatch,
+    stopRunWatch,
+    startGameWatch(
+      (globalThis as { SteamClient?: Parameters<typeof startGameWatch>[0] }).SteamClient,
+      (appid, running) => {
+        runningApps.set(appid, running);
+        gameEvent(appid, running).catch(capture("aviso de abrir o cerrar un juego"));
+      },
+      problem("detección de juegos"),
+      (a, t, r) => {
+        // diagnóstico: si falla (p. ej. backend antiguo) se ignora, para no inundar «Fallos detectados»
+        diagGameEvent(a, t, r).catch(() => undefined);
+      },
+    ),
+    startNoticePump(
+      takeNotices,
+      (t) => {
+        if (t.code === "queued" || t.code === "offline_open") setShared({ online: false });
+        else if (t.kind === "ok") setShared({ online: true });
+        showToast(t.kind, t.body, t.title);
+      },
+      problem("avisos de sincronización"),
+    ),
+  ];
+}
+
+function stopAutoAll(): void {
+  stopAuto.forEach((f) => f());
+  stopAuto = [];
+}
+
 function Content() {
+  const sh = useShared();
   const [state, setState] = useState<State | null>(null);
   const [url, setUrl] = useState("");
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -1207,11 +1997,22 @@ function Content() {
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [running, setRunning] = useState<ReadonlySet<number>>(runningApps.snapshot());
+  const [showUnconfigured, setShowUnconfigured] = useState(true); // se recuerda en prefs.json (main.py)
+  const [lookup, setLookup] = useState(true);
+  const [editing, setEditing] = useState<Record<number, number>>({}); // formularios «Configurar» abiertos desde las sugerencias (appid -> remontaje)
   const urlLoaded = useRef(false);
+  const linked = state?.status === "linked";
+  const [syncState, setSync, mounted] = useSync(linked);
+  const sync: SyncState = syncState ?? EMPTY_SYNC;
+
+  useEffect(() => runningApps.subscribe(() => setRunning(runningApps.snapshot())), []);
 
   const refresh = useCallback(async () => {
     const s = await getState();
     setState(s);
+    if (s.status === "waiting") trackPairing(false);
     if (!urlLoaded.current) {
       urlLoaded.current = true;
       setUrl(s.hub_url);
@@ -1225,6 +2026,57 @@ function Content() {
     const t = setInterval(() => refresh().catch(capture("estado de la vinculación")), 1000);
     return () => clearInterval(t);
   }, [refresh]);
+
+  useEffect(() => {
+    getCompat().then((r) => r?.compat && setShared({ compat: r.compat })).catch(capture("compatibilidad"));
+    getPrefs()
+      .then((r) => {
+        if (r?.ok && typeof r.show_unconfigured === "boolean") setShowUnconfigured(r.show_unconfigured);
+        if (r?.ok && typeof r.lutris_lookup === "boolean") setLookup(r.lutris_lookup);
+      })
+      .catch(capture("preferencias"));
+    getVersion().then((v) => v.version && setShared({ version: v.version })).catch(capture("versión del plugin"));
+  }, []);
+
+  // El estado de la tarea también dice si hay conexión y si el plugin es demasiado antiguo
+  const lastError = useRef<string | null>(null);
+  useEffect(() => {
+    if (!syncState) return;
+    const err = syncState.running ? null : syncState.error;
+    if (err === lastError.current) return; // solo cuando el error cambia: tras «Probar conexión» no vuelve a marcarse sin red por un error viejo
+    lastError.current = err;
+    if (err === "plugin_outdated") setShared({ compat: "plugin_outdated" });
+    else if (err === "connection") setShared({ online: false });
+  }, [syncState]);
+
+  const changePref = (key: "show_unconfigured" | "lutris_lookup", set: (b: boolean) => void) => (on: boolean) => {
+    set(on);
+    setPref(key, on)
+      .then((r) => {
+        if (!r.ok) set(!on);
+      })
+      .catch((e) => {
+        capture("guardar la preferencia")(e);
+        set(!on);
+      });
+  };
+
+  // «Revisar y añadir» / «Añadir manualmente»: abre el formulario del juego sin configurar con nombre y carpeta (vacía) y lo remonta; no guarda nada.
+  const openForm = (appid: number, gname: string, path: string) => {
+    drafts.set(appid, { open: true, gname, path, sug: path ? { ok: true, appid, name: gname, path, candidates: [path], source: "manifest" } : null });
+    setEditing((r) => ({ ...r, [appid]: (r[appid] ?? 0) + 1 }));
+  };
+  const closeForm = (appid: number) =>
+    setEditing((r) => {
+      const { [appid]: _, ...rest } = r;
+      return rest;
+    });
+
+  // Sin fugas: los borradores de juegos que ya no están en «Sin configurar» se descartan (los que siguen no se tocan)
+  const unconfiguredIds = syncState?.unconfigured?.map((u) => u.appid);
+  useEffect(() => {
+    if (unconfiguredIds) drafts.prune(unconfiguredIds);
+  }, [unconfiguredIds?.join(",")]);
 
   const link = async () => {
     setBusy(true);
@@ -1244,8 +2096,10 @@ function Content() {
         return;
       }
       setUrl(a.hub_url ?? url);
+      const wasLinked = state?.status === "linked";
       const b = await startPairing();
       if (!b.ok) setUrlError(URL_ERRORS[b.url_error ?? "invalid"]);
+      else trackPairing(wasLinked);
       await refresh();
     } finally {
       setBusy(false);
@@ -1270,12 +2124,78 @@ function Content() {
 
   const check = async () => {
     setBusy(true);
-    setPing("Comprobando…");
+    setPing(VER_CHECKING);
     try {
-      setPing(describePing(await testConnection()));
+      const p = await testConnection();
+      setPing(describePing(p));
+      setShared({ ...(p.result === "connection" ? { online: false } : p.result === "ok" ? { online: true } : {}), ...(p.compat ? { compat: p.compat } : {}) });
     } finally {
       setBusy(false);
     }
+  };
+
+  // Desvincular borra la clave: pide confirmar antes
+  const askUnlink = () => {
+    showModal(
+      <ConfirmModal
+        strTitle={UNLINK_CONFIRM.title}
+        strDescription={UNLINK_CONFIRM.description}
+        strOKButtonText={UNLINK_CONFIRM.ok}
+        strCancelButtonText="Cancelar"
+        onOK={() => {
+          setPing(null);
+          unlink()
+            .then((s) => {
+              setState(s);
+              setSync(EMPTY_SYNC);
+              setShared({ tab: "home", summary: null, firstSync: false });
+              showToast("warn", UNLINK_TOAST);
+            })
+            .catch(capture("desvincular"));
+        }}
+      />,
+    );
+  };
+
+  const playingName = playingGame(running, sync.games)?.name ?? null;
+  const outdated = sh.compat === "plugin_outdated";
+  const gate: SyncGate = { link: state?.status ?? "unlinked", online: sh.online, outdated, playing: playingName, running: sync.running };
+  const names = Object.fromEntries(sync.games.map((g) => [g.id, g.name]));
+  const setTab = (t: TabId) => setShared({ tab: t });
+  const tab: TabId = state && state.status !== "linked" && tabDisabled(sh.tab, false) ? "home" : sh.tab;
+
+  const run = (f: () => Promise<SyncState>) => () => f().then(setSync).catch(capture("acción sobre los juegos"));
+
+  // «Sincronizar todo». Con una Deck recién vinculada, antes se comprueba qué se bajaría y qué se subiría y se pide confirmar.
+  const syncAllClick = () => {
+    if (!shared.firstSync) {
+      startAll().then(setSync).catch(capture("sincronizar todo"));
+      return;
+    }
+    setPreparing(true);
+    (async () => {
+      try {
+        setSync(await listGames());
+        const s = await waitIdle(mounted);
+        if (!s) return;
+        setSync(s);
+        if (s.error) return;
+        const c = firstConfirm(firstPlan(s.games));
+        showModal(
+          <ConfirmModal
+            strTitle={c.title}
+            strDescription={c.description}
+            strOKButtonText={c.ok}
+            strCancelButtonText="Cancelar"
+            onOK={() => {
+              startAll().then(setSync).catch(capture("sincronizar todo"));
+            }}
+          />,
+        );
+      } finally {
+        if (mounted.current) setPreparing(false);
+      }
+    })().catch(capture("primera sincronización"));
   };
 
   if (!state) {
@@ -1289,153 +2209,124 @@ function Content() {
     );
   }
 
-  const waiting = state.status === "waiting";
-  const linked = state.status === "linked";
+  const ctx: Ctx = {
+    state,
+    sync,
+    setSync,
+    sh,
+    playing: playingName,
+    outdated,
+    online: sh.online,
+    gate,
+    preparing,
+    setTab,
+    syncAllClick,
+    syncRestClick: () => startAll().then(setSync).catch(capture("sincronizar los demás juegos")),
+    cancel: () => cancelAll().then(setSync).catch(capture("cancelar")),
+    run,
+    names,
+  };
+
+  const conflict = conflictGames(sync.games)[0];
+  const bannerItems = banners({
+    tab,
+    link: state.status,
+    online: sh.online,
+    outdated,
+    outdatedText: describeCompat("plugin_outdated") ?? "",
+    running: sync.running,
+    summary: sh.summary,
+    playing: playingName,
+    conflict: conflict?.name ?? null,
+    failed: errorGames(sync.games).length > 0 && !sync.running,
+    failedText: (() => {
+      const g = errorGames(sync.games)[0];
+      return g ? `${g.name}: ${gameText(g)}` : "";
+    })(),
+    firstSync: sh.firstSync,
+    update: hasUpdate(sh.update) ? { latest: sh.update?.latest ?? "?", current: sh.update?.current ?? sh.version ?? "?" } : null,
+    connectionText: describePing({ result: "connection" }),
+  });
+  const onBanner = (b: Banner) => {
+    switch (b.action?.kind) {
+      case "go_home":
+        return setTab("home");
+      case "go_games":
+        return setTab("games");
+      case "go_ver":
+        return setTab("ver");
+      case "close_summary":
+        return setShared({ summary: null });
+      case "sync_all":
+        return syncAllClick();
+      case "ping":
+        return check();
+      case "retry":
+        // Reintentar tras un corte repite «Sincronizar todo»; tras un error de un juego, comprueba de nuevo
+        if (sh.summary?.interrupted) return ctx.syncAllClick();
+        {
+          const bad = errorGames(sync.games)[0];
+          return bad ? run(() => syncGame(bad.id))() : run(listGames)();
+        }
+    }
+  };
+
+  const tabInput: TabInput = {
+    link: state.status,
+    conflicts: conflictGames(sync.games).length,
+    errors: errorGames(sync.games).length,
+    pending: sync.unconfigured.length,
+    showPending: showUnconfigured,
+    updateAvailable: hasUpdate(sh.update) || outdated,
+  };
+
+  const form = (
+    <PairingForm state={state} url={url} setUrl={setUrl} urlError={urlError} name={name} setName={setName} nameError={nameError} busy={busy} link={link} cancel={() => cancelPairing().then(setState).catch(capture("cancelar la vinculación"))} />
+  );
+  const settings = (
+    <SettingsTab
+      ctx={ctx}
+      url={url}
+      setUrl={setUrl}
+      urlError={urlError}
+      name={name}
+      setName={setName}
+      nameError={nameError}
+      busy={busy}
+      saveName={saveName}
+      showUnconfigured={showUnconfigured}
+      changeShowUnconfigured={changePref("show_unconfigured", setShowUnconfigured)}
+      lookup={lookup}
+      changeLookup={changePref("lutris_lookup", setLookup)}
+      link={link}
+      check={check}
+      ping={ping}
+      askUnlink={askUnlink}
+    />
+  );
 
   return (
-    <>
-      <CrashNotices />
-      {linked && <Games />}
-      <PanelSection title="Hub">
-        <PanelSectionRow>
-          <TextField
-            label="Dirección del hub"
-            description="Por ejemplo http://192.168.1.10:8088"
-            value={url}
-            disabled={waiting}
-            onChange={(e) => setUrl(e.target.value)}
-          />
-        </PanelSectionRow>
-        {urlError && <PanelSectionRow>{urlError}</PanelSectionRow>}
-      </PanelSection>
-
-      <PanelSection title="Este dispositivo">
-        <PanelSectionRow>
-          <TextField
-            label="Nombre de este dispositivo"
-            description={NAME_HELP}
-            value={name}
-            disabled={waiting}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </PanelSectionRow>
-        {nameError && <PanelSectionRow>{nameError}</PanelSectionRow>}
-        {!waiting && name !== state.device_name && (
-          <PanelSectionRow>
-            <ButtonItem layout="below" disabled={busy} onClick={saveName}>
-              Guardar nombre
-            </ButtonItem>
-          </PanelSectionRow>
-        )}
-        {linked && state.name_changed && (
-          <PanelSectionRow>
-            Has cambiado el nombre, pero el nombre de este dispositivo en el hub se cambia desde el
-            hub: no se renombra solo. La clave sigue valiendo.
-          </PanelSectionRow>
-        )}
-      </PanelSection>
-
-      <PanelSection title="Vinculación">
-        <PanelSectionRow>
-          <Field label="Estado">{describe(state)}</Field>
-        </PanelSectionRow>
-        {waiting && (
-          <>
-            <PanelSectionRow>
-              <div style={{ textAlign: "center" }}>
-                <div>Comprueba que este código coincide con el del hub y acepta allí:</div>
-                <div style={{ fontSize: "3em", fontWeight: "bold", letterSpacing: "0.15em" }}>
-                  {state.code}
-                </div>
-                <div>Caduca en {mmss(state.seconds_left ?? 0)}</div>
-                {state.retrying && <div>Sin conexión con el hub, reintentando…</div>}
-              </div>
-            </PanelSectionRow>
-            <PanelSectionRow>
-              <ButtonItem layout="below" onClick={() => cancelPairing().then(setState).catch(capture("cancelar la vinculación"))}>
-                Cancelar
-              </ButtonItem>
-            </PanelSectionRow>
-          </>
-        )}
-        {!waiting && (
-          <PanelSectionRow>
-            <ButtonItem layout="below" disabled={busy} onClick={link}>
-              {linked ? "Volver a vincular" : "Vincular con el hub"}
-            </ButtonItem>
-          </PanelSectionRow>
-        )}
-        {linked && (
-          <>
-            <PanelSectionRow>
-              <ButtonItem layout="below" disabled={busy} onClick={check}>
-                Probar conexión
-              </ButtonItem>
-            </PanelSectionRow>
-            {ping && <PanelSectionRow>{ping}</PanelSectionRow>}
-            <PanelSectionRow>
-              <ButtonItem
-                layout="below"
-                disabled={busy}
-                onClick={() => {
-                  setPing(null);
-                  unlink().then((s) => {
-                    setState(s);
-                    toaster.toast({
-                      title: "Checkpoint",
-                      body: "Clave borrada de la Deck. Para que deje de valer, revócala también en el hub.",
-                    });
-                  }).catch(capture("desvincular"));
-                }}
-              >
-                Desvincular
-              </ButtonItem>
-            </PanelSectionRow>
-            <PanelSectionRow>
-              Desvincular solo borra la clave de esta Deck. La revocación real se hace en el hub
-              (Dispositivos).
-            </PanelSectionRow>
-          </>
-        )}
-      </PanelSection>
-
-      <AutoPanel />
-
-      <Updates />
-    </>
+    // L1 / R1 cambian de pestaña (best effort: Steam puede reservarlos en el menú rápido; los botones de las pestañas siempre valen)
+    <Focusable
+      noFocusRing
+      onButtonDown={(e) => {
+        if (e.detail.button === GamepadButton.BUMPER_LEFT) setTab(stepTab(tab, -1, linked));
+        else if (e.detail.button === GamepadButton.BUMPER_RIGHT) setTab(stepTab(tab, 1, linked));
+      }}
+    >
+      <TabBar tab={tab} onTab={setTab} disabled={(t) => tabDisabled(t, linked)} dots={(t) => tabDot(t, tabInput)} />
+      <BannerList items={bannerItems} onAction={onBanner} />
+      {tab === "home" && (linked ? <HomeTab ctx={ctx} form={null} /> : <>
+        <CrashNotices />
+        {form}
+      </>)}
+      {tab === "games" && linked && <GamesTab ctx={ctx} />}
+      {tab === "sugg" && linked && <SaveSuggestions sync={sync} setSync={setSync} editing={editing} openForm={openForm} closeForm={closeForm} />}
+      {tab === "pend" && linked && <PendTab ctx={ctx} showUnconfigured={showUnconfigured} onShow={() => changePref("show_unconfigured", setShowUnconfigured)(true)} editing={editing} />}
+      {tab === "set" && settings}
+      {tab === "ver" && <VersionTab ctx={ctx} />}
+    </Focusable>
   );
-}
-
-// Avisos automáticos (Tramo 5): Steam avisa de abrir/cerrar un juego -> backend; los avisos del backend -> toasts.
-// Viven mientras el plugin esté cargado (no solo con el panel abierto).
-let stopAuto: Array<() => void> = [];
-
-function startAuto(): void {
-  if (stopAuto.length) return;
-  const problem = (context: string) => (e: Error) => capture(context)(e);
-  stopAuto = [
-    startGameWatch(
-      (globalThis as { SteamClient?: Parameters<typeof startGameWatch>[0] }).SteamClient,
-      (appid, running) => {
-        gameEvent(appid, running).catch(capture("aviso de abrir o cerrar un juego"));
-      },
-      problem("detección de juegos"),
-      (a, t, r) => {
-        // diagnóstico: si falla (p. ej. backend antiguo) se ignora, para no inundar «Fallos detectados»
-        diagGameEvent(a, t, r).catch(() => undefined);
-      },
-    ),
-    startNoticePump(
-      takeNotices,
-      (t) => toaster.toast({ title: t.title, body: t.body, duration: t.level === "info" ? 6000 : 12000 }),
-      problem("avisos de sincronización"),
-    ),
-  ];
-}
-
-function stopAutoAll(): void {
-  stopAuto.forEach((f) => f());
-  stopAuto = [];
 }
 
 export default definePlugin(() => {
