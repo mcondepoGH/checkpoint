@@ -212,3 +212,20 @@ def scripthub():
     yield make
     for h in made:
         h.stop()
+
+
+@pytest.fixture(autouse=True)
+def _sqlite_sin_fsync(monkeypatch):
+    """Las bases de Lutris que crean los tests no necesitan durabilidad: sin fsync por commit (en el disco del NAS cada
+    commit costaba ~0,1 s). Solo las conexiones normales; las de solo lectura por URI que abre el código real no se tocan."""
+    import sqlite3
+
+    real = sqlite3.connect
+
+    def connect(*a, **kw):
+        con = real(*a, **kw)
+        if not kw.get("uri"):
+            con.execute("PRAGMA synchronous=OFF")
+        return con
+
+    monkeypatch.setattr(sqlite3, "connect", connect)
