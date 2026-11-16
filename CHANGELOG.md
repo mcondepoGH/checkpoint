@@ -1,5 +1,11 @@
 # Cambios
 
+## 2.2.3 (2026-11-16)
+
+### Cambios
+
+- El hilo del aviso de apertura y cierre ya no muere si `run_game` lanza una excepción inesperada: `work()` la captura, guarda el historial con el error y el log solo lleva el tipo de la excepción. Tests nuevos.
+
 ## 2.2.2 (2026-11-16)
 
 ### Cambios
