@@ -1,5 +1,6 @@
 """Variables de entorno: solo la lista final; las eliminadas se ignoran."""
 
+import pytest
 import os
 import subprocess
 import sys
@@ -14,6 +15,7 @@ def _run(code, **env):
     return subprocess.run([sys.executable, "-c", code], env=e, capture_output=True, text=True)
 
 
+@pytest.mark.slow
 def test_removed_variables_are_ignored(tmp_path):
     r = _run(
         "from app.sync import scheduler\nfrom app.core import settings, updates\n"

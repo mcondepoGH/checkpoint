@@ -1,6 +1,7 @@
 """Logs de trazabilidad apertura -> vigilancia -> cierre -> sync: DEBUG visible con DEBUG, ausente con INFO y sin secretos.
 Con INFO solo cambia el log `hook ... resultado=` (ahora con `code=` y `duración=`)."""
 
+import pytest
 import logging
 import re
 
@@ -115,6 +116,7 @@ def hook_msgs(caplog, level=logging.DEBUG):
     return [r.getMessage() for r in caplog.records if r.name == "checkpoint.hook" and r.levelno == level]
 
 
+@pytest.mark.slow
 def test_debug_history_entry_for_skipped_never_seen(cl, caplog):
     caplog.set_level(logging.DEBUG, logger="checkpoint.hook")
     hopen(cl)
@@ -132,6 +134,7 @@ def test_debug_history_entry_for_skipped_never_seen(cl, caplog):
         assert frag in m[0], (frag, m[0])
 
 
+@pytest.mark.slow
 def test_debug_history_entry_not_saved_and_error_without_message(cl, caplog, monkeypatch):
     caplog.set_level(logging.DEBUG, logger="checkpoint.hook")
     monkeypatch.setattr(history, "append", lambda *a, **k: (_ for _ in ()).throw(OSError("disco lleno /secreto")))
@@ -142,6 +145,7 @@ def test_debug_history_entry_not_saved_and_error_without_message(cl, caplog, mon
     assert not any("secreto" in r.getMessage() for r in caplog.records)
 
 
+@pytest.mark.slow
 def test_debug_history_entry_absent_with_info(cl, caplog):
     caplog.set_level(logging.INFO, logger="checkpoint")
     hopen(cl)

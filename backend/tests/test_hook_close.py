@@ -144,6 +144,7 @@ def test_errors_do_not_arm(cl):
     assert watches(cl).json() == []
 
 
+@pytest.mark.slow
 def test_never_seen_is_discarded(cl):
     hopen(cl)
     assert wait_for(lambda: watches(cl).json() == [])
@@ -301,6 +302,7 @@ def test_checkpoint_error_is_logged_without_message(cl):
     assert set(e["params"]) == {"error"} and "secreto-xyz" not in str(e)
 
 
+@pytest.mark.slow
 def test_history_failure_never_breaks_watcher(cl, monkeypatch):
     def boom(*a, **k):
         raise OSError("disco lleno")

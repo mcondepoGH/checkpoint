@@ -6,6 +6,7 @@
 - `api` puede importar de `config`, `users`, `sync`, `core` y `services`.
 """
 
+import pytest
 import ast
 from pathlib import Path
 
@@ -72,6 +73,7 @@ def _violations():
     return found
 
 
+@pytest.mark.slow
 def test_layers_do_not_import_upwards():
     assert _violations() == []
 
