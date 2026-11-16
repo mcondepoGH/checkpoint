@@ -293,26 +293,31 @@ test('sugerencias de guardado: detalle de ruta (tamaño, ficheros, fecha, dudosa
 });
 
 test('sugerencias de guardado: errores, confirmación y avisos', { skip }, async () => {
-  const { saveError, SAVES_ERRORS, saveConfirm, lookupsPendingText, appliedText } = await load();
+  const { saveError, SAVES_ERRORS, saveConfirm, lookupsPendingText, savesOthers, savesSummary, SAVES_BADGES, SAVES_ADD } = await load();
   for (const c of ['no_manifest', 'no_match', 'bad_args', 'not_suggested', 'path_missing', 'not_unconfigured', 'plugin_outdated', 'unexpected']) {
     assert.ok(SAVES_ERRORS[c], c);
   }
   assert.equal(saveError('algo_nuevo'), SAVES_ERRORS.unexpected);
   assert.equal(saveError(undefined), SAVES_ERRORS.unexpected);
   assert.match(saveError('no_manifest'), /no lleva la lista/);
-  const c = saveConfirm('Move or Die', '/home/deck/.local/share/love/Move Or Die', true);
+  const c = saveConfirm('Move or Die', '/home/deck/.local/share/love/Move Or Die');
+  assert.match(c.title, /Añadir al hub/);
   assert.match(c.description, /Move or Die/);
-  assert.match(c.description, /dudosa/);
-  assert.match(c.description, /Guardar en el hub/); // aplicar no guarda: lo dice
-  assert.doesNotMatch(saveConfirm('A', '/x', false).description, /dudosa/);
+  assert.match(c.description, /\/home\/deck\/\.local\/share\/love\/Move Or Die/);
+  assert.equal(c.ok, SAVES_ADD);
   assert.match(lookupsPendingText(1), /Queda 1 juego/);
   assert.match(lookupsPendingText(3), /Quedan 3 juegos/);
-  assert.match(appliedText('Stardew Valley'), /Stardew Valley/);
+  assert.match(lookupsPendingText(3), /Buscar de nuevo/);
+  assert.equal(savesOthers(2, false), 'Ver otras rutas (2)');
+  assert.match(savesOthers(2, true), /Ocultar/);
+  assert.match(savesSummary(1), /^1 juego /);
+  assert.match(savesSummary(4), /^4 juegos /);
+  assert.deepEqual(Object.keys(SAVES_BADGES).sort(), ['doubtful', 'not_found', 'safe']);
 });
 
-test('sugerencias de guardado: el interruptor explica que solo se envía el slug', { skip }, async () => {
+test('sugerencias de guardado: el interruptor explica que solo se envía el nombre interno', { skip }, async () => {
   const { SAVES_LOOKUP_LABEL, SAVES_LOOKUP_HELP, PATH_FOUND, pathHelp } = await load();
   assert.equal(SAVES_LOOKUP_LABEL, 'Consultar lutris.net para identificar juegos de Lutris');
-  assert.match(SAVES_LOOKUP_HELP, /slug/);
+  assert.match(SAVES_LOOKUP_HELP, /Solo se envía el nombre interno del juego/);
   assert.equal(pathHelp('/x', 'manifest'), PATH_FOUND.manifest);
 });

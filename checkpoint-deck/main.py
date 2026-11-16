@@ -311,6 +311,32 @@ class Plugin:
         """Lo mismo para un juego: `source` = "steam" con su appid (entero) o "lutris" con su slug (texto) o id de fila (entero)."""
         return await asyncio.to_thread(self.saves.one, source, ident)
 
+    def _target_appid(self, source: str, game: Dict[str, Any]) -> Optional[int]:
+        """appid del juego sin configurar al que corresponde la sugerencia (Steam: su appid; Lutris: el atajo `lutris:rungameid/<id>`)."""
+        if source == "steam":
+            return game["id"] if self._unconfigured_name(game["id"]) is not None else None
+        shortcuts = [u["appid"] for u in self.jobs.snapshot()["unconfigured"] if u.get("source") == "shortcut"]
+        return lutris_shortcut_appid(Path.home(), game["id"], shortcuts)
+
+    def _resolve_target(self, source: Any, ident: Any) -> Dict[str, Any]:
+        """Bloqueante. `{ok, appid, name}` del juego sin configurar al que corresponde `ident`; no toca nada."""
+        r = self.saves.one(source, ident)
+        if not r.get("ok"):
+            return self._failure(str(r.get("error", "no_match")))
+        game = r["game"]
+        appid = self._target_appid(source, game)
+        if appid is None:
+            return self._failure("not_unconfigured")
+        return {"ok": True, "appid": appid, "name": self._unconfigured_name(appid) or game["name"]}
+
+    async def resolve_save_target(self, source: str, ident: Any) -> Dict[str, Any]:
+        """Para «Añadir manualmente» sobre una sugerencia (sin ruta): devuelve `{ok, appid, name}` del juego de «Sin configurar en
+        el hub» al que corresponde (Steam o atajo de Lutris). Solo lectura: no valida carpetas ni configura nada. Errores como
+        `apply_save_suggestion` menos los de la ruta."""
+        if self._outdated():
+            return self._failure("plugin_outdated")
+        return await asyncio.to_thread(self._resolve_target, source, ident)
+
     def _apply_target(self, source: str, ident: Any, path: Any) -> Dict[str, Any]:
         """Bloqueante (corre en un hilo). Comprueba que `path` sea una de las rutas que EXISTEN de la sugerencia de ese juego y
         que `verified_dir` la siga admitiendo; luego busca el juego sin configurar al que corresponde (Steam: su appid; Lutris:
@@ -325,11 +351,7 @@ class Plugin:
         good = verify_applied(path, home, protected_dirs(decky))
         if not good:
             return self._failure("path_missing")
-        if source == "steam":
-            appid = game["id"] if self._unconfigured_name(game["id"]) is not None else None
-        else:
-            shortcuts = [u["appid"] for u in self.jobs.snapshot()["unconfigured"] if u.get("source") == "shortcut"]
-            appid = lutris_shortcut_appid(home, game["id"], shortcuts)
+        appid = self._target_appid(source, game)
         if appid is None:
             return self._failure("not_unconfigured")
         self._offered.setdefault(appid, set()).add(good)  # si desaparece antes de guardar, mensaje de «carpeta sugerida»

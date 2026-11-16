@@ -1,5 +1,20 @@
 # Registro de cambios del plugin
 
+## 1.2.1 - 2026-11-16
+
+`checkpointProtocol: 1` (sin cambios). Con semver, `1.2.1` es mayor que `1.2.0`.
+
+### Cambios
+
+- **«Sugerencias de guardado» rediseñadas: una tarjeta por juego.** Solo salen los juegos «Sin configurar en el hub» (se quitan los de Steam que ya están en el hub) con su MEJOR carpeta (la que existe, la no dudosa y la modificada más recientemente), con tamaño, número de ficheros y fecha; el resto de rutas queda plegado en «Ver otras rutas (n)». Un botón grande según la confianza:
+  - Sugerencia segura (confianza alta y carpeta que existe): **«Añadir al hub»**. Abre un modal con el juego y la carpeta; al confirmar se aplica la sugerencia (`apply_save_suggestion`, que vuelve a verificar la carpeta) y se configura el juego en el hub con el mismo camino que «Guardar en el hub» (`configure_game`: `validate_game_path`, nombre repetido, unirse a un juego existente). La tarjeta pasa a «Añadido». Nunca se guarda sin esa confirmación.
+  - Sugerencia dudosa: **«Revisar y añadir»**: abre el formulario «Configurar» en la propia tarjeta con la carpeta rellena, sin guardar.
+  - Carpeta no encontrada aún: sin botón de aplicar, solo «No encontrada aún» y la opción manual.
+  - En todas, **«Añadir manualmente»** (formulario con el nombre del juego y la carpeta vacía). Además, **«Añadir un juego manualmente»** (lista de juegos sin configurar para abrir un formulario) y **«Buscar de nuevo»**.
+- El interruptor «Consultar lutris.net…» pasa a un icono de ajustes (engranaje) con su explicación («solo se envía el nombre interno del juego»).
+- Estados: cargando, vacío, error, sin manifiesto (mensaje claro) y el aviso de juegos por consultar a lutris.net. Un error al añadir (p. ej. nombre repetido) sale en la tarjeta del juego.
+- Callable nuevo `resolve_save_target(source, ident)`: devuelve el `appid` y el nombre del juego sin configurar al que corresponde una sugerencia, sin carpeta ni cambios (lo usa «Añadir manualmente»).
+
 ## 1.2.0 - 2026-11-16
 
 `checkpointProtocol: 1` (sin cambios). Con semver, `1.2.0` es mayor que `1.1.0`.

@@ -306,25 +306,43 @@ export function unconfiguredDescription(appid: number, source?: string): string 
 // ---- «Sugerencias de guardado» (main.py: suggest_saves / apply_save_suggestion): carpetas exactas del manifiesto propio ----
 export const SAVES_TITLE = "Sugerencias de guardado";
 export const SAVES_INTRO =
-  "Busca la carpeta de guardado exacta de los juegos instalados (Steam y Lutris) con la lista que lleva el plugin. Nada se aplica sin que lo confirmes.";
+  "Busca la carpeta de guardado de los juegos instalados que aún no están en el hub. Nada se añade sin que lo confirmes.";
 export const SAVES_BUTTON = "Sugerir carpeta";
+export const SAVES_AGAIN = "Buscar de nuevo";
 export const SAVES_LOADING = "Buscando carpetas de guardado… Puede tardar unos segundos si hay que consultar lutris.net.";
-export const SAVES_EMPTY = "Ningún juego instalado coincide con la lista de rutas de guardado.";
+export const SAVES_EMPTY =
+  "No hay juegos sin configurar con carpeta sugerida: o ya están en el hub o no coinciden con la lista de rutas.";
 export const SAVES_NO_MANIFEST =
   "Este plugin no lleva la lista de rutas de guardado (save_manifest.json), así que no puede sugerir carpetas. Instala un ZIP del plugin que la incluya.";
+export const SAVES_SETTINGS = "Ajustes de las sugerencias";
 export const SAVES_LOOKUP_LABEL = "Consultar lutris.net para identificar juegos de Lutris";
 export const SAVES_LOOKUP_HELP =
-  "Solo se envía el nombre interno (slug) del juego, una vez por juego y sin datos personales. Sin esto, algunos juegos de Lutris salen como dudosos o no salen.";
+  "Solo se envía el nombre interno del juego (slug), una vez por juego y sin datos personales. Sin esto, algunos juegos de Lutris salen como dudosos o no salen.";
 export const SAVES_NOT_FOUND = "No encontrada aún";
 export const SAVES_DOUBTFUL = "dudosa";
-export const SAVES_USE = "Usar esta carpeta";
-export const SAVES_DOUBTFUL_GAME = "Coincidencia dudosa: comprueba que es de este juego antes de confirmar.";
-export const SAVES_NOT_FOUND_GAME = "El juego está en la lista, pero la carpeta aún no existe (se crea al jugar o guardar por primera vez).";
+export const SAVES_ADD = "Añadir al hub";
+export const SAVES_REVIEW = "Revisar y añadir";
+export const SAVES_ADDED = "Añadido";
+export const SAVES_MANUAL = "Añadir manualmente";
+export const SAVES_MANUAL_ALL = "Añadir un juego manualmente";
+export const SAVES_MANUAL_ALL_HIDE = "Cerrar la lista";
+export const SAVES_MANUAL_ALL_HELP = "Elige uno de los juegos instalados que aún no están en el hub y rellena su nombre y carpeta a mano.";
+export const SAVES_MANUAL_EMPTY = "No hay juegos sin configurar. Pulsa «Buscar juegos de Steam» en «Juegos» y vuelve a intentarlo.";
+export const SAVES_DOUBTFUL_GAME = "Coincidencia dudosa: comprueba que es de este juego antes de guardar.";
+export const SAVES_NOT_FOUND_GAME = "La carpeta aún no existe (se crea al jugar o guardar por primera vez). Puedes añadirlo a mano.";
+export type CardBadge = "safe" | "doubtful" | "not_found";
+export const SAVES_BADGES: Record<CardBadge, string> = { safe: "Segura", doubtful: "Dudosa", not_found: SAVES_NOT_FOUND };
+export function savesOthers(n: number, open: boolean): string {
+  return open ? `Ocultar otras rutas (${n})` : `Ver otras rutas (${n})`;
+}
+export function savesSummary(n: number): string {
+  return n === 1 ? "1 juego sin configurar con sugerencia." : `${n} juegos sin configurar con sugerencia.`;
+}
 export const SAVES_ERRORS: Record<string, string> = {
   no_manifest: SAVES_NO_MANIFEST,
   no_match: "Ese juego ya no está instalado o no está en la lista de rutas.",
   bad_args: "Petición no válida.",
-  not_suggested: "Esa carpeta ya no es una de las sugeridas. Vuelve a pulsar «Sugerir carpeta».",
+  not_suggested: "Esa carpeta ya no es una de las sugeridas. Vuelve a pulsar «Buscar de nuevo».",
   path_missing: "La carpeta sugerida ya no existe o no se puede usar. No se ha cambiado nada.",
   not_unconfigured:
     "Este juego no está en «Sin configurar en el hub» (ya está en el hub o no se ha buscado). Pulsa «Buscar juegos de Steam» y vuelve a intentarlo.",
@@ -336,8 +354,8 @@ export function saveError(code?: string): string {
 }
 export function lookupsPendingText(n: number): string {
   return n === 1
-    ? "Queda 1 juego de Lutris por consultar a lutris.net: vuelve a pulsar «Sugerir carpeta»."
-    : `Quedan ${n} juegos de Lutris por consultar a lutris.net: vuelve a pulsar «Sugerir carpeta».`;
+    ? "Queda 1 juego de Lutris por consultar a lutris.net: vuelve a pulsar «Buscar de nuevo»."
+    : `Quedan ${n} juegos de Lutris por consultar a lutris.net: vuelve a pulsar «Buscar de nuevo».`;
 }
 
 export function formatSize(bytes?: number | null): string {
@@ -381,16 +399,11 @@ export interface SaveConfirm {
   description: string;
   ok: string;
 }
-export function saveConfirm(name: string, path: string, doubtful: boolean): SaveConfirm {
+/** Modal de «Añadir al hub»: juego y carpeta; al confirmar se aplica la sugerencia y se guarda en el hub. */
+export function saveConfirm(name: string, path: string): SaveConfirm {
   return {
-    title: "Usar esta carpeta de guardado",
-    description:
-      `${name}: ${path}\n` +
-      (doubtful ? `${SAVES_DOUBTFUL_GAME}\n` : "") +
-      "Se rellenará en «Sin configurar en el hub». Aún tendrás que pulsar «Guardar en el hub».",
-    ok: "Usar carpeta",
+    title: "¿Añadir al hub?",
+    description: `${name}\nCarpeta de guardado: ${path}\nSe creará el juego en el hub con esta carpeta.`,
+    ok: SAVES_ADD,
   };
-}
-export function appliedText(name: string): string {
-  return `Carpeta aplicada a «${name}»: revisa el formulario en «Sin configurar en el hub» y pulsa «Guardar en el hub».`;
 }

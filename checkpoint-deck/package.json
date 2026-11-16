@@ -1,6 +1,6 @@
 {
   "name": "checkpoint-deck",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "checkpointProtocol": 1,
   "description": "Plugin de Decky Loader para vincular la Steam Deck con un hub de Checkpoint",
   "type": "module",

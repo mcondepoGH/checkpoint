@@ -125,3 +125,23 @@ def test_lutris_shortcut_appid_reads_launch_options(tmp_path):
     assert cg.lutris_shortcut_appid(home, 9, ids) is None
     assert cg.lutris_shortcut_appid(home, 7, [3000000002]) is None
 
+
+
+def test_resolve_save_target_gives_appid_and_name_without_path_and_creates_nothing(fake_decky, scripthub, tmp_path, monkeypatch):
+    st, p, save = prepare(fake_decky, scripthub, tmp_path, monkeypatch)
+    before = [dict(g) for g in st.games]
+    (out,) = run(p, lambda: p.resolve_save_target("steam", 730))
+    assert out["ok"] and out["appid"] == 730 and out["name"] and "path" not in out
+    assert st.games == before
+    assert 730 not in p._offered  # no ofrece ninguna carpeta
+
+
+def test_resolve_save_target_errors(fake_decky, scripthub, tmp_path, monkeypatch):
+    st, p, save = prepare(fake_decky, scripthub, tmp_path, monkeypatch, steam=220)  # 220 ya está en el hub
+    (a, b, c) = run(
+        p,
+        lambda: p.resolve_save_target("steam", 220),
+        lambda: p.resolve_save_target("steam", 12345),
+        lambda: p.resolve_save_target("otro", 1),
+    )
+    assert (a["error"], b["error"], c["error"]) == ("not_unconfigured", "no_match", "bad_args")

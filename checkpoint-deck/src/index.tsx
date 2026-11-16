@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ButtonItem,
   ConfirmModal,
+  DialogButton,
   Field,
   PanelSection,
   PanelSectionRow,
@@ -11,10 +12,11 @@ import {
   staticClasses,
 } from "@decky/ui";
 import { FileSelectionType, callable, definePlugin, openFilePicker, toaster } from "@decky/api";
-import { FaCloud } from "react-icons/fa";
+import { FaCloud, FaCog } from "react-icons/fa";
 import { CrashItem, CrashWatch, startCrashWatch } from "./crashwatch";
 import { copyText } from "./clipboard";
 import { drafts } from "./drafts";
+import { CardKind, SaveGame, bestPath, cardKind, gameKey, otherPaths, unconfiguredOnly } from "./suggestions";
 import { Notice, getLastNotice, startGameWatch, startNoticePump } from "./autosync";
 import {
   BROWSE_HELP,
@@ -28,6 +30,10 @@ import {
   GameFailure,
   pathHelp,
   PICKER_FAIL,
+  SAVES_ADD,
+  SAVES_ADDED,
+  SAVES_AGAIN,
+  SAVES_BADGES,
   SAVES_BUTTON,
   SAVES_DOUBTFUL_GAME,
   SAVES_EMPTY,
@@ -35,12 +41,18 @@ import {
   SAVES_LOADING,
   SAVES_LOOKUP_HELP,
   SAVES_LOOKUP_LABEL,
+  SAVES_MANUAL,
+  SAVES_MANUAL_ALL,
+  SAVES_MANUAL_ALL_HELP,
+  SAVES_MANUAL_ALL_HIDE,
+  SAVES_MANUAL_EMPTY,
   SAVES_NOT_FOUND_GAME,
+  SAVES_REVIEW,
+  SAVES_SETTINGS,
   SAVES_TITLE,
-  SAVES_USE,
-  SavePath,
-  appliedText,
   lookupsPendingText,
+  savesOthers,
+  savesSummary,
   saveConfirm,
   saveError,
   savePathDetail,
@@ -171,21 +183,15 @@ interface Suggestion extends GameFailure {
   source?: "proton" | "cloud" | "lutris" | "manifest" | "";
 }
 // Sugerencias del manifiesto propio (`suggest_saves`): una entrada por juego instalado que casa
-interface SaveGame {
-  source: "steam" | "lutris";
-  id: number;
-  name: string;
-  manifest_name?: string;
-  confidence: "high" | "doubtful";
-  needs_confirmation: boolean; // siempre true: nunca se aplica solo
-  state: "found" | "not_found_yet";
-  paths: SavePath[];
-}
 interface SaveResult extends GameFailure {
   manifest?: string;
   games?: SaveGame[];
   network_lookups?: number;
   lookups_pending?: number;
+}
+interface SaveTarget extends GameFailure {
+  appid?: number;
+  name?: string;
 }
 interface SaveApplied extends GameFailure {
   appid?: number;
@@ -217,6 +223,7 @@ const takeNotices = callable<[], Notice[]>("take_notices");
 const getPrefs = callable<[], { ok: boolean; show_unconfigured: boolean; lutris_lookup?: boolean }>("get_prefs");
 const setPref = callable<[key: string, value: boolean], { ok: boolean; show_unconfigured?: boolean; lutris_lookup?: boolean }>("set_pref");
 const suggestSaves = callable<[], SaveResult>("suggest_saves");
+const resolveSaveTarget = callable<[source: string, ident: number | string], SaveTarget>("resolve_save_target");
 const applySaveSuggestion = callable<[source: string, ident: number | string, path: string], SaveApplied>("apply_save_suggestion");
 const reportError = callable<[message: string], { ok: boolean }>("report_error");
 
@@ -485,7 +492,7 @@ const mmss = (s: number) =>
   `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 // Un juego instalado en la Deck que el hub aún no tiene: «Configurar» rellena nombre y ruta (lo detectado) y pide confirmar
-function UnconfiguredGame({ appid, name, source, disabled, onDone }: { appid: number; name: string; source?: string; disabled: boolean; onDone: (s: SyncState) => void }) {
+function UnconfiguredGame({ appid, name, source, disabled, onDone, onClose }: { appid: number; name: string; source?: string; disabled: boolean; onDone: (s: SyncState) => void; onClose?: () => void }) {
   // El selector de carpetas de Decky cierra la Quick Access y desmonta el panel: el formulario se recupera del borrador
   // (src/drafts.ts, a nivel de módulo) para no perder la carpeta elegida al volver.
   const [saved] = useState(() => drafts.get(appid));
@@ -644,7 +651,14 @@ function UnconfiguredGame({ appid, name, source, disabled, onDone }: { appid: nu
             </ButtonItem>
           </PanelSectionRow>
           <PanelSectionRow>
-            <ButtonItem layout="below" disabled={busy} onClick={() => setOpen(false)}>
+            <ButtonItem
+              layout="below"
+              disabled={busy}
+              onClick={() => {
+                setOpen(false);
+                onClose?.();
+              }}
+            >
               Cancelar
             </ButtonItem>
           </PanelSectionRow>
@@ -655,13 +669,28 @@ function UnconfiguredGame({ appid, name, source, disabled, onDone }: { appid: nu
   );
 }
 
-// «Sugerencias de guardado»: carpetas exactas del manifiesto propio. Nada se aplica sin confirmar (ConfirmModal) y aplicar solo
-// rellena el formulario «Configurar» de «Sin configurar en el hub» (el guardado en el hub sigue el flujo de siempre).
-function SaveSuggestions({ onApply }: { onApply: (appid: number, name: string, path: string) => void }) {
+// «Sugerencias de guardado»: una tarjeta por juego sin configurar con su mejor carpeta (manifiesto propio) y UN botón grande:
+// «Añadir al hub» (segura: confirma, aplica y guarda), «Revisar y añadir» (dudosa: abre «Configurar» sin guardar) o nada
+// (carpeta no encontrada). «Añadir manualmente» abre «Configurar» vacío. Nunca se guarda sin confirmación explícita.
+interface SuggestionProps {
+  sync: SyncState;
+  setSync: (s: SyncState) => void;
+  editing: Record<number, number>; // formularios «Configurar» abiertos aquí (appid -> remontaje)
+  openForm: (appid: number, name: string, path: string) => void;
+  closeForm: (appid: number) => void;
+}
+function SaveSuggestions({ sync, setSync, editing, openForm, closeForm }: SuggestionProps) {
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<SaveResult | null>(null); // última respuesta (null = aún no se ha pulsado)
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [cardErr, setCardErr] = useState<Record<string, string>>({});
+  const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
+  const [appidOf, setAppidOf] = useState<Record<string, number>>({}); // tarjeta -> appid de su formulario abierto
+  const [more, setMore] = useState<ReadonlySet<string>>(new Set()); // tarjetas con «otras rutas» desplegadas
+  const [settings, setSettings] = useState(false);
+  const [manualAll, setManualAll] = useState(false);
   const [lookup, setLookup] = useState(true); // se recuerda en prefs.json (main.py)
 
   useEffect(() => {
@@ -684,10 +713,17 @@ function SaveSuggestions({ onApply }: { onApply: (appid: number, name: string, p
       });
   };
 
+  const withKey = <T,>(set: ReadonlySet<T>, k: T): ReadonlySet<T> => new Set([...set, k]);
+  const fail = (k: string, code?: string, detail?: string | null) => setCardErr((e) => ({ ...e, [k]: saveError(code) + (detail ? ` (${detail})` : "") }));
+
   const suggest = async () => {
     setBusy(true);
     setError(null);
     setNote(null);
+    setCardErr({});
+    setAdded(new Set());
+    setHidden(new Set());
+    setMore(new Set());
     try {
       const r = await suggestSaves();
       setRes(r);
@@ -701,28 +737,43 @@ function SaveSuggestions({ onApply }: { onApply: (appid: number, name: string, p
     }
   };
 
-  const apply = async (g: SaveGame, path: string) => {
+  // El juego ya no está «Sin configurar»: sale de la lista con un aviso (no se queda un error que no se puede arreglar)
+  const gone = (g: SaveGame, k: string) => {
+    setHidden((h) => withKey(h, k));
+    setNote(`«${g.name}» ya no está en «Sin configurar en el hub»: se quita de la lista.`);
+  };
+
+  // Segura: tras el modal, aplica (vuelve a verificar la carpeta) y configura el juego con el mismo camino que «Guardar en el hub».
+  const addToHub = async (g: SaveGame, k: string, path: string) => {
     setBusy(true);
-    setError(null);
     setNote(null);
+    setCardErr((e) => ({ ...e, [k]: "" }));
     try {
       const r = await applySaveSuggestion(g.source, g.id, path);
       if (!r.ok || typeof r.appid !== "number") {
-        setError(saveError(r.error));
+        if (r.error === "not_unconfigured") gone(g, k);
+        else fail(k, r.error);
         return;
       }
-      onApply(r.appid, r.name ?? g.name, r.path ?? path);
-      setNote(appliedText(r.name ?? g.name));
+      const c = await configureGame(r.appid, r.name ?? g.name, r.path ?? path);
+      if (!c.ok) {
+        setCardErr((e) => ({ ...e, [k]: gameError(c) + (c.error_detail ? ` (${c.error_detail})` : "") }));
+        return;
+      }
+      if (c.game?.joined) toaster.toast({ title: "Checkpoint", body: joinedText(c.game.name) });
+      drafts.delete(r.appid);
+      setAdded((a) => withKey(a, k));
+      setSync(await getSyncState());
     } catch (e) {
-      capture("aplicar la carpeta sugerida")(e);
-      setError(saveError("unexpected"));
+      capture("añadir la carpeta sugerida al hub")(e);
+      fail(k, "unexpected");
     } finally {
       setBusy(false);
     }
   };
 
-  const confirm = (g: SaveGame, p: SavePath) => {
-    const c = saveConfirm(g.name, p.path, g.confidence === "doubtful" || p.doubtful === true);
+  const confirmAdd = (g: SaveGame, k: string, path: string) => {
+    const c = saveConfirm(g.name, path);
     showModal(
       <ConfirmModal
         strTitle={c.title}
@@ -730,61 +781,181 @@ function SaveSuggestions({ onApply }: { onApply: (appid: number, name: string, p
         strOKButtonText={c.ok}
         strCancelButtonText="Cancelar"
         onOK={() => {
-          apply(g, p.path).catch(capture("aplicar la carpeta sugerida"));
+          addToHub(g, k, path).catch(capture("añadir la carpeta sugerida al hub"));
         }}
       />,
     );
   };
 
-  const games = res?.ok ? (res.games ?? []) : [];
+  // Dudosa («Revisar y añadir», con la carpeta) o manual (sin carpeta): abre «Configurar» en la tarjeta; no guarda nada.
+  const review = async (g: SaveGame, k: string, path: string | null) => {
+    setBusy(true);
+    setNote(null);
+    setCardErr((e) => ({ ...e, [k]: "" }));
+    try {
+      const r: SaveTarget = path === null ? await resolveSaveTarget(g.source, g.id) : await applySaveSuggestion(g.source, g.id, path);
+      if (!r.ok || typeof r.appid !== "number") {
+        if (r.error === "not_unconfigured") gone(g, k);
+        else fail(k, r.error);
+        return;
+      }
+      setAppidOf((m) => ({ ...m, [k]: r.appid as number }));
+      openForm(r.appid, r.name ?? g.name, path === null ? "" : ((r as SaveApplied).path ?? path));
+    } catch (e) {
+      capture("abrir el formulario de la sugerencia")(e);
+      fail(k, "unexpected");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const formFor = (appid: number, onDone?: () => void) => {
+    const u = sync.unconfigured.find((x) => x.appid === appid);
+    if (!u) return null;
+    return (
+      <UnconfiguredGame
+        key={`${appid}:${editing[appid] ?? 0}`}
+        appid={appid}
+        name={u.name}
+        source={u.source}
+        disabled={sync.running}
+        onDone={(st) => {
+          setSync(st);
+          closeForm(appid);
+          onDone?.();
+        }}
+        onClose={() => closeForm(appid)}
+      />
+    );
+  };
+
+  const games = res?.ok ? unconfiguredOnly(res.games ?? [], sync.games.map((x) => x.appid), hidden, added) : [];
+  const owned = new Set(Object.values(appidOf));
+  const orphan = Object.keys(editing).map(Number).filter((a) => !owned.has(a));
+  const pickable = sync.unconfigured.filter((u) => !(u.appid in editing));
+
+  const card = (g: SaveGame) => {
+    const k = gameKey(g);
+    const best = bestPath(g.paths);
+    const kind: CardKind = cardKind(g, best);
+    const others = otherPaths(g.paths, best);
+    const open = more.has(k);
+    const formAppid = appidOf[k];
+    const editingHere = formAppid !== undefined && formAppid in editing;
+    const done = added.has(k);
+    return (
+      <div key={k}>
+        <PanelSectionRow>
+          <Field label={g.name} description={g.source === "lutris" ? "Lutris" : `N.º de Steam: ${g.id}`} focusable>
+            {done ? SAVES_ADDED : SAVES_BADGES[kind]}
+          </Field>
+        </PanelSectionRow>
+        {best && (
+          <PanelSectionRow>
+            <Field label={best.path} description={savePathDetail(best)} focusable />
+          </PanelSectionRow>
+        )}
+        {!done && kind === "doubtful" && <PanelSectionRow>{SAVES_DOUBTFUL_GAME}</PanelSectionRow>}
+        {!done && kind === "not_found" && <PanelSectionRow>{SAVES_NOT_FOUND_GAME}</PanelSectionRow>}
+        {cardErr[k] && <PanelSectionRow>{cardErr[k]}</PanelSectionRow>}
+        {!done && editingHere && formFor(formAppid, () => setAdded((a) => withKey(a, k)))}
+        {!done && !editingHere && (
+          <>
+            {kind === "safe" && best && (
+              <PanelSectionRow>
+                <ButtonItem layout="below" disabled={busy || sync.running} onClick={() => confirmAdd(g, k, best.path)}>
+                  {SAVES_ADD}
+                </ButtonItem>
+              </PanelSectionRow>
+            )}
+            {kind === "doubtful" && best && (
+              <PanelSectionRow>
+                <ButtonItem layout="below" disabled={busy || sync.running} onClick={() => review(g, k, best.path)}>
+                  {SAVES_REVIEW}
+                </ButtonItem>
+              </PanelSectionRow>
+            )}
+            {others.length > 0 && (
+              <PanelSectionRow>
+                <ButtonItem
+                  layout="below"
+                  onClick={() =>
+                    setMore((m) => {
+                      const n = new Set(m);
+                      if (n.has(k)) n.delete(k);
+                      else n.add(k);
+                      return n;
+                    })
+                  }
+                >
+                  {savesOthers(others.length, open)}
+                </ButtonItem>
+              </PanelSectionRow>
+            )}
+            {open &&
+              others.map((p) => (
+                <PanelSectionRow key={p.path}>
+                  <Field label={p.path} description={savePathDetail(p)} focusable />
+                </PanelSectionRow>
+              ))}
+            <PanelSectionRow>
+              <ButtonItem layout="below" disabled={busy || sync.running} onClick={() => review(g, k, null)}>
+                {SAVES_MANUAL}
+              </ButtonItem>
+            </PanelSectionRow>
+          </>
+        )}
+      </div>
+    );
+  };
+
   return (
     <PanelSection title={SAVES_TITLE}>
       <PanelSectionRow>{SAVES_INTRO}</PanelSectionRow>
       <PanelSectionRow>
-        <ToggleField
-          label={SAVES_LOOKUP_LABEL}
-          description={SAVES_LOOKUP_HELP}
-          checked={lookup}
-          disabled={busy}
-          onChange={changeLookup}
-        />
-      </PanelSectionRow>
-      <PanelSectionRow>
         <ButtonItem layout="below" disabled={busy} onClick={suggest}>
-          {SAVES_BUTTON}
+          {res ? SAVES_AGAIN : SAVES_BUTTON}
         </ButtonItem>
       </PanelSectionRow>
       {busy && <PanelSectionRow>{SAVES_LOADING}</PanelSectionRow>}
       {error && <PanelSectionRow>{error}</PanelSectionRow>}
       {note && <PanelSectionRow>{note}</PanelSectionRow>}
       {res && !res.ok && res.error === "no_manifest" && <PanelSectionRow>{saveError("no_manifest")}</PanelSectionRow>}
-      {res?.ok && games.length === 0 && <PanelSectionRow>{SAVES_EMPTY}</PanelSectionRow>}
       {res?.ok && (res.lookups_pending ?? 0) > 0 && <PanelSectionRow>{lookupsPendingText(res.lookups_pending ?? 0)}</PanelSectionRow>}
-      {games.map((g) => (
-        <div key={`${g.source}:${g.id}`}>
-          <PanelSectionRow>
-            <Field label={g.name} description={g.source === "lutris" ? "Lutris" : `N.º de Steam: ${g.id}`} focusable>
-              {g.confidence === "doubtful" ? "Dudosa" : ""}
-            </Field>
+      {res?.ok && games.length === 0 && <PanelSectionRow>{SAVES_EMPTY}</PanelSectionRow>}
+      {res?.ok && games.length > 0 && <PanelSectionRow>{savesSummary(games.length)}</PanelSectionRow>}
+      {games.map(card)}
+      {orphan.map((a) => formFor(a))}
+      <PanelSectionRow>
+        <ButtonItem layout="below" disabled={busy} description={manualAll ? SAVES_MANUAL_ALL_HELP : undefined} onClick={() => setManualAll((v) => !v)}>
+          {manualAll ? SAVES_MANUAL_ALL_HIDE : SAVES_MANUAL_ALL}
+        </ButtonItem>
+      </PanelSectionRow>
+      {manualAll && pickable.length === 0 && <PanelSectionRow>{SAVES_MANUAL_EMPTY}</PanelSectionRow>}
+      {manualAll &&
+        pickable.map((u) => (
+          <PanelSectionRow key={u.appid}>
+            <ButtonItem layout="below" disabled={busy || sync.running} description={unconfiguredDescription(u.appid, u.source)} onClick={() => openForm(u.appid, u.name, "")}>
+              {u.name}
+            </ButtonItem>
           </PanelSectionRow>
-          {g.confidence === "doubtful" && <PanelSectionRow>{SAVES_DOUBTFUL_GAME}</PanelSectionRow>}
-          {g.state === "not_found_yet" && <PanelSectionRow>{SAVES_NOT_FOUND_GAME}</PanelSectionRow>}
-          {g.paths.map((p) => (
-            <div key={p.path}>
-              <PanelSectionRow>
-                <Field label={p.path} description={savePathDetail(p)} focusable />
-              </PanelSectionRow>
-              {p.exists && (
-                <PanelSectionRow>
-                  <ButtonItem layout="below" disabled={busy} onClick={() => confirm(g, p)}>
-                    {SAVES_USE}
-                  </ButtonItem>
-                </PanelSectionRow>
-              )}
-            </div>
-          ))}
+        ))}
+      <PanelSectionRow>
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <DialogButton
+            style={{ width: 44, minWidth: 44, padding: "10px 0", display: "flex", justifyContent: "center" }}
+            aria-label={SAVES_SETTINGS}
+            onClick={() => setSettings((v) => !v)}
+          >
+            <FaCog />
+          </DialogButton>
         </div>
-      ))}
+      </PanelSectionRow>
+      {settings && (
+        <PanelSectionRow>
+          <ToggleField label={SAVES_LOOKUP_LABEL} description={SAVES_LOOKUP_HELP} checked={lookup} disabled={busy} onChange={changeLookup} />
+        </PanelSectionRow>
+      )}
     </PanelSection>
   );
 }
@@ -794,13 +965,18 @@ function Games() {
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [showUnconfigured, setShowUnconfigured] = useState(true); // se recuerda en prefs.json (main.py)
   const started = useRef(false);
-  const [formRev, setFormRev] = useState<Record<number, number>>({}); // remonta el formulario «Configurar» al aplicar una sugerencia
+  const [editing, setEditing] = useState<Record<number, number>>({}); // formularios «Configurar» abiertos desde las sugerencias (appid -> remontaje)
 
-  // Una sugerencia confirmada rellena el formulario del juego sin configurar (borrador abierto) y lo remonta; no guarda nada.
-  const applySuggested = (appid: number, name: string, path: string) => {
-    drafts.set(appid, { open: true, gname: name, path, sug: { ok: true, appid, name, path, candidates: [path], source: "manifest" } });
-    setFormRev((r) => ({ ...r, [appid]: (r[appid] ?? 0) + 1 }));
+  // «Revisar y añadir» / «Añadir manualmente»: abre el formulario del juego sin configurar con nombre y carpeta (vacía) y lo remonta; no guarda nada.
+  const openForm = (appid: number, name: string, path: string) => {
+    drafts.set(appid, { open: true, gname: name, path, sug: path ? { ok: true, appid, name, path, candidates: [path], source: "manifest" } : null });
+    setEditing((r) => ({ ...r, [appid]: (r[appid] ?? 0) + 1 }));
   };
+  const closeForm = (appid: number) =>
+    setEditing((r) => {
+      const { [appid]: _, ...rest } = r;
+      return rest;
+    });
 
   const poll = useCallback(async () => {
     const s = await getSyncState();
@@ -936,7 +1112,7 @@ function Games() {
         </PanelSectionRow>
       </PanelSection>
 
-      <SaveSuggestions onApply={applySuggested} />
+      <SaveSuggestions sync={sync} setSync={setSync} editing={editing} openForm={openForm} closeForm={closeForm} />
 
       <PanelSection title="Juegos en el hub">
         {sync.games.length === 0 && !busy && !sync.error && (
@@ -995,8 +1171,8 @@ function Games() {
         <PanelSection title="Sin configurar en el hub">
           <PanelSectionRow>{UNCONFIGURED_HELP}</PanelSectionRow>
           {sync.unconfigured.some((u) => u.source === "shortcut") && <PanelSectionRow>{SHORTCUT_HELP}</PanelSectionRow>}
-          {sync.unconfigured.map((u) => (
-            <UnconfiguredGame key={`${u.appid}:${formRev[u.appid] ?? 0}`} appid={u.appid} name={u.name} source={u.source} disabled={busy} onDone={setSync} />
+          {sync.unconfigured.filter((u) => !(u.appid in editing)).map((u) => (
+            <UnconfiguredGame key={u.appid} appid={u.appid} name={u.name} source={u.source} disabled={busy} onDone={setSync} />
           ))}
         </PanelSection>
       )}
