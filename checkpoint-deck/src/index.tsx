@@ -14,7 +14,7 @@ import {
   staticClasses,
 } from "@decky/ui";
 import { FileSelectionType, callable, definePlugin, openFilePicker, toaster } from "@decky/api";
-import { FaCloud, FaCog } from "react-icons/fa";
+import { FaChevronDown, FaChevronUp, FaCloud, FaCog } from "react-icons/fa";
 import { CrashItem, CrashWatch, startCrashWatch } from "./crashwatch";
 import { copyText } from "./clipboard";
 import { drafts } from "./drafts";
@@ -34,6 +34,7 @@ import {
   errorGames,
   firstPlan,
   gameBadge,
+  gameExpanded,
   hasUpdate,
   homeStatus,
   latestSync,
@@ -1452,12 +1453,16 @@ function GameDetail({ ctx, g, changed, onBack, onIgnore, toggle }: { ctx: Ctx; g
   );
 }
 
+// Tarjetas de «Juegos» desplegadas o plegadas por el usuario (solo en memoria: se pierde al recargar el plugin)
+const gameOpen = new Map<string, boolean>();
+
 function GamesTab({ ctx }: { ctx: Ctx }) {
   const { sync, setSync } = ctx;
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [paths, setPaths] = useState<Record<string, string | null>>({});
   const [changes, setChanges] = useState<Record<string, Changed>>({});
   const [detail, setDetail] = useState<string | null>(null);
+  const [, setTick] = useState(0); // repinta al plegar o desplegar (el estado vive en `gameOpen`)
   const busy = sync.running;
 
   // Carpetas configuradas (se piden aparte: el estado de la tarea no lleva rutas) y carpetas distintas sugeridas
@@ -1568,80 +1573,97 @@ function GamesTab({ ctx }: { ctx: Ctx }) {
         const path = paths[g.id];
         const ch = changes[g.id];
         const openNow = ctx.playing === g.name;
+        const expanded = gameExpanded(g, gameOpen.get(g.id));
         return (
           <PanelSection key={g.id}>
-            <PanelSectionRow>
-              <ToggleField
-                label={g.name}
-                description={`${g.appid ? `N.º de Steam: ${g.appid}. ` : "Sin juego de Steam asociado. "}${g.enabled ? gameText(g) : "Desactivado"}`}
-                checked={g.enabled}
-                disabled={busy}
-                onChange={(on: boolean) => toggle(g, on)}
-              />
-            </PanelSectionRow>
-            <PanelSectionRow>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {openNow && <StatusBadge badge={{ tone: "info", label: OPEN_NOW }} />}
-                <StatusBadge badge={badge} />
-              </div>
-            </PanelSectionRow>
-            {path && (
-              <PanelSectionRow>
-                <div style={{ width: "100%" }}>
-                  <div style={MUTED}>{GAME_FOLDER}</div>
-                  <div style={MONO}>{path}</div>
-                </div>
-              </PanelSectionRow>
-            )}
-            {lastText(g) && <PanelSectionRow>{lastText(g)}</PanelSectionRow>}
-            {g.last_at && (
-              <PanelSectionRow>
-                <div style={MUTED}>{GAME_LAST_SYNC(whenText(g.last_at))}</div>
-              </PanelSectionRow>
-            )}
-            {g.enabled && g.state === "conflict" && (
-              <>
-                <PanelSectionRow>{RESOLVE_HELP}</PanelSectionRow>
-                {(["hub", "device"] as const).map((w) => (
-                  <PanelSectionRow key={w}>
-                    <ButtonItem layout="below" disabled={busy} onClick={() => askResolve(g, w)}>
-                      {w === "hub" ? RESOLVE_HUB_LABEL : RESOLVE_DEVICE_LABEL}
-                    </ButtonItem>
-                  </PanelSectionRow>
-                ))}
-              </>
-            )}
-            {ch && (
+            {/* Cabecera: solo nombre + estado (+ «Abierto ahora»). Es un botón (foco de mando, A / toque) que pliega o despliega la tarjeta. */}
+            <div style={{ borderBottom: "1px solid #ffffff22", paddingBottom: 6, marginBottom: 6 }}>
+              <DialogButton
+                aria-expanded={expanded}
+                onClick={() => {
+                  gameOpen.set(g.id, !expanded);
+                  setTick((n) => n + 1);
+                }}
+                style={{ width: "100%", height: "auto", minHeight: 52, padding: "8px 12px", display: "flex", alignItems: "center", gap: 8, textAlign: "left" }}
+              >
+                <span style={{ ...WRAP, flex: "1 1 120px", minWidth: 0, fontWeight: 600, lineHeight: 1.3 }}>{g.name}</span>
+                <span style={{ display: "flex", flex: "0 1 auto", flexWrap: "wrap", justifyContent: "flex-end", alignItems: "center", gap: 6, rowGap: 6 }}>
+                  {openNow && <StatusBadge badge={{ tone: "info", label: OPEN_NOW }} />}
+                  <StatusBadge badge={badge} />
+                </span>
+                <span aria-hidden="true" style={{ flex: "0 0 auto", display: "flex" }}>{expanded ? <FaChevronUp /> : <FaChevronDown />}</span>
+              </DialogButton>
+            </div>
+            {expanded && (
               <>
                 <PanelSectionRow>
-                  <div style={{ ...WRAP, borderLeft: `4px solid ${TONE_COLOR.info}`, paddingLeft: 8 }}>
-                    <b>{CHANGED_TITLE}</b>
-                    <div style={MONO}>{ch.path}</div>
-                  </div>
+                  <ToggleField
+                    label={GAME_ENABLED}
+                    description={`${g.appid ? `N.º de Steam: ${g.appid}. ` : "Sin juego de Steam asociado. "}${g.enabled ? gameText(g) : "Desactivado"}`}
+                    checked={g.enabled}
+                    disabled={busy}
+                    onChange={(on: boolean) => toggle(g, on)}
+                  />
                 </PanelSectionRow>
+                {path && (
+                  <PanelSectionRow>
+                    <div style={{ width: "100%" }}>
+                      <div style={MUTED}>{GAME_FOLDER}</div>
+                      <div style={MONO}>{path}</div>
+                    </div>
+                  </PanelSectionRow>
+                )}
+                {lastText(g) && <PanelSectionRow>{lastText(g)}</PanelSectionRow>}
+                {g.last_at && (
+                  <PanelSectionRow>
+                    <div style={MUTED}>{GAME_LAST_SYNC(whenText(g.last_at))}</div>
+                  </PanelSectionRow>
+                )}
+                {g.enabled && g.state === "conflict" && (
+                  <>
+                    <PanelSectionRow>{RESOLVE_HELP}</PanelSectionRow>
+                    {(["hub", "device"] as const).map((w) => (
+                      <PanelSectionRow key={w}>
+                        <ButtonItem layout="below" disabled={busy} onClick={() => askResolve(g, w)}>
+                          {w === "hub" ? RESOLVE_HUB_LABEL : RESOLVE_DEVICE_LABEL}
+                        </ButtonItem>
+                      </PanelSectionRow>
+                    ))}
+                  </>
+                )}
+                {ch && (
+                  <>
+                    <PanelSectionRow>
+                      <div style={{ ...WRAP, borderLeft: `4px solid ${TONE_COLOR.info}`, paddingLeft: 8 }}>
+                        <b>{CHANGED_TITLE}</b>
+                        <div style={MONO}>{ch.path}</div>
+                      </div>
+                    </PanelSectionRow>
+                    <PanelSectionRow>
+                      <ButtonItem layout="below" onClick={() => setDetail(g.id)}>
+                        {CHANGED_VIEW}
+                      </ButtonItem>
+                    </PanelSectionRow>
+                    <PanelSectionRow>
+                      <ButtonItem layout="below" onClick={() => ignore(ch)}>
+                        {CHANGED_IGNORE}
+                      </ButtonItem>
+                    </PanelSectionRow>
+                  </>
+                )}
+                <PanelSectionRow>
+                  <ButtonItem layout="below" disabled={!canSync(g) || g.state === "conflict"} onClick={ctx.run(() => syncGame(g.id))}>
+                    Sincronizar
+                  </ButtonItem>
+                </PanelSectionRow>
+                {openNow && <PanelSectionRow>{GAME_OPEN_HINT}</PanelSectionRow>}
                 <PanelSectionRow>
                   <ButtonItem layout="below" onClick={() => setDetail(g.id)}>
-                    {CHANGED_VIEW}
-                  </ButtonItem>
-                </PanelSectionRow>
-                <PanelSectionRow>
-                  <ButtonItem layout="below" onClick={() => ignore(ch)}>
-                    {CHANGED_IGNORE}
+                    {GAME_DETAIL}
                   </ButtonItem>
                 </PanelSectionRow>
               </>
             )}
-            <PanelSectionRow>
-              <ButtonItem layout="below" disabled={!canSync(g) || g.state === "conflict"} onClick={ctx.run(() => syncGame(g.id))}>
-                Sincronizar
-              </ButtonItem>
-            </PanelSectionRow>
-            {openNow && <PanelSectionRow>{GAME_OPEN_HINT}</PanelSectionRow>}
-            <PanelSectionRow>
-              <ButtonItem layout="below" onClick={() => setDetail(g.id)}>
-                {GAME_DETAIL}
-              </ButtonItem>
-            </PanelSectionRow>
           </PanelSection>
         );
       })}
@@ -2255,8 +2277,6 @@ function Content() {
         return setTab("games");
       case "go_ver":
         return setTab("ver");
-      case "close_summary":
-        return setShared({ summary: null });
       case "sync_all":
         return syncAllClick();
       case "ping":

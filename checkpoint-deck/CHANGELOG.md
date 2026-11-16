@@ -1,5 +1,17 @@
 # Registro de cambios del plugin
 
+## 1.3.1 - 2026-11-16
+
+`checkpointProtocol: 1` (sin cambios). Con semver, `1.3.1` es mayor que `1.3.0`. Ajustes tras probar la 1.3.0 en la Deck (sin verificar en una Deck real).
+
+### Cambios
+
+- **Juegos:** cada tarjeta muestra solo el nombre y la insignia de estado; carpeta, última sincronización, interruptor, «Sincronizar», «Ver detalle» y la carpeta distinta sugerida van plegados (botón con flecha, foco de mando; se recuerda solo en memoria). «Sincronizar todo» sigue arriba. Un juego activado con conflicto o error sale desplegado por defecto (sus acciones están dentro).
+- **Insignias de estado:** ya no se solapan con la línea divisora (altura de línea y márgenes propios).
+- **Sin banner «Sincronización terminada»:** el resumen va solo por toast. Siguen los avisos de problema (interrumpida, conflicto, fallo).
+- **Pendientes:** textos más cortos.
+- **Pestañas:** la activa se centra siempre en la barra (también con L1 / R1 y con el foco del mando); si caben todas no hay scroll.
+
 ## 1.3.0 - 2026-11-16
 
 `checkpointProtocol: 1` (sin cambios). Con semver, `1.3.0` es mayor que `1.2.1`.

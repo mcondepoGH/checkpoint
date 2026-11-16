@@ -140,15 +140,15 @@ export const CHECK_HELP =
 export const TOGGLE_HELP =
   "El interruptor activa o desactiva el juego en el hub, para todos tus dispositivos. Desactivado no se sincroniza.";
 export const UNCONFIGURED_HELP =
-  "Instalados en la Deck pero sin juego en el hub. Configúralos aquí: el nombre y la ruta de guardado se rellenan solos si se detectan.";
-export const NO_PATH_FOUND = "No se encontró ninguna carpeta de guardado que exista: escríbela (ruta completa) o usa Examinar….";
+  "Instalados en la Deck, sin juego en el hub.";
+export const NO_PATH_FOUND = "No se detectó carpeta: escríbela o usa Examinar…";
 export const PATH_FOUND: Record<string, string> = {
-  proton: "Ruta detectada en el prefijo de Proton del juego. Revísala y confirma.",
-  cloud: "Ruta detectada en los guardados de Steam Cloud. Revísala y confirma.",
-  manifest: "Carpeta elegida de las sugerencias de guardado. Revísala y confirma.",
-  lutris: "Candidatos encontrados en el prefijo de Lutris; elige la carpeta de partidas guardadas o usa Examinar…",
+  proton: "Detectada en el prefijo de Proton. Revísala.",
+  cloud: "Detectada en Steam Cloud. Revísala.",
+  manifest: "Elegida de las sugerencias. Revísala.",
+  lutris: "Candidatos del prefijo de Lutris: elige uno o usa Examinar…",
 };
-export const NO_PATH_LUTRIS = "No se encontró ninguna carpeta de partidas en el prefijo; usa Examinar…";
+export const NO_PATH_LUTRIS = "Sin carpeta de partidas en el prefijo: usa Examinar…";
 
 /** Ayuda bajo «Carpeta de guardado»: qué se detectó (`source`) y si hay ruta. Un atajo de Lutris sin candidatos tiene la suya. */
 export function pathHelp(path: string, source?: string): string {
@@ -261,7 +261,7 @@ export function gameError(f: GameFailure): string {
 
 // ---- selector de carpetas nativo de Decky (`openFilePicker`) en el formulario «Configurar» ----
 export const BROWSE_LABEL = "Examinar…";
-export const BROWSE_HELP = "Abre el selector de carpetas de Decky, o escribe la ruta completa.";
+export const BROWSE_HELP = "Selector de Decky, o escribe la ruta.";
 /** Fallo conocido del selector de Decky (su frontend hace `theError.match` sobre un error que llega como objeto). */
 export const PICKER_FAIL = "Decky no puede abrir esa carpeta; escribe la ruta.";
 
@@ -298,7 +298,7 @@ export function unconfiguredView(show: boolean, count: number): { showList: bool
 // ---- atajos de Steam (juegos que no son de Steam, p. ej. Lutris) en «Sin configurar en el hub» ----
 export const SHORTCUT_LABEL = "Atajo";
 export const SHORTCUT_HELP =
-  "Los marcados como «Atajo» son juegos que no son de Steam (p. ej. Lutris) añadidos a Steam. Si el atajo lanza un juego de Lutris, se ofrecen como candidatas las carpetas de partidas que existan en su prefijo (elige una o usa «Examinar…», que abre en el prefijo). En los demás atajos la carpeta no se detecta: escríbela o usa «Examinar…».";
+  "«Atajo»: juego que no es de Steam (p. ej. Lutris). Si es de Lutris, se proponen carpetas de su prefijo; en los demás atajos no se detecta: escríbela o usa «Examinar…».";
 // Línea de descripción de un juego sin configurar: un atajo lo dice; su número no es un id de la tienda de Steam
 export function unconfiguredDescription(appid: number, source?: string): string {
   return source === "shortcut" ? `${SHORTCUT_LABEL} · N.º de Steam: ${appid}` : `N.º de Steam: ${appid}`;
@@ -471,10 +471,6 @@ export const BANNER = {
     `Quedaron ${left === 1 ? "1 juego" : `${left} juegos`} sin sincronizar. Lo ya subido o bajado está a salvo; ningún juego se quedó a medias.`,
   retry: "Reintentar",
   ping: "Probar conexión",
-  doneTitle: "Sincronización terminada.",
-  conflictHint: " Resuelve el conflicto en Juegos.",
-  errorHint: " Reintenta el juego con error.",
-  close: "Cerrar",
   outdatedTitle: "Plugin demasiado antiguo.",
   howToUpdate: "Ver cómo actualizar",
   offlineTitle: "Sin conexión con el hub.",
@@ -605,10 +601,10 @@ export const CHANGE_FOLDER_HELP = "Hoy el plugin no cambia la carpeta de un jueg
 
 // Pendientes (sin configurar)
 export const PEND_TITLE = "Sin configurar en el hub";
-export const PEND_NONE = "No queda ningún juego por configurar.";
+export const PEND_NONE = "Ningún juego por configurar.";
 export const PEND_SEE_SUGGESTION = "Ver sugerencia";
 export const PEND_SHOW_LIST = "Mostrar la lista";
-export const PEND_HIDDEN_HELP = "También en Ajustes: «Mostrar juegos sin configurar».";
+export const PEND_HIDDEN_HELP = "También en Ajustes.";
 
 // Versión
 export const VER_TITLE = "Actualizaciones";

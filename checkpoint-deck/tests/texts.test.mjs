@@ -261,14 +261,17 @@ test('los atajos de Steam salen marcados como «Atajo» en sin configurar', { sk
   assert.equal(t.unconfiguredDescription(3000000001, 'shortcut'), 'Atajo · N.º de Steam: 3000000001');
   assert.equal(t.unconfiguredDescription(5, 'otro'), 'N.º de Steam: 5');
   assert.ok(!t.SHORTCUT_HELP.includes('\n'));
-  // la ayuda ya no dice que la carpeta de un atajo nunca se detecta: los de Lutris la traen sugerida; los demás no
-  assert.match(t.SHORTCUT_HELP, /Lutris.*candidatas.*prefijo/);
+  // la ayuda es corta y no dice que la carpeta de un atajo nunca se detecta: los de Lutris la traen sugerida; los demás no
+  assert.match(t.SHORTCUT_HELP, /Lutris.*prefijo/);
   assert.match(t.SHORTCUT_HELP, /demás atajos.*no se detecta.*Examinar/);
-  assert.ok(!t.SHORTCUT_HELP.startsWith('Los marcados como «Atajo» son juegos que no son de Steam (p. ej. Lutris) añadidos a Steam. Su carpeta'));
+  assert.ok(t.SHORTCUT_HELP.length < 200);
+  // los textos de «Pendientes» son frases cortas
+  assert.ok(t.UNCONFIGURED_HELP.length < 70);
+  for (const v of [...Object.values(t.PATH_FOUND), t.NO_PATH_FOUND, t.NO_PATH_LUTRIS, t.PEND_HIDDEN_HELP, t.BROWSE_HELP]) assert.ok(v.length < 70, v);
   // la sugerencia de Lutris tiene su propia línea bajo la carpeta (sin ella la descripción quedaría vacía)
-  assert.match(t.PATH_FOUND.lutris, /Candidatos encontrados en el prefijo de Lutris/);
+  assert.match(t.PATH_FOUND.lutris, /Candidatos del prefijo de Lutris/);
   assert.match(t.PATH_FOUND.lutris, /Examinar/);
-  assert.equal(t.NO_PATH_LUTRIS, 'No se encontró ninguna carpeta de partidas en el prefijo; usa Examinar…');
+  assert.equal(t.NO_PATH_LUTRIS, 'Sin carpeta de partidas en el prefijo: usa Examinar…');
   // ayuda según haya o no candidatos
   assert.equal(t.pathHelp('/x/Saves', 'lutris'), t.PATH_FOUND.lutris);
   assert.equal(t.pathHelp('', 'lutris'), t.NO_PATH_LUTRIS);

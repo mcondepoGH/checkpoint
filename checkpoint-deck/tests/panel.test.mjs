@@ -155,12 +155,10 @@ test('banners: sin vincular solo avisa fuera de Inicio y sin vincular nada más'
   assert.deepEqual(banners(B({ link: 'waiting', tab: 'set' })), []);
 });
 
-test('banners: máximo 2 por prioridad; el resumen va primero', { skip }, async () => {
+test('banners: máximo 2 por prioridad; sin banner de resumen', { skip }, async () => {
   const { banners } = await load('panel.ts');
   const b = banners(B({ summary: T({ up: 1, conf: 1 }), outdated: true, online: false, playing: 'Hades', conflict: 'Cuphead' }));
-  assert.deepEqual(b.map((x) => x.id), ['summary', 'outdated']);
-  assert.match(b[0].text, /^1 subido, 0 bajados, 1 conflicto\. Resuelve el conflicto en Juegos\.$/);
-  assert.equal(b[0].tone, 'warn');
+  assert.deepEqual(b.map((x) => x.id), ['outdated', 'offline']);
   const c = banners(B({ online: false, playing: 'Hades', conflict: 'Cuphead', failed: true }));
   assert.deepEqual(c.map((x) => x.id), ['offline', 'playing']);
   assert.match(c[0].text, /^No se pudo conectar\. El cierre de un juego queda en cola/);
@@ -174,10 +172,15 @@ test('banners: sincronización cortada ofrece reintentar o probar la conexión; 
   assert.equal(banners(B({ summary: cut, online: false }))[0].action.kind, 'ping');
   assert.match(banners(B({ summary: T({ interrupted: true, left: 1 }) }))[0].text, /^Quedaron 1 juego sin/);
   assert.deepEqual(banners(B({ summary: cut, running: true })), []);
-  const ok = banners(B({ summary: T({ up: 2 }) }))[0];
-  assert.equal(ok.tone, 'ok');
-  assert.equal(ok.text, '2 subidos, 0 bajados, 0 conflictos.');
-  assert.equal(banners(B({ summary: T({ err: 1 }) }))[0].text, '0 subidos, 0 bajados, 0 conflictos, 1 error. Reintenta el juego con error.');
+  // el éxito (y el resumen con conflictos o errores) solo va por toast: ningún banner de resumen
+  assert.deepEqual(banners(B({ summary: T({ up: 2 }) })), []);
+  assert.deepEqual(banners(B({ summary: T({ up: 1, conf: 1 }) })), []);
+  assert.deepEqual(banners(B({ summary: T({ err: 1 }) })), []);
+  // los problemas siguen fijos por su propio aviso, sin duplicar el toast de éxito
+  assert.deepEqual(banners(B({ summary: T({ conf: 1 }), conflict: 'Cuphead' })).map((x) => x.id), ['conflict']);
+  assert.deepEqual(banners(B({ summary: T({ err: 1 }), failed: true })).map((x) => x.id), ['failed']);
+  const { BANNER } = await load('texts.ts');
+  assert.equal(BANNER.doneTitle, undefined);
 });
 
 test('banners: dispositivo nuevo, actualización y conflicto con su acción', { skip }, async () => {
@@ -185,7 +188,7 @@ test('banners: dispositivo nuevo, actualización y conflicto con su acción', { 
   const f = banners(B({ firstSync: true }));
   assert.equal(f[0].id, 'first');
   assert.equal(f[0].action.kind, 'sync_all');
-  assert.deepEqual(banners(B({ firstSync: true, summary: T({ up: 1 }) })).map((x) => x.id), ['summary']); // tras sincronizar ya no
+  assert.deepEqual(banners(B({ firstSync: true, summary: T({ up: 1 }) })).map((x) => x.id), []); // tras sincronizar ya no
   assert.deepEqual(banners(B({ firstSync: true, online: false })).map((x) => x.id), ['offline']);
   const u = banners(B({ update: { latest: '1.3.0', current: '1.2.1' } }))[0];
   assert.equal(u.title, 'Actualización disponible: 1.3.0');
@@ -266,4 +269,25 @@ test('textos nuevos: toasts de menos de 45 caracteres', { skip }, async () => {
   assert.equal(t.UPDATED_TOAST('1.3.0'), 'Checkpoint actualizado a 1.3.0');
   assert.deepEqual(t.TAB_ORDER, ['home', 'games', 'sugg', 'pend', 'set', 'ver']);
   assert.equal(t.COMING_SOON, 'Próximamente');
+});
+
+test('gameExpanded: plegada salvo conflicto o error activados; lo que elige el usuario manda', { skip }, async () => {
+  const { gameExpanded } = await load('panel.ts');
+  for (const st of ['up_to_date', 'upload', 'download', 'unknown', 'no_path', 'missing_dir']) assert.equal(gameExpanded(G({ state: st })), false, st);
+  assert.equal(gameExpanded(G({ state: 'conflict' })), true);
+  assert.equal(gameExpanded(G({ state: 'error' })), true);
+  assert.equal(gameExpanded(G({ state: 'conflict', enabled: false })), false);
+  assert.equal(gameExpanded(G({ state: 'conflict' }), false), false);
+  assert.equal(gameExpanded(G({ state: 'up_to_date' }), true), true);
+});
+
+test('tabScrollLeft: centra la pestaña, sin pasarse y sin scroll si caben', { skip }, async () => {
+  const { tabScrollLeft } = await load('panel.ts');
+  // 6 pestañas de 100 px en 400 px de barra (scrollWidth 600): máximo 200
+  assert.equal(tabScrollLeft(0, 100, 400, 600), 0); // la primera
+  assert.equal(tabScrollLeft(100, 100, 400, 600), 0); // aún no hace falta
+  assert.equal(tabScrollLeft(250, 100, 400, 600), 100); // centrada
+  assert.equal(tabScrollLeft(500, 100, 400, 600), 200); // la última: tope
+  assert.equal(tabScrollLeft(300, 100, 400, 400), 0); // caben: sin scroll
+  assert.equal(tabScrollLeft(300, 100, 400, 350), 0);
 });

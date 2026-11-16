@@ -1,9 +1,10 @@
 // Piezas visuales del panel por pestañas (solo presentación; la lógica está en panel.ts). Componentes de @decky/ui: el foco
 // de mando lo dan DialogButton y Focusable. Cada insignia lleva forma (icono) + color + texto: el color solo nunca dice nada.
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useRef } from "react";
 import { DialogButton, Focusable } from "@decky/ui";
 import { toaster } from "@decky/api";
 import { FaCheckCircle, FaExclamationTriangle, FaInfoCircle, FaTimesCircle } from "react-icons/fa";
+import { tabScrollLeft } from "./panel";
 import type { Badge as BadgeData, Banner, ProgressRow, TabDot } from "./panel";
 import { ToastKind, toastDuration } from "./autosync";
 import { TAB_DOT_ATTENTION, TAB_DOT_UPDATE, TAB_LABELS, TAB_ORDER, TONE_ICON, TabId, Tone } from "./texts";
@@ -23,7 +24,11 @@ export function StatusBadge({ badge }: { badge: BadgeData }) {
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
-        padding: "3px 10px",
+        boxSizing: "border-box",
+        flex: "0 0 auto",
+        padding: "4px 10px",
+        lineHeight: 1.3,
+        verticalAlign: "middle",
         borderRadius: 999,
         border: `1px solid ${TONE_COLOR[badge.tone]}`,
         background: TONE_BG[badge.tone],
@@ -71,14 +76,34 @@ function Dot({ dot }: { dot: TabDot }) {
 }
 
 export function TabBar({ tab, onTab, disabled, dots }: { tab: TabId; onTab: (t: TabId) => void; disabled: (t: TabId) => boolean; dots: (t: TabId) => TabDot | null }) {
+  const bar = useRef<HTMLElement | null>(null);
+  // Centra la pestaña en la barra (solo horizontal: no mueve el panel). Sin scroll si caben todas; la primera queda a 0.
+  const centerBtn = (btn: HTMLElement | null | undefined, smooth: boolean) => {
+    const el = bar.current;
+    if (!el || !btn) return;
+    el.scrollTo({ left: tabScrollLeft(btn.offsetLeft, btn.offsetWidth, el.clientWidth, el.scrollWidth), behavior: smooth ? "smooth" : "auto" });
+  };
+  const center = (id: TabId, smooth: boolean) => centerBtn(bar.current?.querySelector<HTMLElement>(`[data-tab="${id}"]`), smooth);
+  const first = useRef(true);
+  // Cualquier cambio de pestaña (toque, L1 / R1, mando) deja la activa a la vista
+  useEffect(() => {
+    center(tab, !first.current);
+    first.current = false;
+  }, [tab]);
   return (
-    <Focusable flow-children="row" style={{ display: "flex", gap: 4, overflowX: "auto", padding: "4px 0 8px" }}>
+    <Focusable
+      flow-children="row"
+      ref={bar as never}
+      onFocus={(e: { target: EventTarget }) => centerBtn((e.target as HTMLElement).closest?.("[data-tab]") as HTMLElement | null, true)} // foco de mando sobre una pestaña a medias
+      style={{ position: "relative", display: "flex", gap: 4, overflowX: "auto", overflowY: "hidden", scrollbarWidth: "none", padding: "4px 0 8px" }}
+    >
       {TAB_ORDER.map((id) => {
         const dot = dots(id);
         const on = tab === id;
         return (
           <DialogButton
             key={id}
+            data-tab={id}
             disabled={disabled(id)}
             onClick={() => onTab(id)}
             aria-selected={on}

@@ -10,7 +10,6 @@ import {
   TAB_ORDER,
   TabId,
   Tone,
-  summaryText,
   tabDotCount,
 } from "./texts";
 
@@ -201,7 +200,7 @@ export function firstPlan(games: GameLike[]): FirstPlan {
 }
 
 // ---- avisos fijos bajo las pestañas ----
-export type BannerAction = "go_home" | "go_games" | "go_ver" | "retry" | "ping" | "close_summary" | "sync_all";
+export type BannerAction = "go_home" | "go_games" | "go_ver" | "retry" | "ping" | "sync_all";
 export interface Banner {
   id: string;
   tone: Tone;
@@ -216,7 +215,7 @@ export interface BannerInput {
   outdated: boolean;
   outdatedText: string;
   running: boolean;
-  summary: Tally | null; // resumen de la última «Sincronizar todo» (null = nada que avisar o ya cerrado)
+  summary: Tally | null; // resumen de la última «Sincronizar todo»; solo un corte (interrupted) genera aviso fijo
   playing: string | null;
   conflict: string | null; // nombre del primer juego en conflicto
   failed: boolean; // algún juego con error
@@ -244,16 +243,8 @@ export function banners(i: BannerInput): Banner[] {
         text: BANNER.cutText(s.left),
         action: i.online ? { label: BANNER.retry, kind: "retry" } : { label: BANNER.ping, kind: "ping" },
       });
-    } else {
-      const bad = s.err > 0 || s.conf > 0;
-      out.push({
-        id: "summary",
-        tone: bad ? "warn" : "ok",
-        title: BANNER.doneTitle,
-        text: summaryText(s) + (s.conf ? `.${BANNER.conflictHint}` : s.err ? `.${BANNER.errorHint}` : "."),
-        action: { label: BANNER.close, kind: "close_summary" },
-      });
     }
+    // Sin banner de éxito ni de resumen con conflictos o errores: el toast ya lo dice y «conflict» / «failed» siguen fijos
   }
   if (i.outdated) out.push({ id: "outdated", tone: "err", title: BANNER.outdatedTitle, text: i.outdatedText, action: { label: BANNER.howToUpdate, kind: "go_ver" } });
   if (!i.online) out.push({ id: "offline", tone: "warn", title: BANNER.offlineTitle, text: `${i.connectionText} ${BANNER.offlineText}`, action: { label: BANNER.ping, kind: "ping" } });
@@ -263,6 +254,14 @@ export function banners(i: BannerInput): Banner[] {
   if (i.firstSync && !i.running && i.online && !s) out.push({ id: "first", tone: "info", title: BANNER.newDeviceTitle, text: BANNER.newDeviceText, action: { label: "Sincronizar todo", kind: "sync_all" } });
   if (i.update) out.push({ id: "update", tone: "info", title: BANNER.updateTitle(i.update.latest), text: BANNER.updateText(i.update.current), action: { label: BANNER.howToUpdate, kind: "go_ver" } });
   return out.slice(0, MAX_BANNERS);
+}
+
+// ---- tarjetas de «Juegos»: plegadas por defecto ----
+/** ¿Está desplegada la tarjeta? Lo que elige el usuario (`override`) manda; sin elección, solo se despliega un juego activado
+ *  con conflicto o error (lo único urgente: sus acciones están dentro de la tarjeta). Lo demás sale plegado: nombre + estado. */
+export function gameExpanded(g: { enabled: boolean; state: string }, override?: boolean): boolean {
+  if (override !== undefined) return override;
+  return g.enabled && (g.state === "conflict" || g.state === "error");
 }
 
 // ---- pestañas ----
@@ -283,6 +282,13 @@ export function tabDot(id: TabId, i: TabInput): TabDot | null {
   if (id === "pend" && i.pending > 0 && i.showPending) return { kind: "count", n: i.pending, label: tabDotCount(i.pending) };
   if (id === "ver" && i.updateAvailable) return { kind: "update" };
   return null;
+}
+/** `scrollLeft` que deja el botón de una pestaña centrado en la barra, sin pasarse de los extremos (la primera queda a 0).
+ *  Si las pestañas caben en el ancho no hay nada que desplazar (0). */
+export function tabScrollLeft(offsetLeft: number, width: number, viewport: number, scrollWidth: number): number {
+  const max = Math.max(0, scrollWidth - viewport);
+  if (max === 0) return 0;
+  return Math.max(0, Math.min(max, Math.round(offsetLeft - (viewport - width) / 2)));
 }
 /** Pestaña anterior o siguiente (L1 / R1), saltando las desactivadas y sin dar la vuelta. */
 export function stepTab(cur: TabId, dir: -1 | 1, linked: boolean): TabId {
