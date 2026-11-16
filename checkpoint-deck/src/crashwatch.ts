@@ -6,6 +6,7 @@ import { crashReport, redact } from "./crash";
 
 export const MAX_VISIBLE = 3;
 export const DEDUPE_MS = 5000;
+export const TITLE_MAX = 1000; // el título del fallo se ve entero en «Fallos detectados» (antes 200); ya va saneado
 const EXTENSION = /(chrome|moz|safari(-web)?|ms-browser)-extension:\/\//i;
 const NETWORK = /^(Failed to fetch|Load failed|NetworkError|Network request failed)/i;
 
@@ -118,7 +119,7 @@ export function startCrashWatch(
     if (seen.has(key) || [...shown.values()].includes(key)) return;
     seen.set(key, t);
     const details = crashReport(e, { version, nav: win.navigator });
-    const title = redact(`${e.name || "Error"}: ${e.message}`).slice(0, 200);
+    const title = redact(`${e.name || "Error"}: ${e.message}`).slice(0, TITLE_MAX);
     const item: CrashItem = { id: nextId++, severity: kind === "error" ? "alert" : "status", title, details };
     items = [...items, item].slice(-max);
     shown.set(item.id, key);

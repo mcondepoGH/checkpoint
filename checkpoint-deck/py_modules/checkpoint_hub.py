@@ -30,6 +30,7 @@ TIMEOUT_S = 10.0
 MAX_BODY = 64 * 1024  # el hub responde JSON pequeño; no se lee más
 KEY_PREFIX = "ckd_"
 SETTINGS_FILE = "settings.json"
+DETAIL_MAX = 1500  # el detalle de un fallo se ve entero en la Deck (saneado antes de recortar)
 NAME_MAX = 64  # igual que `NAME_MAX` del hub (backend/app/config/models.py)
 
 
@@ -205,7 +206,7 @@ def redact(text: str, *secrets: Optional[str]) -> str:
     return _SENSITIVE.sub("***", text)
 
 
-def describe_error(e: BaseException, *secrets: Optional[str], limit: int = 300) -> str:
+def describe_error(e: BaseException, *secrets: Optional[str], limit: int = DETAIL_MAX) -> str:
     """`Tipo: mensaje` de una excepción, saneado y recortado, para el log y para el detalle que ve la interfaz.
     Un HubApiError/HubNetworkError añade el endpoint (método y ruta, sin servidor ni consulta) y el estado."""
     status = getattr(e, "status", None)

@@ -1,5 +1,16 @@
 # Registro de cambios del plugin
 
+## 1.3.2 - 2026-11-16
+
+`checkpointProtocol: 1` (sin cambios). Los avisos se ven completos (por probar en una Deck real).
+
+### Cambios
+
+- **Inicio, «Último aviso»:** el recorte venía del propio texto, que era el del toast (máx. 45 caracteres, con el nombre del juego cortado a 22 con «…»). Ahora se guarda el aviso entero (nombre completo y, en un fallo de sincronización, el motivo conocido); los toasts de Decky siguen limitados a 45.
+- **Inicio, «Fallos detectados»:** el título y los detalles se pintan enteros con salto de línea (antes iban en un `Field` de Decky, que los acorta). El título del fallo llega hasta 1000 caracteres (antes 200), siempre saneado.
+- **Textos largos:** salto de línea sin elipsis; si pasan de 200 px de alto, scroll interno con el mando.
+- **Detalle de errores del hub:** `describe_error` recorta a 1500 caracteres (antes 300), después de ocultar claves y secretos.
+
 ## 1.3.1 - 2026-11-16
 
 `checkpointProtocol: 1` (sin cambios). Con semver, `1.3.1` es mayor que `1.3.0`. Ajustes tras probar la 1.3.0 en la Deck (sin verificar en una Deck real).

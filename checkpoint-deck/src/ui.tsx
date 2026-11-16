@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useRef } from "react";
 import { DialogButton, Focusable } from "@decky/ui";
 import { toaster } from "@decky/api";
 import { FaCheckCircle, FaExclamationTriangle, FaInfoCircle, FaTimesCircle } from "react-icons/fa";
-import { tabScrollLeft } from "./panel";
+import { LONG_TEXT_STYLE, tabScrollLeft } from "./panel";
 import type { Badge as BadgeData, Banner, ProgressRow, TabDot } from "./panel";
 import { ToastKind, toastDuration } from "./autosync";
 import { TAB_DOT_ATTENTION, TAB_DOT_UPDATE, TAB_LABELS, TAB_ORDER, TONE_ICON, TabId, Tone } from "./texts";
@@ -16,6 +16,15 @@ const TONE_BG: Record<Tone, string> = { ok: "#52c98f22", info: "#6cb8ff22", warn
 export const WRAP = { whiteSpace: "normal", overflowWrap: "anywhere", wordBreak: "break-all" } as const;
 export const MONO = { ...WRAP, fontFamily: "monospace", fontSize: "0.85em" } as const;
 export const MUTED = { ...WRAP, opacity: 0.75, fontSize: "0.9em" } as const;
+
+/** Texto largo completo (aviso, fallo): salta de línea, sin elipsis, y con scroll de mando si pasa de `LONG_TEXT_MAX_HEIGHT`. */
+export function LongText({ children, label }: { children: ReactNode; label?: string }) {
+  return (
+    <Focusable style={LONG_TEXT_STYLE} aria-label={label}>
+      {children}
+    </Focusable>
+  );
+}
 
 export function StatusBadge({ badge }: { badge: BadgeData }) {
   return (

@@ -448,3 +448,15 @@ def test_set_resolution_rejects_a_non_object_answer(scripthub):
     c = hc.HubClient(hub.url, "ckd_secret", sleep=lambda s: None)
     with pytest.raises(hc.HubApiError):
         c.set_resolution("g1", "device", {"hub": None, "device": None})
+
+
+def test_describe_error_no_recorta_a_300_y_sigue_saneando():
+    from checkpoint_hub import DETAIL_MAX, describe_error
+
+    assert DETAIL_MAX == 1500
+    larga = "motivo largo " * 60  # ~780 caracteres
+    out = describe_error(ValueError(larga + KEY))
+    assert len(out) > 300 and len(out) <= DETAIL_MAX
+    assert KEY not in out
+    assert len(describe_error(ValueError("x" * 5000))) == DETAIL_MAX
+    assert len(describe_error(ValueError("x" * 5000), limit=50)) == 50

@@ -336,3 +336,14 @@ export const hasUpdate = (u: { state?: string; latest?: string | null } | null |
 /** «Checkpoint actualizado a X» solo si la versión vista antes existía y cambió. */
 export const updatedTo = (prev: string | null | undefined, cur: string | null | undefined): string | null =>
   prev && cur && prev !== cur ? cur : null;
+
+// ---- textos largos (avisos, fallos): se ven enteros, con salto de línea; solo si son muy largos tienen scroll interno ----
+/** Alto máximo (px) de un bloque de texto largo; por encima hay scroll con el mando (foco). Nunca se corta con «…». */
+export const LONG_TEXT_MAX_HEIGHT = 200;
+export const LONG_TEXT_STYLE = {
+  whiteSpace: "pre-wrap",
+  overflowWrap: "anywhere",
+  wordBreak: "break-word",
+  maxHeight: LONG_TEXT_MAX_HEIGHT,
+  overflowY: "auto",
+} as const;

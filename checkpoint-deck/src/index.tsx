@@ -49,7 +49,7 @@ import {
   updatedTo,
   whenText,
 } from "./panel";
-import { BannerList, Bar, MONO, MUTED, RunList, StatusBadge, TONE_COLOR, TabBar, WRAP, showToast } from "./ui";
+import { BannerList, Bar, LongText, MONO, MUTED, RunList, StatusBadge, TONE_COLOR, TabBar, WRAP, showToast } from "./ui";
 import {
   BANNER,
   CHANGED_IGNORE,
@@ -414,7 +414,10 @@ function CrashNotices() {
       {items.map((it) => (
         <div key={it.id}>
           <PanelSectionRow>
-            <Field label={it.title} description={it.details} focusable />
+            <LongText label={it.title}>
+              <b>{it.title}</b>
+              {it.details ? `\n${it.details}` : ""}
+            </LongText>
           </PanelSectionRow>
           <PanelSectionRow>
             <ButtonItem layout="below" onClick={() => dismiss(it.id)}>
@@ -1327,7 +1330,7 @@ function HomeTab({ ctx, form }: { ctx: Ctx; form: ReactNode }) {
       )}
       <PanelSection title="Avisos">
         <PanelSectionRow>
-          <div style={WRAP}>{lastNoticeText(notice)}</div>
+          <LongText>{lastNoticeText(notice)}</LongText>
         </PanelSectionRow>
       </PanelSection>
       <PanelSection title={HOME_CONNECTION}>

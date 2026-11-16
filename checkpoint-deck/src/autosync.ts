@@ -2,7 +2,7 @@
 // - `startGameWatch` (con `onRaw` opcional para diagnosticar los eventos que el filtro descarta): escucha a Steam (`SteamClient.GameSessions.RegisterForAppLifetimeNotifications`, API INTERNA sin
 //   contrato estable: una actualización de Steam puede romperla; los toasts confirman que funciona en una Deck real) y avisa al backend con (appid, abierto).
 // - `startNoticePump` + `noticeText`: recoge los avisos que deja el backend (`take_notices`) y los convierte en toasts.
-import { LastNotice, TOAST_MAX, toastLine } from "./texts";
+import { LastNotice, TOAST_MAX, syncError, toastLine } from "./texts";
 
 export { TOAST_MAX };
 
@@ -82,39 +82,48 @@ export interface Toast {
   code: string;
 }
 
+/** Cuerpo de un aviso con la función `line` que une nombre y resto: `toastLine` (toast, máx. `TOAST_MAX`) o `fullLine` (panel, completo). */
+function noticeBody(n: Notice, line: (name: string, rest: string) => string, full = false): string {
+  const g = n.game ?? "Juego";
+  switch (n.code) {
+    case "downloaded":
+      return line(g, "guardado bajado");
+    case "uploaded":
+      return line(g, "guardado subido");
+    case "up_to_date":
+      return line(g, "al día");
+    case "no_path":
+      return line(g, "sin carpeta de guardado");
+    case "missing_dir":
+      return line(g, "carpeta no encontrada");
+    case "conflict":
+      return line(g, "conflicto, resuélvelo");
+    case "joined":
+      return line(g, "unido a este equipo");
+    case "queued":
+      return "Sin conexión: cierre en cola";
+    case "offline_open":
+      return "Sin conexión: no se sincronizó";
+    case "unauthorized":
+      return "Clave no válida: vuelve a vincular";
+    case "sync_failed":
+      // en el panel (no en el toast) se añade el motivo conocido, ya saneado por el backend (solo un código)
+      return line(g, "error al sincronizar" + (full && n.params?.reason ? `. ${syncError(String(n.params.reason))}` : ""));
+    default:
+      return line(g, "aviso de Checkpoint");
+  }
+}
+/** «<nombre>: <resto>» sin recortar nada: el nombre y el resto enteros (para el panel; el toast sigue limitado). */
+export const fullLine = (name: string, rest: string): string => `${name}: ${rest}`;
+/** Texto COMPLETO de un aviso para «Último aviso» (sin el límite de `TOAST_MAX`, que es solo de los toasts de Decky). */
+export function noticeFullText(n: Notice): string {
+  return noticeBody(n, fullLine, true);
+}
+
 /** Cuerpo del toast: corto (máx. `TOAST_MAX` caracteres, sin punto final); Decky corta los largos. Los detalles de un
  *  fallo van al panel «Juegos» y al log, no aquí. */
 export function noticeText(n: Notice): Toast {
-  const g = n.game ?? "Juego";
-  const line = (rest: string) => toastLine(g, rest);
-  const body = ((): string => {
-    switch (n.code) {
-      case "downloaded":
-        return line("guardado bajado");
-      case "uploaded":
-        return line("guardado subido");
-      case "up_to_date":
-        return line("al día");
-      case "no_path":
-        return line("sin carpeta de guardado");
-      case "missing_dir":
-        return line("carpeta no encontrada");
-      case "conflict":
-        return line("conflicto, resuélvelo");
-      case "joined":
-        return line("unido a este equipo");
-      case "queued":
-        return "Sin conexión: cierre en cola";
-      case "offline_open":
-        return "Sin conexión: no se sincronizó";
-      case "unauthorized":
-        return "Clave no válida: vuelve a vincular";
-      case "sync_failed":
-        return line("error al sincronizar");
-      default:
-        return line("aviso de Checkpoint");
-    }
-  })();
+  const body = noticeBody(n, toastLine);
   return { title: "Checkpoint", body, level: n.level, kind: noticeKind(n), code: n.code };
 }
 
@@ -148,7 +157,7 @@ export function startNoticePump(
       const list = await take();
       for (const n of Array.isArray(list) ? list : []) {
         const t = noticeText(n);
-        lastNotice = { time: hhmm(now()), text: t.body }; // entregado por el backend, aunque el toast falle
+        lastNotice = { time: hhmm(now()), text: noticeFullText(n) }; // entregado por el backend, aunque el toast falle
         try {
           show(t);
         } catch (e) {

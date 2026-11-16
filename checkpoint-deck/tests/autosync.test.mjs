@@ -328,3 +328,24 @@ test('noticeText lleva el icono (kind) y el código del aviso', { skip }, async 
   assert.equal(t.code, 'uploaded');
   assert.equal(noticeText({ id: 1, code: 'queued', game: null, level: 'warning', params: {} }).kind, 'warn');
 });
+
+test('«Último aviso» guarda el texto completo (nombre y motivo sin recortar); el toast sigue en 45 caracteres', { skip }, async () => {
+  const { startNoticePump, getLastNotice, noticeFullText } = await load();
+  const game = 'Call of Cthulhu: Dark Corners of the Earth - Edición completa';
+  const n = { id: 1, code: 'sync_failed', game, level: 'error', params: { reason: 'connection' } };
+  const full = noticeFullText(n);
+  assert.ok(full.startsWith(`${game}: error al sincronizar. `), full);
+  assert.ok(!full.includes('…'));
+  assert.ok([...full].length > 45);
+  assert.equal(noticeFullText({ id: 2, code: 'up_to_date', game, level: 'info', params: {} }), `${game}: al día`);
+  assert.equal(noticeFullText({ id: 3, code: 'unauthorized', game: null, level: 'error', params: {} }), 'Clave no válida: vuelve a vincular');
+  const shown = [];
+  let given = false;
+  const take = async () => (given ? [] : ((given = true), [n]));
+  const timers = { setInterval: (f) => (f(), 1), clearInterval: () => {} };
+  const stop = startNoticePump(take, (t) => shown.push(t), () => assert.fail('sin problemas'), 2000, timers, () => new Date(2026, 0, 1, 9, 5));
+  await new Promise((r) => setImmediate(r));
+  stop();
+  assert.ok([...shown[0].body].length <= 45, 'el toast sigue limitado');
+  assert.equal(getLastNotice().text, full);
+});

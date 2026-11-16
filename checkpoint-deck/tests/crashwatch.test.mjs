@@ -112,3 +112,17 @@ test('sin onPickerError el error conocido se sigue mostrando (nada se oculta por
   assert.equal(w.list().length, 1);
   w.stop();
 });
+
+test('el título del fallo llega entero hasta TITLE_MAX (antes 200) y sigue saneado', { skip }, async () => {
+  const { startCrashWatch, TITLE_MAX } = await load();
+  const win = fakeWin();
+  const w = startCrashWatch(win, { version: '0.1' });
+  const message = `${'fallo largo '.repeat(40)}con ckd_secreta123`; // ~480 caracteres
+  win.fire('error', { message, error: new Error(message) });
+  const [a] = w.list();
+  assert.equal(TITLE_MAX, 1000);
+  assert.ok(a.title.length > 200 && a.title.length <= TITLE_MAX, String(a.title.length));
+  assert.doesNotMatch(a.title, /ckd_secreta123/);
+  assert.match(a.title, /fallo largo con \[oculto\]$/); // completo, hasta el final
+  w.stop();
+});

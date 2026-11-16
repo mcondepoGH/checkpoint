@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -290,4 +290,21 @@ test('tabScrollLeft: centra la pestaña, sin pasarse y sin scroll si caben', { s
   assert.equal(tabScrollLeft(500, 100, 400, 600), 200); // la última: tope
   assert.equal(tabScrollLeft(300, 100, 400, 400), 0); // caben: sin scroll
   assert.equal(tabScrollLeft(300, 100, 400, 350), 0);
+});
+
+test('texto largo: salta de línea sin elipsis y con scroll solo por altura máxima', { skip }, async () => {
+  const { LONG_TEXT_STYLE, LONG_TEXT_MAX_HEIGHT } = await load('panel.ts');
+  assert.equal(LONG_TEXT_STYLE.whiteSpace, 'pre-wrap');
+  assert.equal(LONG_TEXT_STYLE.overflowWrap, 'anywhere');
+  assert.equal(LONG_TEXT_STYLE.maxHeight, LONG_TEXT_MAX_HEIGHT);
+  assert.equal(LONG_TEXT_STYLE.overflowY, 'auto');
+  assert.ok(!('textOverflow' in LONG_TEXT_STYLE) && !('WebkitLineClamp' in LONG_TEXT_STYLE));
+});
+
+test('«Último aviso» y «Fallos detectados» pintan el texto largo con LongText (sin Field, que corta)', () => {
+  const idx = readFileSync(join(here, '../src/index.tsx'), 'utf8');
+  assert.match(idx, /<LongText>\{lastNoticeText\(notice\)\}<\/LongText>/);
+  const crash = idx.slice(idx.indexOf('function CrashNotices'), idx.indexOf('// ---- textos (español)'));
+  assert.match(crash, /<LongText/);
+  assert.doesNotMatch(crash, /<Field /);
 });
