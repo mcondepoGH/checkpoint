@@ -27,7 +27,7 @@ from checkpoint_hub import (
 )
 from checkpoint_auto import AutoRunner, AutoSync, Notices
 from checkpoint_client import refresh_library as hub_refresh_library
-from checkpoint_games import GameTools, suggest_path, suggest_shortcut
+from checkpoint_games import GameTools, lutris_shortcut_appid, suggest_path, suggest_shortcut, verify_applied
 from checkpoint_jobs import Jobs
 from checkpoint_lutris_api import LutrisSteamLookup
 from checkpoint_savesuggest import SaveSuggester
@@ -308,6 +308,40 @@ class Plugin:
     async def suggest_saves_for(self, source: str, ident: Any) -> Dict[str, Any]:
         """Lo mismo para un juego: `source` = "steam" con su appid (entero) o "lutris" con su slug (texto) o id de fila (entero)."""
         return await asyncio.to_thread(self.saves.one, source, ident)
+
+    def _apply_target(self, source: str, ident: Any, path: Any) -> Dict[str, Any]:
+        """Bloqueante (corre en un hilo). Comprueba que `path` sea una de las rutas que EXISTEN de la sugerencia de ese juego y
+        que `verified_dir` la siga admitiendo; luego busca el juego sin configurar al que corresponde (Steam: su appid; Lutris:
+        el atajo con `lutris:rungameid/<id>`). No configura nada."""
+        r = self.saves.one(source, ident)
+        if not r.get("ok"):
+            return self._failure(str(r.get("error", "no_match")))
+        game = r["game"]
+        if not isinstance(path, str) or path not in [p["path"] for p in game["paths"] if p["exists"]]:
+            return self._failure("not_suggested")
+        home = Path.home()
+        good = verify_applied(path, home, protected_dirs(decky))
+        if not good:
+            return self._failure("path_missing")
+        if source == "steam":
+            appid = game["id"] if self._unconfigured_name(game["id"]) is not None else None
+        else:
+            shortcuts = [u["appid"] for u in self.jobs.snapshot()["unconfigured"] if u.get("source") == "shortcut"]
+            appid = lutris_shortcut_appid(home, game["id"], shortcuts)
+        if appid is None:
+            return self._failure("not_unconfigured")
+        self._offered.setdefault(appid, set()).add(good)  # si desaparece antes de guardar, mensaje de «carpeta sugerida»
+        return {"ok": True, "appid": appid, "name": self._unconfigured_name(appid) or game["name"], "path": good}
+
+    async def apply_save_suggestion(self, source: str, ident: Any, path: str) -> Dict[str, Any]:
+        """Aplica la carpeta que el usuario CONFIRMÓ en la interfaz: no crea nada en el hub. Devuelve `{ok, appid, name, path}`
+        del juego de «Sin configurar en el hub» cuyo formulario «Configurar» debe abrirse con esa carpeta; el guardado en el hub
+        sigue el flujo de siempre (`configure_game`: `validate_game_path` y carpeta existente). Errores: `no_manifest`, `no_match`,
+        `bad_args`, `not_suggested` (la ruta no es una de las sugeridas que existen), `path_missing` (ya no vale) y
+        `not_unconfigured` (el juego ya está en el hub o no está en «Sin configurar»)."""
+        if self._outdated():
+            return self._failure("plugin_outdated")
+        return await asyncio.to_thread(self._apply_target, source, ident, path)
 
     async def picker_start(self, path: str = "") -> Dict[str, Any]:
         """Ruta segura con la que abrir el selector de carpetas de Decky: `path` si existe, es carpeta y se puede leer; si no, el

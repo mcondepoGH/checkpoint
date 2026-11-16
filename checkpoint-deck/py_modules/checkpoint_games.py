@@ -169,6 +169,29 @@ def suggest_shortcut(
     return empty
 
 
+def verify_applied(path: Any, home: Path, protected: Sequence[Path] = ()) -> Optional[str]:
+    """Ruta que el usuario confirmó de una sugerencia del manifiesto, vuelta a verificar al aplicarla (`verified_dir`, con las
+    bibliotecas de Steam como raíces permitidas: tarjeta SD). None si ya no vale. Solo lectura."""
+    roots: List[str] = []
+    try:
+        for root in checkpoint_steam.find_steam_roots(Path(home)):
+            roots.append(os.path.realpath(root))
+            roots.extend(os.path.realpath(d) for d in checkpoint_steam.library_dirs(root))
+    except OSError:
+        pass
+    return verified_dir(path, home, protected, _accept, roots)
+
+
+def lutris_shortcut_appid(home: Path, row_id: int, shortcut_appids: Sequence[int]) -> Optional[int]:
+    """Appid del atajo de Steam (de `shortcut_appids`) cuyas `LaunchOptions` son `lutris:rungameid/<row_id>`, o None."""
+    for appid in shortcut_appids:
+        for root in checkpoint_steam.find_steam_roots(Path(home)):
+            opts = checkpoint_shortcuts.find_launch_options(root, appid)
+            if opts is not None and checkpoint_lutris.parse_game_id(opts) == row_id:
+                return appid
+    return None
+
+
 def describe_failure(e: Exception) -> Dict[str, Any]:
     """Fallo de una llamada al hub como dict para la interfaz: `{ok: False, error, error_params, error_detail}`."""
     detail = describe_error(e)

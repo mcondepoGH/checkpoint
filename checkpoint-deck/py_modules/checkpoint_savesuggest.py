@@ -8,8 +8,8 @@ Solo lectura en disco y solo biblioteca estándar (la única red es la consulta 
       nuevo, cacheada) contra `steam`                                  (`high`, lutris_api_steam)
   4. Secundario, confianza `doubtful`: `slug` del manifiesto == slug local (slug_derived), o nombre normalizado igual a
      `games.name` (name).
-NUNCA se sugiere sin confirmación del usuario: todo resultado lleva `needs_confirmation` = True (la UI de confirmación no
-está hecha) y el plugin no configura nada aquí.
+NUNCA se sugiere sin confirmación del usuario: todo resultado lleva `needs_confirmation` = True (la UI pide confirmación en un
+modal; aplicar rellena el formulario «Configurar», ver `Plugin.apply_save_suggestion`) y este módulo no configura nada.
 
 Resultado por juego: `{source, id, name, manifest_name, match: {by, id}, confidence, needs_confirmation, state, paths}`.
 `state` = `found` (hay rutas que existen: solo esas, de la más reciente a la más antigua por mtime) o `not_found_yet` (ninguna

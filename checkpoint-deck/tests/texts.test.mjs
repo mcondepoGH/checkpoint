@@ -278,3 +278,41 @@ test('los atajos de Steam salen marcados como «Atajo» en sin configurar', { sk
   assert.match(src, /unconfiguredDescription\(appid, source\)/);
   assert.match(src, /SHORTCUT_HELP/);
 });
+
+test('sugerencias de guardado: detalle de ruta (tamaño, ficheros, fecha, dudosa, no encontrada)', { skip }, async () => {
+  const { savePathDetail, formatSize, formatDate, SAVES_NOT_FOUND } = await load();
+  const mtime = new Date(2023, 5, 7, 12, 0, 0).getTime() / 1000; // mediodía local: sin saltos de zona
+  assert.equal(savePathDetail({ path: '/x', exists: true, size: 2048, files: 4, mtime }), '2,0 KB · 4 ficheros · modificada 07/06/2023');
+  assert.equal(savePathDetail({ path: '/x', exists: true, size: 10, files: 1, mtime, doubtful: true }), '10 B · 1 fichero · modificada 07/06/2023 · dudosa');
+  assert.equal(savePathDetail({ path: '/x', exists: true, size: 5, files: 3, mtime, truncated: true }), '5 B · 3+ ficheros · modificada 07/06/2023');
+  assert.equal(savePathDetail({ path: '/x', exists: false }), SAVES_NOT_FOUND);
+  assert.equal(savePathDetail({ path: '/x', exists: false, doubtful: true }), `${SAVES_NOT_FOUND} · dudosa`);
+  assert.equal(formatSize(3 * 1024 * 1024), '3,0 MB');
+  assert.equal(formatSize(null), 'tamaño desconocido');
+  assert.equal(formatDate(null), 'fecha desconocida');
+});
+
+test('sugerencias de guardado: errores, confirmación y avisos', { skip }, async () => {
+  const { saveError, SAVES_ERRORS, saveConfirm, lookupsPendingText, appliedText } = await load();
+  for (const c of ['no_manifest', 'no_match', 'bad_args', 'not_suggested', 'path_missing', 'not_unconfigured', 'plugin_outdated', 'unexpected']) {
+    assert.ok(SAVES_ERRORS[c], c);
+  }
+  assert.equal(saveError('algo_nuevo'), SAVES_ERRORS.unexpected);
+  assert.equal(saveError(undefined), SAVES_ERRORS.unexpected);
+  assert.match(saveError('no_manifest'), /no lleva la lista/);
+  const c = saveConfirm('Move or Die', '/home/deck/.local/share/love/Move Or Die', true);
+  assert.match(c.description, /Move or Die/);
+  assert.match(c.description, /dudosa/);
+  assert.match(c.description, /Guardar en el hub/); // aplicar no guarda: lo dice
+  assert.doesNotMatch(saveConfirm('A', '/x', false).description, /dudosa/);
+  assert.match(lookupsPendingText(1), /Queda 1 juego/);
+  assert.match(lookupsPendingText(3), /Quedan 3 juegos/);
+  assert.match(appliedText('Stardew Valley'), /Stardew Valley/);
+});
+
+test('sugerencias de guardado: el interruptor explica que solo se envía el slug', { skip }, async () => {
+  const { SAVES_LOOKUP_LABEL, SAVES_LOOKUP_HELP, PATH_FOUND, pathHelp } = await load();
+  assert.equal(SAVES_LOOKUP_LABEL, 'Consultar lutris.net para identificar juegos de Lutris');
+  assert.match(SAVES_LOOKUP_HELP, /slug/);
+  assert.equal(pathHelp('/x', 'manifest'), PATH_FOUND.manifest);
+});

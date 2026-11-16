@@ -28,6 +28,22 @@ import {
   GameFailure,
   pathHelp,
   PICKER_FAIL,
+  SAVES_BUTTON,
+  SAVES_DOUBTFUL_GAME,
+  SAVES_EMPTY,
+  SAVES_INTRO,
+  SAVES_LOADING,
+  SAVES_LOOKUP_HELP,
+  SAVES_LOOKUP_LABEL,
+  SAVES_NOT_FOUND_GAME,
+  SAVES_TITLE,
+  SAVES_USE,
+  SavePath,
+  appliedText,
+  lookupsPendingText,
+  saveConfirm,
+  saveError,
+  savePathDetail,
   RESOLVE_DEVICE_LABEL,
   RESOLVE_HELP,
   RESOLVE_HUB_LABEL,
@@ -152,7 +168,29 @@ interface Suggestion extends GameFailure {
   home?: string; // home de la Deck: donde abre el selector si no hay ruta
   candidates?: string[];
   browse_start?: string; // atajo de Lutris: dónde abre «Examinar…» (<prefijo>/drive_c/users, o el prefijo)
-  source?: "proton" | "cloud" | "lutris" | "";
+  source?: "proton" | "cloud" | "lutris" | "manifest" | "";
+}
+// Sugerencias del manifiesto propio (`suggest_saves`): una entrada por juego instalado que casa
+interface SaveGame {
+  source: "steam" | "lutris";
+  id: number;
+  name: string;
+  manifest_name?: string;
+  confidence: "high" | "doubtful";
+  needs_confirmation: boolean; // siempre true: nunca se aplica solo
+  state: "found" | "not_found_yet";
+  paths: SavePath[];
+}
+interface SaveResult extends GameFailure {
+  manifest?: string;
+  games?: SaveGame[];
+  network_lookups?: number;
+  lookups_pending?: number;
+}
+interface SaveApplied extends GameFailure {
+  appid?: number;
+  name?: string;
+  path?: string;
 }
 interface Configured extends GameFailure {
   game?: { id: string; name: string; appid: number; joined?: boolean };
@@ -176,8 +214,10 @@ const setGameEnabled = callable<[game: string, enabled: boolean], Toggled>("set_
 const gameEvent = callable<[appid: number, running: boolean], { ok: boolean }>("game_event");
 const diagGameEvent = callable<[unAppID: string, tipo: string, bRunning: string], { ok: boolean }>("diag_game_event");
 const takeNotices = callable<[], Notice[]>("take_notices");
-const getPrefs = callable<[], { ok: boolean; show_unconfigured: boolean }>("get_prefs");
-const setPref = callable<[key: string, value: boolean], { ok: boolean; show_unconfigured?: boolean }>("set_pref");
+const getPrefs = callable<[], { ok: boolean; show_unconfigured: boolean; lutris_lookup?: boolean }>("get_prefs");
+const setPref = callable<[key: string, value: boolean], { ok: boolean; show_unconfigured?: boolean; lutris_lookup?: boolean }>("set_pref");
+const suggestSaves = callable<[], SaveResult>("suggest_saves");
+const applySaveSuggestion = callable<[source: string, ident: number | string, path: string], SaveApplied>("apply_save_suggestion");
 const reportError = callable<[message: string], { ok: boolean }>("report_error");
 
 // ---- captura de fallos (mismo patrón que el hub: crashwatch + avisos con detalles saneados) ----
@@ -615,11 +655,152 @@ function UnconfiguredGame({ appid, name, source, disabled, onDone }: { appid: nu
   );
 }
 
+// «Sugerencias de guardado»: carpetas exactas del manifiesto propio. Nada se aplica sin confirmar (ConfirmModal) y aplicar solo
+// rellena el formulario «Configurar» de «Sin configurar en el hub» (el guardado en el hub sigue el flujo de siempre).
+function SaveSuggestions({ onApply }: { onApply: (appid: number, name: string, path: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState<SaveResult | null>(null); // última respuesta (null = aún no se ha pulsado)
+  const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [lookup, setLookup] = useState(true); // se recuerda en prefs.json (main.py)
+
+  useEffect(() => {
+    getPrefs()
+      .then((r) => {
+        if (r?.ok && typeof r.lutris_lookup === "boolean") setLookup(r.lutris_lookup);
+      })
+      .catch(capture("preferencias"));
+  }, []);
+
+  const changeLookup = (on: boolean) => {
+    setLookup(on);
+    setPref("lutris_lookup", on)
+      .then((r) => {
+        if (!r.ok) setLookup(!on);
+      })
+      .catch((e) => {
+        capture("guardar la preferencia")(e);
+        setLookup(!on);
+      });
+  };
+
+  const suggest = async () => {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      const r = await suggestSaves();
+      setRes(r);
+      if (!r.ok && r.error !== "no_manifest") setError(saveError(r.error));
+    } catch (e) {
+      capture("sugerir carpetas de guardado")(e);
+      setRes(null);
+      setError(saveError("unexpected"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const apply = async (g: SaveGame, path: string) => {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    try {
+      const r = await applySaveSuggestion(g.source, g.id, path);
+      if (!r.ok || typeof r.appid !== "number") {
+        setError(saveError(r.error));
+        return;
+      }
+      onApply(r.appid, r.name ?? g.name, r.path ?? path);
+      setNote(appliedText(r.name ?? g.name));
+    } catch (e) {
+      capture("aplicar la carpeta sugerida")(e);
+      setError(saveError("unexpected"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirm = (g: SaveGame, p: SavePath) => {
+    const c = saveConfirm(g.name, p.path, g.confidence === "doubtful" || p.doubtful === true);
+    showModal(
+      <ConfirmModal
+        strTitle={c.title}
+        strDescription={c.description}
+        strOKButtonText={c.ok}
+        strCancelButtonText="Cancelar"
+        onOK={() => {
+          apply(g, p.path).catch(capture("aplicar la carpeta sugerida"));
+        }}
+      />,
+    );
+  };
+
+  const games = res?.ok ? (res.games ?? []) : [];
+  return (
+    <PanelSection title={SAVES_TITLE}>
+      <PanelSectionRow>{SAVES_INTRO}</PanelSectionRow>
+      <PanelSectionRow>
+        <ToggleField
+          label={SAVES_LOOKUP_LABEL}
+          description={SAVES_LOOKUP_HELP}
+          checked={lookup}
+          disabled={busy}
+          onChange={changeLookup}
+        />
+      </PanelSectionRow>
+      <PanelSectionRow>
+        <ButtonItem layout="below" disabled={busy} onClick={suggest}>
+          {SAVES_BUTTON}
+        </ButtonItem>
+      </PanelSectionRow>
+      {busy && <PanelSectionRow>{SAVES_LOADING}</PanelSectionRow>}
+      {error && <PanelSectionRow>{error}</PanelSectionRow>}
+      {note && <PanelSectionRow>{note}</PanelSectionRow>}
+      {res && !res.ok && res.error === "no_manifest" && <PanelSectionRow>{saveError("no_manifest")}</PanelSectionRow>}
+      {res?.ok && games.length === 0 && <PanelSectionRow>{SAVES_EMPTY}</PanelSectionRow>}
+      {res?.ok && (res.lookups_pending ?? 0) > 0 && <PanelSectionRow>{lookupsPendingText(res.lookups_pending ?? 0)}</PanelSectionRow>}
+      {games.map((g) => (
+        <div key={`${g.source}:${g.id}`}>
+          <PanelSectionRow>
+            <Field label={g.name} description={g.source === "lutris" ? "Lutris" : `N.º de Steam: ${g.id}`} focusable>
+              {g.confidence === "doubtful" ? "Dudosa" : ""}
+            </Field>
+          </PanelSectionRow>
+          {g.confidence === "doubtful" && <PanelSectionRow>{SAVES_DOUBTFUL_GAME}</PanelSectionRow>}
+          {g.state === "not_found_yet" && <PanelSectionRow>{SAVES_NOT_FOUND_GAME}</PanelSectionRow>}
+          {g.paths.map((p) => (
+            <div key={p.path}>
+              <PanelSectionRow>
+                <Field label={p.path} description={savePathDetail(p)} focusable />
+              </PanelSectionRow>
+              {p.exists && (
+                <PanelSectionRow>
+                  <ButtonItem layout="below" disabled={busy} onClick={() => confirm(g, p)}>
+                    {SAVES_USE}
+                  </ButtonItem>
+                </PanelSectionRow>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+    </PanelSection>
+  );
+}
+
 function Games() {
   const [sync, setSync] = useState<SyncState | null>(null);
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [showUnconfigured, setShowUnconfigured] = useState(true); // se recuerda en prefs.json (main.py)
   const started = useRef(false);
+  const [formRev, setFormRev] = useState<Record<number, number>>({}); // remonta el formulario «Configurar» al aplicar una sugerencia
+
+  // Una sugerencia confirmada rellena el formulario del juego sin configurar (borrador abierto) y lo remonta; no guarda nada.
+  const applySuggested = (appid: number, name: string, path: string) => {
+    drafts.set(appid, { open: true, gname: name, path, sug: { ok: true, appid, name, path, candidates: [path], source: "manifest" } });
+    setFormRev((r) => ({ ...r, [appid]: (r[appid] ?? 0) + 1 }));
+  };
 
   const poll = useCallback(async () => {
     const s = await getSyncState();
@@ -755,6 +936,8 @@ function Games() {
         </PanelSectionRow>
       </PanelSection>
 
+      <SaveSuggestions onApply={applySuggested} />
+
       <PanelSection title="Juegos en el hub">
         {sync.games.length === 0 && !busy && !sync.error && (
           <PanelSectionRow>
@@ -813,7 +996,7 @@ function Games() {
           <PanelSectionRow>{UNCONFIGURED_HELP}</PanelSectionRow>
           {sync.unconfigured.some((u) => u.source === "shortcut") && <PanelSectionRow>{SHORTCUT_HELP}</PanelSectionRow>}
           {sync.unconfigured.map((u) => (
-            <UnconfiguredGame key={u.appid} appid={u.appid} name={u.name} source={u.source} disabled={busy} onDone={setSync} />
+            <UnconfiguredGame key={`${u.appid}:${formRev[u.appid] ?? 0}`} appid={u.appid} name={u.name} source={u.source} disabled={busy} onDone={setSync} />
           ))}
         </PanelSection>
       )}

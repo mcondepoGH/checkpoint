@@ -144,6 +144,7 @@ export const NO_PATH_FOUND = "No se encontró ninguna carpeta de guardado que ex
 export const PATH_FOUND: Record<string, string> = {
   proton: "Ruta detectada en el prefijo de Proton del juego. Revísala y confirma.",
   cloud: "Ruta detectada en los guardados de Steam Cloud. Revísala y confirma.",
+  manifest: "Carpeta elegida de las sugerencias de guardado. Revísala y confirma.",
   lutris: "Candidatos encontrados en el prefijo de Lutris; elige la carpeta de partidas guardadas o usa Examinar…",
 };
 export const NO_PATH_LUTRIS = "No se encontró ninguna carpeta de partidas en el prefijo; usa Examinar…";
@@ -300,4 +301,96 @@ export const SHORTCUT_HELP =
 // Línea de descripción de un juego sin configurar: un atajo lo dice; su número no es un id de la tienda de Steam
 export function unconfiguredDescription(appid: number, source?: string): string {
   return source === "shortcut" ? `${SHORTCUT_LABEL} · N.º de Steam: ${appid}` : `N.º de Steam: ${appid}`;
+}
+
+// ---- «Sugerencias de guardado» (main.py: suggest_saves / apply_save_suggestion): carpetas exactas del manifiesto propio ----
+export const SAVES_TITLE = "Sugerencias de guardado";
+export const SAVES_INTRO =
+  "Busca la carpeta de guardado exacta de los juegos instalados (Steam y Lutris) con la lista que lleva el plugin. Nada se aplica sin que lo confirmes.";
+export const SAVES_BUTTON = "Sugerir carpeta";
+export const SAVES_LOADING = "Buscando carpetas de guardado… Puede tardar unos segundos si hay que consultar lutris.net.";
+export const SAVES_EMPTY = "Ningún juego instalado coincide con la lista de rutas de guardado.";
+export const SAVES_NO_MANIFEST =
+  "Este plugin no lleva la lista de rutas de guardado (save_manifest.json), así que no puede sugerir carpetas. Instala un ZIP del plugin que la incluya.";
+export const SAVES_LOOKUP_LABEL = "Consultar lutris.net para identificar juegos de Lutris";
+export const SAVES_LOOKUP_HELP =
+  "Solo se envía el nombre interno (slug) del juego, una vez por juego y sin datos personales. Sin esto, algunos juegos de Lutris salen como dudosos o no salen.";
+export const SAVES_NOT_FOUND = "No encontrada aún";
+export const SAVES_DOUBTFUL = "dudosa";
+export const SAVES_USE = "Usar esta carpeta";
+export const SAVES_DOUBTFUL_GAME = "Coincidencia dudosa: comprueba que es de este juego antes de confirmar.";
+export const SAVES_NOT_FOUND_GAME = "El juego está en la lista, pero la carpeta aún no existe (se crea al jugar o guardar por primera vez).";
+export const SAVES_ERRORS: Record<string, string> = {
+  no_manifest: SAVES_NO_MANIFEST,
+  no_match: "Ese juego ya no está instalado o no está en la lista de rutas.",
+  bad_args: "Petición no válida.",
+  not_suggested: "Esa carpeta ya no es una de las sugeridas. Vuelve a pulsar «Sugerir carpeta».",
+  path_missing: "La carpeta sugerida ya no existe o no se puede usar. No se ha cambiado nada.",
+  not_unconfigured:
+    "Este juego no está en «Sin configurar en el hub» (ya está en el hub o no se ha buscado). Pulsa «Buscar juegos de Steam» y vuelve a intentarlo.",
+  plugin_outdated: "Este plugin es demasiado antiguo para el hub. Actualiza el plugin.",
+  unexpected: "Fallo inesperado en el plugin. Mira el registro de Decky.",
+};
+export function saveError(code?: string): string {
+  return (code && SAVES_ERRORS[code]) || SAVES_ERRORS.unexpected;
+}
+export function lookupsPendingText(n: number): string {
+  return n === 1
+    ? "Queda 1 juego de Lutris por consultar a lutris.net: vuelve a pulsar «Sugerir carpeta»."
+    : `Quedan ${n} juegos de Lutris por consultar a lutris.net: vuelve a pulsar «Sugerir carpeta».`;
+}
+
+export function formatSize(bytes?: number | null): string {
+  if (typeof bytes !== "number" || bytes < 0) return "tamaño desconocido";
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB"];
+  let v = bytes / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(v < 10 ? 1 : 0).replace(".", ",")} ${units[i]}`;
+}
+/** Fecha local dd/mm/aaaa de un mtime en segundos (época Unix); "fecha desconocida" si no hay. */
+export function formatDate(mtime?: number | null): string {
+  if (typeof mtime !== "number" || !isFinite(mtime) || mtime <= 0) return "fecha desconocida";
+  const d = new Date(mtime * 1000);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+export interface SavePath {
+  path: string;
+  exists: boolean;
+  mtime?: number | null;
+  size?: number | null;
+  files?: number | null;
+  truncated?: boolean;
+  doubtful?: boolean;
+}
+/** Línea de detalle de una ruta candidata: tamaño, ficheros y fecha (existe) o «No encontrada aún»; «dudosa» si lo es. */
+export function savePathDetail(p: SavePath): string {
+  const tag = p.doubtful ? ` · ${SAVES_DOUBTFUL}` : "";
+  if (!p.exists) return `${SAVES_NOT_FOUND}${tag}`;
+  const n = p.files ?? 0;
+  const files = `${n}${p.truncated ? "+" : ""} ${n === 1 && !p.truncated ? "fichero" : "ficheros"}`;
+  return `${formatSize(p.size)} · ${files} · modificada ${formatDate(p.mtime)}${tag}`;
+}
+export interface SaveConfirm {
+  title: string;
+  description: string;
+  ok: string;
+}
+export function saveConfirm(name: string, path: string, doubtful: boolean): SaveConfirm {
+  return {
+    title: "Usar esta carpeta de guardado",
+    description:
+      `${name}: ${path}\n` +
+      (doubtful ? `${SAVES_DOUBTFUL_GAME}\n` : "") +
+      "Se rellenará en «Sin configurar en el hub». Aún tendrás que pulsar «Guardar en el hub».",
+    ok: "Usar carpeta",
+  };
+}
+export function appliedText(name: string): string {
+  return `Carpeta aplicada a «${name}»: revisa el formulario en «Sin configurar en el hub» y pulsa «Guardar en el hub».`;
 }
