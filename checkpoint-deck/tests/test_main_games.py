@@ -2,6 +2,7 @@
 están en el hub y desactivar uno (un juego desactivado no sincroniza al abrir ni al cerrar)."""
 
 import asyncio
+import threading
 import json
 from pathlib import Path
 
@@ -172,9 +173,24 @@ def test_disabling_a_game_stops_the_automatic_sync_on_open_and_close(fake_decky,
     def syncs():
         return [q.path for q in hub.requests if "/api/hook/" in q.path]
 
+    from checkpoint_auto import AutoSync
+
+    handled = threading.Semaphore(0)  # un permiso por evento ya procesado por la cola: se espera a eso, no a un tiempo fijo
+
+    def counting(orig):
+        def wrapped(self, appid):
+            try:
+                return orig(self, appid)
+            finally:
+                handled.release()
+
+        return wrapped
+
+    monkeypatch.setattr(AutoSync, "opened", counting(AutoSync.opened))
+    monkeypatch.setattr(AutoSync, "closed", counting(AutoSync.closed))
+
     async def wait_idle():
-        for _ in range(100):
-            await asyncio.sleep(0.02)
+        assert await asyncio.to_thread(handled.acquire, True, 10)
 
     async def go():
         await p._main()
@@ -206,8 +222,10 @@ def test_enabling_it_again_syncs_on_open(fake_decky, scripthub, tmp_path, monkey
         on = await p.set_game_enabled("hl2", True)
         s = await p.get_sync_state()
         await p.game_event(220, True)
-        for _ in range(100):
-            await asyncio.sleep(0.02)
+        for _ in range(500):  # sondeo corto hasta que el hub recibe el fingerprint (el evento se procesó)
+            if any("/api/hook/hl2/fingerprint" in q.path for q in hub.requests):
+                break
+            await asyncio.sleep(0.01)
         await p._unload()
         return on, s
 

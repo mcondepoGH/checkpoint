@@ -204,7 +204,9 @@ def test_set_enabled_ok_and_errors(scripthub, home):
     assert tools(hub.url, home).set_enabled("g", False) == {"ok": True, "game": "g", "enabled": False}
     hub = scripthub(lambda r: (404, {"detail": {"code": "err.steam.game_unknown", "params": {}}}, {}))
     assert tools(hub.url, home).set_enabled("g", False)["error"] == "unknown_game"
-    assert tools("http://127.0.0.1:1", home).set_enabled("g", True)["error"] == "connection"
+    sin_hub = tools("http://127.0.0.1:1", home)
+    sin_hub._client._sleep = lambda _s: None  # sin espera real entre los reintentos del cliente
+    assert sin_hub.set_enabled("g", True)["error"] == "connection"
 
 
 # ---- suggest_shortcut (atajos de Lutris)

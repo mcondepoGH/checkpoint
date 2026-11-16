@@ -46,12 +46,12 @@ def real_hub(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "STATIC_DIR", tmp_path / "static")
     Env(tmp_path, copy.deepcopy(CFG))
     app = create_app(Auth("admin", PW, 1, rounds=4))
-    s = socket.socket()
+    s = socket.socket()  # el socket se entrega ya enlazado a uvicorn: sin la carrera de cerrar el puerto y reabrirlo
     s.bind(("127.0.0.1", 0))
+    s.listen(128)
     port = s.getsockname()[1]
-    s.close()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
-    t = threading.Thread(target=server.run, daemon=True)
+    t = threading.Thread(target=lambda: server.run(sockets=[s]), daemon=True)
     t.start()
     for _ in range(100):
         if server.started:
@@ -61,6 +61,7 @@ def real_hub(tmp_path, monkeypatch):
     yield f"http://127.0.0.1:{port}"
     server.should_exit = True
     t.join(5)
+    s.close()
 
 
 def test_pair_accept_collect_key_ping(real_hub, tmp_path, monkeypatch):
