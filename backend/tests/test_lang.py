@@ -45,7 +45,7 @@ def test_startup_silent_when_valid(monkeypatch, caplog):
 
 
 def _client():
-    return TestClient(create_app(Auth("u", "p")))
+    return TestClient(create_app(Auth("u", "p", rounds=4)))
 
 
 def test_public_endpoint_without_session(monkeypatch):
