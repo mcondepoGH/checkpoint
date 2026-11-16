@@ -1,5 +1,12 @@
 # Cambios
 
+## 2.2.0 (2026-11-16)
+
+### Novedades
+
+- Sugerencias de la carpeta de guardado exacta en el plugin de Steam Deck: el sugeridor casa cada juego con un manifiesto propio de rutas de guardado de Steam y Lutris, derivado de Ludusavi (0b39b91) y generado en el build de Docker (etapa `savemanifest`, incluido en el ZIP del plugin). Filtra por existencia, trata las rutas steamCloud como normales, marca como dudosas las rutas de LÖVE y, para los juegos de Lutris, consulta lutris.net (appid de Steam) con caché.
+- Plugin de Steam Deck 1.3.1: nueva interfaz por pestañas (Inicio, Juegos, Sugerencias, Pendientes, Ajustes y Versión) con estado, avisos fijos, «Sincronizar todo» global con resumen, sellos de última sincronización, «Añadir al hub» por sugerencia y tarjetas de juegos plegables.
+
 ## 2.1.0 (2026-11-15)
 
 ### Cambios
