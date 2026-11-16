@@ -229,3 +229,12 @@ def _sqlite_sin_fsync(monkeypatch):
         return con
 
     monkeypatch.setattr(sqlite3, "connect", connect)
+
+
+@pytest.fixture(autouse=True)
+def _sin_fsync(monkeypatch):
+    """Los tests no necesitan durabilidad: sin fsync en las escrituras atómicas (el hub real y el plugin; en el disco del
+    NAS cada una costaba del orden de 0,1 s). El temporal + rename, que es lo que se comprueba, se conserva."""
+    import os
+
+    monkeypatch.setattr(os, "fsync", lambda fd: None)
