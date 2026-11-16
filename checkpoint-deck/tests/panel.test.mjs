@@ -107,9 +107,11 @@ test('summaryText y summaryToast: singular/plural, al día y tope de 45 caracter
   assert.equal(summaryText({ up: 0, down: 0, conf: 0, err: 0 }), 'Todo estaba al día');
   assert.equal(summaryToast({ up: 1, down: 2, conf: 0, err: 0 }), '1 subido, 2 bajados');
   assert.equal(summaryToast({ up: 0, down: 0, conf: 0, err: 0 }), 'Todo estaba al día');
+  assert.equal(summaryToast({ up: 1, down: 1, conf: 1, err: 0 }), '1 subido, 1 bajado, 1 conflicto');
   const big = summaryToast({ up: 10, down: 20, conf: 30, err: 40 });
-  assert.ok([...big].length <= TOAST_MAX, big);
-  assert.ok(big.endsWith('…'));
+  assert.equal(big, 'Terminó con incidencias: mira Juegos');
+  for (const t of [{ up: 1, down: 0, conf: 0, err: 0 }, { up: 99, down: 99, conf: 99, err: 99 }, { up: 0, down: 0, conf: 0, err: 5 }, { up: 12, down: 3, conf: 2, err: 1 }])
+    assert.ok([...summaryToast(t)].length <= TOAST_MAX && !summaryToast(t).includes('…'), summaryToast(t));
 });
 
 test('syncBlockReason y canSyncRest', { skip }, async () => {
@@ -263,10 +265,18 @@ test('VersionNotifier avisa una vez por versión; updatedTo solo si cambió', { 
 
 test('textos nuevos: toasts de menos de 45 caracteres', { skip }, async () => {
   const t = await load('texts.ts');
-  for (const s of [t.UPDATED_TOAST('10.20.30'), t.VER_AUTO_TOAST('10.20.30-rc.1'), t.SYNC_CUT_TOAST, t.SYNC_CANCELLED_TOAST, t.LINKED_TOAST('steam-deck-del-salon-muy-largo-con-un-nombre-de-64-caracteres-total')]) {
+  for (const s of [t.UPDATED_TOAST('10.20.30'), t.VER_AUTO_TOAST('10.20.30-rc.1'), t.SYNC_CUT_TOAST, t.SYNC_CANCELLED_TOAST, t.UNLINK_TOAST, t.JOINED_TOAST, t.LINKED_TOAST]) {
     assert.ok([...s].length <= t.TOAST_MAX, s);
   }
   assert.equal(t.UPDATED_TOAST('1.3.0'), 'Checkpoint actualizado a 1.3.0');
+  assert.equal(t.VER_AUTO_TOAST('1.3.3'), 'Hay una versión nueva: 1.3.3');
+  assert.equal(t.SYNC_CUT_TOAST, 'Sin conexión: quedaron juegos pendientes');
+  assert.equal(t.SYNC_CANCELLED_TOAST, 'Sincronización cancelada');
+  assert.equal(t.UNLINK_TOAST, 'Deck desvinculada. Revoca la clave en el hub');
+  assert.ok([...t.UNLINK_TOAST].length <= t.TOAST_MAX);
+  assert.ok([...t.JOINED_TOAST].length <= t.TOAST_MAX);
+  assert.equal(t.VER_AUTO_TOAST('10.20.30-rc.1-con-sufijo-larguisimo').endsWith('…'), true);
+  assert.equal(t.LINKED_TOAST, 'Deck vinculada con el hub correctamente');
   assert.deepEqual(t.TAB_ORDER, ['home', 'games', 'sugg', 'pend', 'set', 'ver']);
   assert.equal(t.COMING_SOON, 'Próximamente');
 });

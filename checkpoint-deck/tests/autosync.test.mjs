@@ -109,41 +109,69 @@ test('detener quita el registro una sola vez', { skip }, async () => {
   assert.equal(s.unregistered, 1);
 });
 
-test('el texto de cada aviso lleva el juego y el nivel, corto y sin punto final', { skip }, async () => {
-  const { noticeText } = await load();
-  const n = (code, extra = {}) => ({ id: 1, code, game: 'Uno', level: 'info', params: {}, ...extra });
-  const body = (code, extra) => noticeText(n(code, extra)).body;
-  assert.equal(body('downloaded', { params: { files: 3 } }), 'Uno: guardado bajado');
-  assert.equal(body('uploaded', { params: { files: 3 } }), 'Uno: guardado subido');
-  assert.equal(body('up_to_date'), 'Uno: al día');
-  assert.equal(body('no_path'), 'Uno: sin carpeta de guardado');
-  assert.equal(body('missing_dir'), 'Uno: carpeta no encontrada');
-  assert.equal(body('conflict', { level: 'warning' }), 'Uno: conflicto, resuélvelo');
-  assert.equal(body('sync_failed', { level: 'error', params: { reason: 'path_forbidden' } }), 'Uno: error al sincronizar');
-  assert.equal(body('queued', { level: 'warning' }), 'Sin conexión: cierre en cola');
-  assert.equal(body('offline_open', { level: 'warning' }), 'Sin conexión: no se sincronizó');
-  assert.equal(body('unauthorized', { level: 'error' }), 'Clave no válida: vuelve a vincular');
-  assert.equal(noticeText(n('up_to_date')).level, 'info');
-  assert.equal(noticeText(n('conflict', { level: 'warning' })).title, 'Checkpoint');
-  assert.match(body('algo_nuevo'), /Uno/); // código desconocido: no se pierde el aviso
-  assert.equal(noticeText(n('up_to_date', { game: null })).body, 'Juego: al día');
-});
+const TOAST_BODIES = {
+  downloaded: 'Partida actualizada desde el hub',
+  uploaded: 'Partida enviada al hub correctamente',
+  up_to_date: 'Partida al día, sin cambios pendientes',
+  no_path: 'Falta la carpeta de guardado del juego',
+  missing_dir: 'No se encuentra la carpeta de guardado',
+  conflict: 'Conflicto: elige qué partida conservar',
+  joined: 'Juego unido a esta Deck correctamente',
+  sync_failed: 'No se pudo sincronizar: revisa los avisos',
+  queued: 'Sin conexión: sincronizará al reconectar',
+  offline_open: 'Sin conexión: no se pudo sincronizar',
+  unauthorized: 'Clave no válida: vuelve a vincular',
+};
 
-test('ningún toast pasa de 45 caracteres, ni con un nombre larguísimo, y el nombre se recorta con «…»', { skip }, async () => {
-  const { noticeText, TOAST_MAX } = await load();
-  assert.equal(TOAST_MAX, 45);
-  const codes = ['downloaded', 'uploaded', 'up_to_date', 'no_path', 'missing_dir', 'conflict', 'sync_failed', 'queued', 'offline_open', 'unauthorized', 'joined', 'algo_nuevo_con_un_codigo_larguisimo'];
-  for (const game of ['X', 'Half-Life 2', 'Call of Cthulhu: Dark Corners of the Earth', 'Ñ'.repeat(200), null]) {
-    for (const code of codes) {
-      const b = noticeText({ id: 1, code, game, level: 'info', params: { files: 123456, reason: 'x'.repeat(300) } }).body;
-      assert.ok([...b].length <= 45, `${code} (${game?.slice(0, 12)}): ${b.length} > 45: ${b}`);
-      assert.ok(!b.endsWith('.'), `punto final en ${b}`);
+test('toast de cada aviso: sin nombre de juego, exacto, nivel y código intactos', { skip }, async () => {
+  const { noticeText } = await load();
+  for (const [code, body] of Object.entries(TOAST_BODIES)) {
+    for (const game of ['Uno', 'Half-Life 2', null]) {
+      const t = noticeText({ id: 1, code, game, level: 'info', params: {} });
+      assert.equal(t.body, body);
+      assert.equal(t.title, 'Checkpoint');
+      assert.equal(t.code, code);
+      if (game) assert.ok(!t.body.includes(game) && !t.title.includes(game));
     }
   }
-  const long = noticeText({ id: 1, code: 'up_to_date', game: 'A'.repeat(100), level: 'info', params: {} }).body;
-  assert.match(long, /^A+…: al día$/);
-  assert.ok([...long.split(':')[0]].length <= 22);
-  assert.equal(noticeText({ id: 1, code: 'up_to_date', game: 'Cabe justo', level: 'info', params: {} }).body, 'Cabe justo: al día');
+  assert.equal(noticeText({ id: 1, code: 'conflict', game: 'Uno', level: 'warning', params: {} }).level, 'warning');
+  assert.match(noticeText({ id: 1, code: 'algo_nuevo', game: 'Uno', level: 'info', params: {} }).body, /^Nuevo aviso de Checkpoint$/);
+});
+
+test('ningún toast pasa de 45 caracteres ni lleva punto final, con cualquier nombre de juego', { skip }, async () => {
+  const { noticeText, TOAST_MAX } = await load();
+  assert.equal(TOAST_MAX, 45);
+  const codes = [...Object.keys(TOAST_BODIES), 'algo_nuevo_con_un_codigo_larguisimo'];
+  for (const game of ['X', 'Call of Cthulhu: Dark Corners of the Earth', 'Ñ'.repeat(200), null]) {
+    for (const code of codes) {
+      const b = noticeText({ id: 1, code, game, level: 'info', params: { files: 123456, reason: 'x'.repeat(300) } }).body;
+      assert.ok([...b].length <= 45, `${code}: ${b.length} > 45: ${b}`);
+      assert.ok(!b.endsWith('.') && !b.includes('…'), b);
+    }
+  }
+});
+
+test('aviso (panel): nombre completo del juego; sin juego no se inventa nombre', { skip }, async () => {
+  const { noticeFullText } = await load();
+  const game = 'Ñ'.repeat(120);
+  const n = (code, extra = {}) => ({ id: 1, code, game, level: 'info', params: {}, ...extra });
+  assert.equal(noticeFullText(n('downloaded')), `${game}: partida actualizada desde el hub`);
+  assert.equal(noticeFullText(n('uploaded')), `${game}: partida enviada al hub correctamente`);
+  assert.equal(noticeFullText(n('up_to_date')), `${game}: partida al día, sin cambios pendientes`);
+  assert.equal(noticeFullText(n('no_path')), `${game}: falta la carpeta de guardado del juego`);
+  assert.equal(noticeFullText(n('missing_dir')), `${game}: no se encuentra la carpeta de guardado`);
+  assert.equal(noticeFullText(n('conflict')), `${game}: conflicto: elige qué partida conservar`);
+  assert.equal(noticeFullText(n('joined')), `${game}: juego unido a esta Deck correctamente`);
+  assert.equal(noticeFullText(n('sync_failed')), `${game}: no se pudo sincronizar: revisa los avisos`);
+  assert.ok(noticeFullText(n('algo_nuevo')).startsWith(`${game}: `));
+  // avisos que no son de un juego: sin nombre aunque el backend mande uno
+  assert.equal(noticeFullText(n('queued')), 'Sin conexión: sincronizará al reconectar');
+  assert.equal(noticeFullText(n('offline_open')), 'Sin conexión: no se pudo sincronizar');
+  assert.equal(noticeFullText(n('unauthorized')), 'Clave no válida: vuelve a vincular');
+  // aviso de un juego sin nombre: nada inventado («Juego»)
+  assert.equal(noticeFullText(n('up_to_date', { game: null })), 'Partida al día, sin cambios pendientes');
+  for (const c of ['downloaded', 'conflict', 'sync_failed']) assert.ok(!/^Juego/.test(noticeFullText(n(c, { game: null }))));
+  assert.ok(!noticeFullText(n('sync_failed')).includes('…'));
 });
 
 test('el bombeo de avisos los muestra, no se solapa y sobrevive a un fallo', { skip }, async () => {
@@ -198,7 +226,7 @@ test('la bomba recuerda el último aviso entregado (hora y texto) y no lo cambia
   stop();
   assert.equal(before, null);
   assert.equal(one.time, '09:05');
-  assert.match(one.text, /Uno.*sub/i);
+  assert.match(one.text, /Uno.*enviada/i);
   const last = getLastNotice();
   assert.match(last.text, /Tres/); // el último de la tanda
   assert.equal(shown.length, 3);
@@ -246,8 +274,8 @@ test('el bombeo entrega y recuerda los avisos nuevos como último aviso', { skip
   const stop = startNoticePump(take, (t) => shown.push(t), () => assert.fail('sin problemas'), 2000, timers, () => new Date(2026, 0, 1, 9, 5));
   await new Promise((r) => setImmediate(r));
   stop();
-  assert.deepEqual(shown, [{ title: 'Checkpoint', body: 'Uno: al día', level: 'info', kind: 'ok', code: 'up_to_date' }]);
-  assert.deepEqual(getLastNotice(), { time: '09:05', text: 'Uno: al día' });
+  assert.deepEqual(shown, [{ title: 'Checkpoint', body: 'Partida al día, sin cambios pendientes', level: 'info', kind: 'ok', code: 'up_to_date' }]);
+  assert.deepEqual(getLastNotice(), { time: '09:05', text: 'Uno: partida al día, sin cambios pendientes' });
 });
 
 test('onRaw recibe el evento crudo antes del filtro y el filtro descarta igual', { skip }, async () => {
@@ -329,15 +357,15 @@ test('noticeText lleva el icono (kind) y el código del aviso', { skip }, async 
   assert.equal(noticeText({ id: 1, code: 'queued', game: null, level: 'warning', params: {} }).kind, 'warn');
 });
 
-test('«Último aviso» guarda el texto completo (nombre y motivo sin recortar); el toast sigue en 45 caracteres', { skip }, async () => {
+test('«Último aviso» guarda el texto completo (nombre y motivo sin recortar); el toast va sin juego y en 45 caracteres', { skip }, async () => {
   const { startNoticePump, getLastNotice, noticeFullText } = await load();
   const game = 'Call of Cthulhu: Dark Corners of the Earth - Edición completa';
   const n = { id: 1, code: 'sync_failed', game, level: 'error', params: { reason: 'connection' } };
   const full = noticeFullText(n);
-  assert.ok(full.startsWith(`${game}: error al sincronizar. `), full);
+  assert.ok(full.startsWith(`${game}: no se pudo sincronizar: revisa los avisos. `), full);
   assert.ok(!full.includes('…'));
   assert.ok([...full].length > 45);
-  assert.equal(noticeFullText({ id: 2, code: 'up_to_date', game, level: 'info', params: {} }), `${game}: al día`);
+  assert.equal(noticeFullText({ id: 2, code: 'up_to_date', game, level: 'info', params: {} }), `${game}: partida al día, sin cambios pendientes`);
   assert.equal(noticeFullText({ id: 3, code: 'unauthorized', game: null, level: 'error', params: {} }), 'Clave no válida: vuelve a vincular');
   const shown = [];
   let given = false;
@@ -347,5 +375,6 @@ test('«Último aviso» guarda el texto completo (nombre y motivo sin recortar);
   await new Promise((r) => setImmediate(r));
   stop();
   assert.ok([...shown[0].body].length <= 45, 'el toast sigue limitado');
+  assert.ok(!shown[0].body.includes('Cthulhu'), 'el toast no lleva el juego');
   assert.equal(getLastNotice().text, full);
 });

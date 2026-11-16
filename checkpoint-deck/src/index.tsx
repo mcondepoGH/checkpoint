@@ -170,7 +170,7 @@ import {
   describeUpdate,
   conflictText,
   gameError,
-  joinedText,
+  JOINED_TOAST,
   lastNoticeText,
   pickerArgs,
   pluginUrl,
@@ -373,7 +373,7 @@ function startCapture(): void {
     // Al log de Decky; si el propio envío falla no se reporta (evita el bucle)
     onReport: (it) => {
       reportError(it.details).catch(() => undefined);
-      toaster.toast({ title: "Checkpoint: fallo detectado", body: it.title });
+      toaster.toast({ title: "Checkpoint: fallo detectado", body: "Mira «Fallos detectados» en Inicio" });
     },
   });
 }
@@ -592,7 +592,7 @@ function UnconfiguredGame({ appid, name, source, disabled, onDone, onClose }: { 
         setError(gameError(r) + (r.error_detail ? ` (${r.error_detail})` : ""));
         return;
       }
-      if (r.game?.joined) toaster.toast({ title: "Checkpoint", body: joinedText(r.game.name) });
+      if (r.game?.joined) toaster.toast({ title: "Checkpoint", body: JOINED_TOAST });
       onDone(await getSyncState()); // el juego pasa a la lista de «Juegos en el hub»
       drafts.delete(appid);
     } catch (e) {
@@ -810,7 +810,7 @@ function SaveSuggestions({ sync, setSync, editing, openForm, closeForm }: Sugges
         setCardErr((e) => ({ ...e, [k]: gameError(c) + (c.error_detail ? ` (${c.error_detail})` : "") }));
         return;
       }
-      if (c.game?.joined) toaster.toast({ title: "Checkpoint", body: joinedText(c.game.name) });
+      if (c.game?.joined) toaster.toast({ title: "Checkpoint", body: JOINED_TOAST });
       drafts.delete(r.appid);
       setAdded((a) => withKey(a, k));
       setSync(await getSyncState());
@@ -1079,7 +1079,7 @@ function trackPairing(wasLinked: boolean): void {
         stopPairWatch();
         if (s.status !== "linked") return;
         setShared({ online: true, ...(wasLinked ? {} : { firstSync: true, summary: null }) });
-        showToast("ok", LINKED_TOAST(s.device ?? s.device_name));
+        showToast("ok", LINKED_TOAST);
       })
       .catch(capture("estado de la vinculación"));
   }, 1500);

@@ -1,5 +1,15 @@
 # Registro de cambios del plugin
 
+## 1.3.3 - 2026-11-16
+
+`checkpointProtocol: 1` (sin cambios). Toasts sin nombre de juego (por probar en una Deck real).
+
+### Cambios
+
+- **Toasts de Decky:** ya no llevan el nombre del juego (era largo y el mensaje salía cortado). Solo mensaje, más descriptivo y entero dentro de 45 caracteres, p. ej. «Partida actualizada desde el hub» en lugar de «Hades: cargada». Afecta a subida, bajada, sin cambios, conflicto, error, carpeta, unión a un juego, sin conexión, clave no válida, resumen de «Sincronizar todo», cancelación, corte, versión nueva o actualizada, vinculación y desvinculación. El resumen de «Sincronizar todo» conserva su forma («n subidos, n bajados, n conflictos») y, si no cabe en 45 caracteres, dice «Terminó con incidencias: mira Juegos» en lugar de recortarse con «…». Solo se recorta con «…» la versión en los toasts de versión nueva o actualizada.
+- **Avisos del panel:** «Último aviso» sigue llevando el nombre completo del juego (sin recorte) y el motivo del fallo; los avisos que no son de un juego (conexión, clave) no llevan nombre ni se inventan uno. Los avisos del panel repiten la redacción del toast tras el nombre (p. ej. «Hades: partida actualizada desde el hub»). Los avisos fijos y el detalle de cada juego ya nombraban el juego entero.
+- **Fallo detectado:** el toast dice «Mira «Fallos detectados» en Inicio»; el título y los detalles completos siguen en Inicio.
+
 ## 1.3.2 - 2026-11-16
 
 `checkpointProtocol: 1` (sin cambios). Los avisos se ven completos (por probar en una Deck real).

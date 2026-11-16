@@ -2,7 +2,7 @@
 // - `startGameWatch` (con `onRaw` opcional para diagnosticar los eventos que el filtro descarta): escucha a Steam (`SteamClient.GameSessions.RegisterForAppLifetimeNotifications`, API INTERNA sin
 //   contrato estable: una actualización de Steam puede romperla; los toasts confirman que funciona en una Deck real) y avisa al backend con (appid, abierto).
 // - `startNoticePump` + `noticeText`: recoge los avisos que deja el backend (`take_notices`) y los convierte en toasts.
-import { LastNotice, TOAST_MAX, syncError, toastLine } from "./texts";
+import { LastNotice, TOAST_MAX, syncError } from "./texts";
 
 export { TOAST_MAX };
 
@@ -82,48 +82,40 @@ export interface Toast {
   code: string;
 }
 
-/** Cuerpo de un aviso con la función `line` que une nombre y resto: `toastLine` (toast, máx. `TOAST_MAX`) o `fullLine` (panel, completo). */
-function noticeBody(n: Notice, line: (name: string, rest: string) => string, full = false): string {
-  const g = n.game ?? "Juego";
-  switch (n.code) {
-    case "downloaded":
-      return line(g, "guardado bajado");
-    case "uploaded":
-      return line(g, "guardado subido");
-    case "up_to_date":
-      return line(g, "al día");
-    case "no_path":
-      return line(g, "sin carpeta de guardado");
-    case "missing_dir":
-      return line(g, "carpeta no encontrada");
-    case "conflict":
-      return line(g, "conflicto, resuélvelo");
-    case "joined":
-      return line(g, "unido a este equipo");
-    case "queued":
-      return "Sin conexión: cierre en cola";
-    case "offline_open":
-      return "Sin conexión: no se sincronizó";
-    case "unauthorized":
-      return "Clave no válida: vuelve a vincular";
-    case "sync_failed":
-      // en el panel (no en el toast) se añade el motivo conocido, ya saneado por el backend (solo un código)
-      return line(g, "error al sincronizar" + (full && n.params?.reason ? `. ${syncError(String(n.params.reason))}` : ""));
-    default:
-      return line(g, "aviso de Checkpoint");
-  }
-}
-/** «<nombre>: <resto>» sin recortar nada: el nombre y el resto enteros (para el panel; el toast sigue limitado). */
+/** Textos de un aviso del backend. `toast`: cuerpo del toast de Decky, SIN nombre de juego, entero y como mucho `TOAST_MAX`
+ *  caracteres. `rest`: texto del aviso (panel), que lleva delante el nombre del juego si el aviso es de uno (`game`). */
+const NOTICE_TEXTS: Record<string, { toast: string; rest: string; game: boolean }> = {
+  downloaded: { toast: "Partida actualizada desde el hub", rest: "partida actualizada desde el hub", game: true },
+  uploaded: { toast: "Partida enviada al hub correctamente", rest: "partida enviada al hub correctamente", game: true },
+  up_to_date: { toast: "Partida al día, sin cambios pendientes", rest: "partida al día, sin cambios pendientes", game: true },
+  no_path: { toast: "Falta la carpeta de guardado del juego", rest: "falta la carpeta de guardado del juego", game: true },
+  missing_dir: { toast: "No se encuentra la carpeta de guardado", rest: "no se encuentra la carpeta de guardado", game: true },
+  conflict: { toast: "Conflicto: elige qué partida conservar", rest: "conflicto: elige qué partida conservar", game: true },
+  joined: { toast: "Juego unido a esta Deck correctamente", rest: "juego unido a esta Deck correctamente", game: true },
+  queued: { toast: "Sin conexión: sincronizará al reconectar", rest: "Sin conexión: sincronizará al reconectar", game: false },
+  offline_open: { toast: "Sin conexión: no se pudo sincronizar", rest: "Sin conexión: no se pudo sincronizar", game: false },
+  unauthorized: { toast: "Clave no válida: vuelve a vincular", rest: "Clave no válida: vuelve a vincular", game: false },
+  sync_failed: { toast: "No se pudo sincronizar: revisa los avisos", rest: "no se pudo sincronizar: revisa los avisos", game: true },
+};
+const DEFAULT_TEXTS = { toast: "Nuevo aviso de Checkpoint", rest: "nuevo aviso de Checkpoint", game: true };
+const upFirst = (t: string): string => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+
+/** «<nombre>: <resto>» sin recortar nada: el nombre y el resto enteros (para el panel). */
 export const fullLine = (name: string, rest: string): string => `${name}: ${rest}`;
-/** Texto COMPLETO de un aviso para «Último aviso» (sin el límite de `TOAST_MAX`, que es solo de los toasts de Decky). */
+/** Texto COMPLETO de un aviso (para «Último aviso»): con el nombre entero del juego si el aviso es de un juego (sin inventar
+ *  uno si falta) y, en un fallo de sincronización, el motivo conocido ya saneado. Nunca recortado. */
 export function noticeFullText(n: Notice): string {
-  return noticeBody(n, fullLine, true);
+  const t = NOTICE_TEXTS[n.code] ?? DEFAULT_TEXTS;
+  let rest = t.rest;
+  if (n.code === "sync_failed" && n.params?.reason) rest += `. ${syncError(String(n.params.reason))}`;
+  if (!t.game) return rest;
+  return n.game ? fullLine(n.game, rest) : upFirst(rest);
 }
 
-/** Cuerpo del toast: corto (máx. `TOAST_MAX` caracteres, sin punto final); Decky corta los largos. Los detalles de un
- *  fallo van al panel «Juegos» y al log, no aquí. */
+/** Toast: título corto y cuerpo SIN nombre de juego (máx. `TOAST_MAX` caracteres, sin punto final; Decky corta los largos).
+ *  El aviso con el juego y los detalles van a `noticeFullText`, al panel y al log. */
 export function noticeText(n: Notice): Toast {
-  const body = noticeBody(n, toastLine);
+  const body = (NOTICE_TEXTS[n.code] ?? DEFAULT_TEXTS).toast;
   return { title: "Checkpoint", body, level: n.level, kind: noticeKind(n), code: n.code };
 }
 

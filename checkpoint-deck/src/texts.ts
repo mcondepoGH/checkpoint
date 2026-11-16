@@ -190,17 +190,15 @@ const GAME_FIELDS: Record<string, string> = {
 
 // ---- toasts cortos: el cuerpo entero cabe en `TOAST_MAX` caracteres (si no, Decky lo corta). Los detalles van al panel y al log.
 export const TOAST_MAX = 45;
-const NAME_MAX = 22;
-/** «<nombre>: <resto>» sin pasar de `TOAST_MAX`: el nombre se recorta (máx. 22) con «…», el resto no. */
-export function toastLine(name: string, rest: string): string {
-  const room = Math.max(1, Math.min(NAME_MAX, TOAST_MAX - [...rest].length - 2));
-  const chars = [...name];
-  const shown = chars.length <= room ? name : `${chars.slice(0, Math.max(1, room - 1)).join("")}…`;
-  return `${shown}: ${rest}`;
+/** Recorta con «…» solo un dato libre (versión, nombre de equipo) para que el cuerpo del toast no pase de `TOAST_MAX`. Nunca el nombre de un juego. */
+function fit(prefix: string, value: string): string {
+  const room = TOAST_MAX - [...prefix].length;
+  const chars = [...value];
+  return `${prefix}${chars.length <= room ? value : `${chars.slice(0, Math.max(1, room - 1)).join("")}…`}`;
 }
 
-/** Aviso al unirse este dispositivo a un juego que el hub ya tenía (respuesta `joined: true`). */
-export const joinedText = (name: string): string => toastLine(name, "unido a este equipo");
+/** Toast al unirse este dispositivo a un juego que el hub ya tenía (respuesta `joined: true`): sin nombre de juego. */
+export const JOINED_TOAST = "Juego unido a esta Deck correctamente";
 
 // ---- resolver un conflicto de datos (panel «Juegos en el hub»; main.py: resolve_conflict) ----
 export const RESOLVE_HUB_LABEL = "Usar datos del hub";
@@ -524,7 +522,8 @@ export function summaryText(t: TallyText): string {
   const base = `${plural(t.up, "subido", "subidos")}, ${plural(t.down, "bajado", "bajados")}, ${plural(t.conf, "conflicto", "conflictos")}`;
   return t.err ? `${base}, ${plural(t.err, "error", "errores")}` : base;
 }
-/** Lo mismo para un toast: sin partes a cero y recortado a `TOAST_MAX` (Decky corta los cuerpos largos). */
+/** Lo mismo para un toast: sin partes a cero y entero dentro de `TOAST_MAX` (Decky corta los largos): con el prefijo
+ *  la lista; si no cabe, un aviso genérico (las cifras están en el panel). */
 export function summaryToast(t: TallyText): string {
   const parts = [
     t.up ? plural(t.up, "subido", "subidos") : "",
@@ -532,11 +531,11 @@ export function summaryToast(t: TallyText): string {
     t.conf ? plural(t.conf, "conflicto", "conflictos") : "",
     t.err ? plural(t.err, "error", "errores") : "",
   ].filter(Boolean);
-  const text = parts.length ? parts.join(", ") : "Todo estaba al día";
-  const chars = [...text];
-  return chars.length <= TOAST_MAX ? text : `${chars.slice(0, TOAST_MAX - 1).join("")}…`;
+  if (!parts.length) return "Todo estaba al día";
+  const list = parts.join(", ");
+  return [...list].length <= TOAST_MAX ? list : "Terminó con incidencias: mira Juegos";
 }
-export const SYNC_CUT_TOAST = "Sin conexión: quedó a medias";
+export const SYNC_CUT_TOAST = "Sin conexión: quedaron juegos pendientes";
 export const SYNC_CANCELLED_TOAST = "Sincronización cancelada";
 
 // Primera sincronización de un dispositivo recién vinculado
@@ -570,12 +569,8 @@ export const UNLINK_CONFIRM = {
   description: "Se borra la clave de esta Deck. Para que deje de valer, revócala también en el hub (Dispositivos).",
   ok: "Desvincular",
 };
-export const UNLINK_TOAST = "Clave borrada de la Deck. Para que deje de valer, revócala también en el hub.";
-export const LINKED_TOAST = (device: string): string => {
-  const room = TOAST_MAX - "Vinculado: ".length;
-  const chars = [...device];
-  return `Vinculado: ${chars.length <= room ? device : `${chars.slice(0, room - 1).join("")}…`}`;
-};
+export const UNLINK_TOAST = "Deck desvinculada. Revoca la clave en el hub";
+export const LINKED_TOAST = "Deck vinculada con el hub correctamente";
 
 // «Juegos en el hub» (tarjetas)
 export const GAME_FOLDER = "Carpeta configurada";
@@ -615,5 +610,5 @@ export const VER_CHECK = "Buscar actualizaciones";
 export const VER_CHECKING = "Comprobando…";
 export const VER_HOW = "Cómo actualizar";
 export const VER_NOT_SELF = "El plugin no se instala solo: lo hace Decky con «Instalar plugin desde URL».";
-export const VER_AUTO_TOAST = (latest: string): string => toastLine("Actualización", latest);
-export const UPDATED_TOAST = (cur: string): string => `Checkpoint actualizado a ${cur}`;
+export const VER_AUTO_TOAST = (latest: string): string => fit("Hay una versión nueva: ", latest);
+export const UPDATED_TOAST = (cur: string): string => fit("Checkpoint actualizado a ", cur);

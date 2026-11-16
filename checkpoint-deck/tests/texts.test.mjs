@@ -228,10 +228,10 @@ test('copiar la dirección: botón y mensajes de éxito y de fallo', { skip }, a
   assert.equal(COPY_FAIL, 'No se pudo copiar: selecciona y escribe la dirección');
 });
 
-test('al unirse a un juego existente el aviso es corto y nombra el juego', { skip }, async () => {
-  const { joinedText } = await load();
-  assert.equal(joinedText('Celeste'), 'Celeste: unido a este equipo');
-  assert.ok([...joinedText('Z'.repeat(80))].length <= 45);
+test('al unirse a un juego existente el toast no lleva nombre de juego y cabe', { skip }, async () => {
+  const { JOINED_TOAST, TOAST_MAX } = await load();
+  assert.equal(JOINED_TOAST, 'Juego unido a esta Deck correctamente');
+  assert.ok([...JOINED_TOAST].length <= TOAST_MAX);
 });
 
 
