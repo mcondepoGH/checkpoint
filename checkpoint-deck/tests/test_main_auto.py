@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import stat
+import threading
 from pathlib import Path
 
 from test_main_library import KEY, make_plugin
@@ -333,12 +334,25 @@ def _run_event(fake_decky, scripthub, tmp_path, monkeypatch, result, running, ap
     save.mkdir(parents=True)
     sync_returns(monkeypatch, result)
 
+    done = threading.Event()  # el evento ya se procesó entero (avisos incluidos): se espera a esto, no a un tiempo fijo
+    from checkpoint_auto import AutoSync
+
+    for name in ("opened", "closed"):
+        orig = getattr(AutoSync, name)
+
+        def wrapped(self, appid, _orig=orig):
+            try:
+                return _orig(self, appid)
+            finally:
+                done.set()
+
+        monkeypatch.setattr(AutoSync, name, wrapped)
+
     async def go():
         await p._main()
         await p.game_event(appid, running)
-        got = await drain(p, 1, n=60)
-        await asyncio.sleep(0.2)
-        got += await p.take_notices()
+        assert await asyncio.to_thread(done.wait, 10)
+        got = await p.take_notices()
         await p._unload()
         return got
 
