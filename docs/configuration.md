@@ -56,8 +56,13 @@ games:
     keep_versions: 5           # opcional: sustituye a max_versions para este juego
     # enabled: false           # opcional: desactiva el juego (no se sincroniza por ninguna vía)
     # steam_appid: 1245620     # opcional: id de Steam del juego (ver abajo)
+    # steam_appids:            # opcional: appid distinto por dispositivo (atajos que no son de Steam; ver abajo)
+    #   pc-1a2b3c4d: 2389644016
+    #   laptop-5e6f7a8b: 3928137182
 ```
 
 **Appid de Steam (opcional).** `steam_appid` es el id de Steam del juego: un dato del juego, igual en todos los dispositivos, que el plugin de Steam Deck usa para saber qué juego del hub corresponde a cada juego de Steam. Se edita en Configuración, en el campo «Appid de Steam» de la tarjeta del juego (o en `config.yaml`); vacío o ausente = sin appid. Debe ser un número entero mayor que 0: `0`, negativos, decimales, texto (también `"440"` entre comillas) y `true`/`false` se rechazan con `err.config.steam_appid_invalid`. Dos juegos no pueden compartir el mismo appid (`err.config.steam_appid_duplicate`, indica el otro juego). Solo se pueden guardar juegos de Steam por ahora: no hay appid para los que no lo son. Las keys de la API solo lo leen (`GET /api/games`); no pueden cambiarlo.
+
+**Appid por dispositivo (opcional).** Un atajo que no es de Steam (juego añadido a mano) recibe un appid distinto en cada dispositivo (p. ej. 2389644016 en el hub y 3928137182 en otro equipo). `steam_appids` es un mapa `{id de dispositivo: appid}` con el appid de ese juego en cada dispositivo; `steam_appid` sigue siendo el valor general. El appid **efectivo** de un juego en un dispositivo es `steam_appids[dispositivo]` si existe y, si no, `steam_appid`. Reglas: cada appid es un entero mayor que 0 (`err.config.steam_appid_invalid`); las claves deben ser dispositivos de la configuración (`err.config.steam_appids_device_unknown`) y estar en la lista `devices` del propio juego (`err.config.steam_appids_device_not_in_game`); el appid efectivo es único entre los juegos de un mismo dispositivo (`err.config.steam_appid_duplicate`), y el general sigue sin poder repetirse entre juegos. Si está vacío o ausente no se escribe. La Deck lo rellena sola al enviar su biblioteca (ver `POST /api/steam/library` en la API); también se puede escribir en `config.yaml`. El editor de la web todavía no lo muestra.
 
 La clave de cada juego y dispositivo es su **ID interno**, que no cambia nunca; `name` es solo una etiqueta y se puede renombrar libremente sin perder saves, versiones ni logs. `name` es obligatorio en cada juego y dispositivo. La CLI y la API aceptan el ID o el nombre.
