@@ -892,7 +892,7 @@ GAMES = dict(
     summary="Listar los juegos y su estado",
     description="Con la key de **usuario**, todos los juegos de la configuración; con la de **dispositivo**, solo los "
     "que tienen ese dispositivo en su lista. Con el resultado de su última sincronización, para consultarlo "
-    "desde un dispositivo sin SSH. `steam_appid` es el id de Steam del juego (entero) o `null` si no tiene; el mismo para todos los dispositivos. `status` es `null` si el juego aún no se ha sincronizado. Solo lectura: no "
+    "desde un dispositivo sin SSH. `steam_appid` es el id de Steam del juego (entero) o `null` si no tiene: con key de dispositivo, el efectivo en ese dispositivo (su `steam_appids` y, si no, el general, sin exponer los de otros dispositivos); con key de usuario, el general y, si el juego lo tiene, `steam_appids` (`{dispositivo: appid}`). `status` es `null` si el juego aún no se ha sincronizado. Solo lectura: no "
     "sincroniza nada y no devuelve dispositivos ni ajustes. Con clave de dispositivo incluye la ruta del guardado en ese "
     "dispositivo (`path`: cadena, o `null` si no tiene ruta) y solo la de ese dispositivo; con la de usuario no hay `path`.",
     responses={
@@ -937,6 +937,20 @@ GAMES = dict(
                         "steam_appid": None,
                         "status": None,
                         "path": None,
+                    },
+                ],
+            ),
+            (
+                "user_per_device",
+                "Con key de usuario: un atajo con appid por dispositivo lleva `steam_appids`",
+                [
+                    {
+                        "id": "dq7",
+                        "name": "Dragon Quest VII",
+                        "enabled": True,
+                        "steam_appid": 2389644016,
+                        "steam_appids": {"omarchy-1a2b3c4d": 3928137182},
+                        "status": None,
                     },
                 ],
             ),

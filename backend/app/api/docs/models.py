@@ -1,6 +1,6 @@
 """Modelos pydantic solo para el esquema OpenAPI (no validan ni filtran las respuestas reales)."""
 
-from typing import Optional
+from typing import Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -89,9 +89,17 @@ class GameItem(BaseModel):
     enabled: bool = Field(description="`false` si el juego está desactivado: no se sincroniza por ninguna vía.")
     steam_appid: Optional[int] = Field(
         None,
-        description="Appid de Steam del juego (entero positivo), o `null` si no tiene. Es un dato del juego, igual "
-        "para todos los dispositivos; solo se edita desde la configuración del hub.",
+        description="Appid de Steam del juego (entero positivo), o `null` si no tiene. Con key de dispositivo es el "
+        "efectivo en ESE dispositivo (su entrada de `steam_appids` y, si no hay, el general); con key de usuario, el "
+        "general. Solo se edita desde la configuración del hub (o lo rellena la Deck al enviar su biblioteca).",
         examples=[1245620],
+    )
+    steam_appids: Optional[Dict[str, int]] = Field(
+        None,
+        description="Solo con key de **usuario** y solo si el juego lo tiene: appid de Steam por dispositivo "
+        "(`{id de dispositivo: appid}`), para los atajos que no son de Steam y tienen un appid distinto en cada "
+        "dispositivo. Con key de dispositivo no sale (no se exponen los de otros dispositivos).",
+        examples=[{"omarchy-1a2b3c4d": 3928137182}],
     )
     status: Optional[GameSyncStatus] = Field(
         None, description="Última sincronización del juego, o `null` si aún no hay ninguna."

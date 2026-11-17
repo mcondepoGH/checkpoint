@@ -476,4 +476,5 @@ def test_openapi_steam_game_create_documents_the_join(client):
     assert {"joined", "devices", "enabled"} <= set(props)
     assert "joined" not in j["components"]["schemas"]["SteamGameCreated"].get("required", [])
     ex = op["responses"]["422"]["content"]["application/json"]["examples"]
-    assert {"slot", "mismatch", "inuse"} <= set(ex)
+    assert {"slot", "inuse"} <= set(ex)
+    assert "mismatch" not in ex  # un appid distinto del general ya no se rechaza: va a `steam_appids`

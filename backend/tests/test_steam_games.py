@@ -178,6 +178,9 @@ def test_no_secrets_in_logs_of_the_new_endpoints(hub, caplog):
 
 
 # ---- unirse a un juego existente (mismo nombre normalizado, hueco libre) ----
+DQ = "Dragon Quest VII"
+
+
 def join_cfg(hub, **games):
     """Sustituye o añade juegos en la config guardada (misma vía que `PUT /api/config`: `ConfigStore.save`)."""
     from app.config.models import validate_config
@@ -234,11 +237,51 @@ def test_join_refuses_without_a_free_slot(hub):
     assert cfg_games(hub)["g1"]["devices"] == ["deck", "pc"] and "Mi Juego" not in r.text
 
 
-def test_join_refuses_a_different_appid(hub):
+def test_join_with_another_appid_writes_the_device_entry_and_keeps_the_general(hub):
     r = create(hub, {"appid": 333, "name": "Has Appid", "path": "/x/y"}, key=hub.key2)  # el juego tiene 111
+    assert r.status_code == 200 and r.json()["joined"] is True and r.json()["appid"] == 333
+    g = cfg_games(hub)["haspid"]
+    assert g["devices"] == ["deck", "deck2"] and g["steam_appid"] == 111 and g["steam_appids"] == {"deck2": 333}
+
+
+def test_join_dragon_quest_other_appid_goes_to_the_free_slot(hub):
+    join_cfg(hub, dq={"name": DQ, "devices": ["deck"], "paths": {"deck": "/dq"}, "steam_appid": 2389644016})
+    r = create(hub, {"appid": 3928137182, "name": DQ, "path": "/dqp"}, key=hub.key2)
+    assert r.status_code == 200 and r.json()["joined"] is True and r.json()["devices"] == ["deck", "deck2"]
+    g = cfg_games(hub)["dq"]
+    assert (
+        g["steam_appid"] == 2389644016 and g["steam_appids"] == {"deck2": 3928137182} and g["paths"]["deck2"] == "/dqp"
+    )
+    again = create(hub, {"appid": 3928137182, "name": DQ, "path": "/otra"}, key=hub.key2)
+    assert again.json()["joined"] is False  # idempotente con el appid efectivo del dispositivo
+
+
+def test_join_other_appid_never_overwrites_other_device_entries(hub):
+    join_cfg(
+        hub,
+        dq={"name": DQ, "devices": ["deck"], "paths": {"deck": "/dq"}, "steam_appid": 5, "steam_appids": {"deck": 6}},
+    )
+    r = create(hub, {"appid": 7, "name": DQ, "path": "/dqp"}, key=hub.key2)
+    assert r.status_code == 200
+    assert cfg_games(hub)["dq"]["steam_appids"] == {"deck": 6, "deck2": 7}
+
+
+def test_join_other_appid_refuses_an_appid_effective_in_that_device(hub):
+    join_cfg(
+        hub,
+        dq={"name": DQ, "devices": ["deck"], "paths": {"deck": "/dq"}, "steam_appid": 5},
+        oth={"name": "Oth", "devices": ["deck2"], "paths": {"deck2": "/o"}, "steam_appid": 444},
+    )
+    r = create(hub, {"appid": 444, "name": DQ, "path": "/dqp"}, key=hub.key2)
     assert r.status_code == 422
-    assert r.json()["detail"]["params"] == {"field": "name", "reason": "err.steam.appid_mismatch"}
-    assert cfg_games(hub)["haspid"]["devices"] == ["deck"]
+    assert r.json()["detail"]["params"] == {"field": "name", "reason": "err.steam.appid_in_use"}
+
+
+def test_join_game_without_appid_sets_the_general(hub):
+    join_cfg(hub, dq={"name": DQ, "devices": ["deck"], "paths": {"deck": "/dq"}})
+    assert create(hub, {"appid": 9, "name": DQ, "path": "/dqp"}, key=hub.key2).status_code == 200
+    g = cfg_games(hub)["dq"]
+    assert g["steam_appid"] == 9 and "steam_appids" not in g
 
 
 def test_join_refuses_an_appid_used_by_another_game(hub):
@@ -306,3 +349,86 @@ def test_put_config_is_not_affected_by_the_join_rules(hub):
     assert (
         errors["games.twin.name"]["code"] == "err.config.name_duplicate"
     )  # la config sigue rechazando el nombre repetido
+
+
+# ---- appid por dispositivo (atajo no-Steam: un appid distinto en cada dispositivo) ----
+
+
+def test_library_adds_a_per_device_entry_for_a_shortcut_with_another_general_appid(hub):
+    """Caso Dragon Quest VII: general 2389644016 (hub), la Deck ve 3928137182 con el mismo nombre."""
+    join_cfg(
+        hub,
+        dq={"name": DQ, "devices": ["deck", "pc"], "paths": {"deck": "/dq", "pc": "/dqp"}, "steam_appid": 2389644016},
+    )
+    from test_steam import lib
+
+    j = lib(hub, [(3928137182, DQ)]).json()
+    assert j == {"associated": [{"appid": 3928137182, "game": "dq"}], "suggested": 0, "unchanged": 0, "ignored": 0}
+    g = cfg_games(hub)["dq"]
+    assert g["steam_appid"] == 2389644016 and g["steam_appids"] == {"deck": 3928137182}  # general intacto
+    # segunda llamada: ya es el de ese dispositivo
+    assert lib(hub, [(3928137182, DQ)]).json() == {"associated": [], "suggested": 0, "unchanged": 1, "ignored": 0}
+    # y `GET /api/games` con la key de la Deck da su appid
+    mine = {x["id"]: x["steam_appid"] for x in hub.anon.get("/api/games", headers=bearer(hub.key)).json()}
+    assert mine["dq"] == 3928137182
+
+
+def test_library_never_overwrites_an_existing_device_entry(hub):
+    join_cfg(
+        hub,
+        dq={
+            "name": DQ,
+            "devices": ["deck"],
+            "paths": {"deck": "/dq"},
+            "steam_appid": 2389644016,
+            "steam_appids": {"deck": 3928137182},
+        },
+    )
+    from test_steam import lib, sugg
+
+    assert lib(hub, [(777, DQ)]).json() == {"associated": [], "suggested": 0, "unchanged": 0, "ignored": 1}
+    assert cfg_games(hub)["dq"]["steam_appids"] == {"deck": 3928137182} and sugg(hub) == []
+
+
+def test_library_per_device_does_not_touch_other_devices_or_the_general_when_matching(hub):
+    join_cfg(
+        hub,
+        dq={
+            "name": DQ,
+            "devices": ["deck", "pc"],
+            "paths": {"deck": "/dq", "pc": "/dqp"},
+            "steam_appid": 2389644016,
+            "steam_appids": {"pc": 111222},
+        },
+    )
+    from test_steam import lib
+
+    assert lib(hub, [(2389644016, DQ)]).json()["unchanged"] == 1  # el general coincide con el de Steam: nada que hacer
+    assert cfg_games(hub)["dq"]["steam_appids"] == {"pc": 111222}
+
+
+def test_library_per_device_refuses_an_appid_already_effective_in_that_device(hub):
+    join_cfg(hub, dq={"name": DQ, "devices": ["deck"], "paths": {"deck": "/dq"}, "steam_appid": 2389644016})
+    from test_steam import lib
+
+    # 111 es el general de «Has Appid», también de la Deck: no se puede dar a otro juego
+    j = lib(hub, [(111, DQ)]).json()
+    assert j["associated"] == [] and "steam_appids" not in cfg_games(hub)["dq"]
+
+
+def test_library_per_device_needs_a_name_unique_among_active_games_of_the_device(hub):
+    join_cfg(
+        hub,
+        dq={"name": DQ, "devices": ["deck"], "paths": {"deck": "/dq"}, "steam_appid": 2389644016},
+        dq2={"name": "Dragon-Quest VII", "devices": ["deck"], "paths": {"deck": "/dq2"}},
+    )
+    from test_steam import lib, sugg
+
+    j = lib(hub, [(3928137182, DQ)]).json()
+    assert j["associated"] == [] and j["suggested"] >= 1  # ambiguo: queda como sugerencia
+    s = [x for x in sugg(hub) if x["game"] == "dq"]
+    assert s  # y aceptarla escribe la entrada por dispositivo en el juego con general
+    r = hub.session.post(f"/api/steam/suggestions/{s[0]['id']}/accept")
+    assert r.status_code == 200
+    g = cfg_games(hub)["dq"]
+    assert g["steam_appid"] == 2389644016 and g["steam_appids"] == {"deck": 3928137182}

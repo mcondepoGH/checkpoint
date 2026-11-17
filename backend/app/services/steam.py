@@ -2,12 +2,17 @@
 
 La Deck envía su lista de juegos instalados `[{appid, name}]`; el hub la compara con los juegos de ESE dispositivo y:
 
-- ASOCIA solo con certeza (escribe `steam_appid` del juego, por `ConfigStore.save`): el juego está activo, tiene ese
-  dispositivo, aún no tiene appid, su nombre normalizado es igual al de UNA sola entrada de Steam, ningún otro juego del
-  hub tiene ese mismo nombre normalizado y el appid no lo usa otro juego.
+- ASOCIA solo con certeza (por `ConfigStore.save`): el juego está activo y tiene ese dispositivo.
+  - Sin appid general ni de ese dispositivo: escribe `steam_appid` si su nombre normalizado es igual al de UNA sola
+    entrada de Steam, ningún otro juego del hub tiene ese mismo nombre normalizado y el appid no lo usa otro juego.
+  - Con `steam_appid` general distinto del de Steam y sin entrada de ese dispositivo (un atajo que no es de Steam tiene
+    un appid por dispositivo): escribe `steam_appids[dispositivo]` si hay coincidencia exacta de nombre con UNA sola
+    entrada de Steam, única entre los juegos activos de ese dispositivo, y el appid no es ya el efectivo de otro juego
+    en él. El general y los otros dispositivos no se tocan.
 - SUGIERE (memoria; el usuario decide en la web) los casos dudosos: nombre parecido pero no igual (`SIMILARITY`), nombre
   igual pero ambiguo (dos juegos del hub o dos entradas de Steam con el mismo nombre).
-- NUNCA pisa un appid existente (si es el mismo no hace nada; si es otro, ni lo toca ni lo sugiere).
+- NUNCA pisa un appid existente: si el juego ya tiene `steam_appids[dispositivo]` (mismo: no hace nada; otro: ni lo toca
+  ni lo sugiere), y el general nunca se modifica si ya existe. La key de un dispositivo solo fija appids de SUS juegos.
 
 Los descartes (par appid + juego) se recuerdan en `data/state/_steam/dismissed.json` (sin secretos) y no se vuelven a
 proponer hasta que el usuario los olvida. Nada de aquí escribe claves ni cuerpos de petición en logs."""
@@ -150,15 +155,19 @@ def game_error(errors: Dict[str, dict], gid: str) -> dict:
 
 class Plan:
     def __init__(self):
-        self.associate: Dict[int, str] = {}  # appid -> id del juego
+        self.associate: Dict[int, str] = {}  # appid -> id del juego (se escribe `steam_appid`)
+        self.associate_dev: Dict[int, str] = {}  # appid -> id del juego (se escribe `steam_appids[dispositivo]`)
         self.unchanged: set = set()  # appids que ya estaban asociados a su juego
         self.suggest: List[Tuple[int, str]] = []  # (appid, id del juego)
+        self.suggest_dev: set = set()  # los (appid, id del juego) de `suggest` que irían a `steam_appids[dispositivo]`
 
 
 def plan_matches(entries: List[Tuple[int, str]], games: dict, device: str) -> Plan:
     """Decisión pura: qué asociar, qué ya estaba y qué sugerir, mirando solo los juegos activos de `device`."""
     plan = Plan()
-    used = {g.steam_appid: gid for gid, g in games.items() if g.steam_appid is not None}
+    used = {g.steam_appid: gid for gid, g in games.items() if g.steam_appid is not None}  # generales (únicos en el hub)
+    used_dev = {g.effective_appid(device): gid for gid, g in games.items() if device in g.devices}  # efectivos en D
+    used_dev.pop(None, None)
     gnames = {gid: normalize(g.name) for gid, g in games.items()}
     name_count = Counter(n for n in gnames.values() if n)  # TODOS los juegos: cualquier duplicado es ambiguo
     ents = [(appid, normalize(name)) for appid, name in entries]
@@ -167,32 +176,50 @@ def plan_matches(entries: List[Tuple[int, str]], games: dict, device: str) -> Pl
         if n:
             by_name[n].append(appid)
     scope = [gid for gid, g in games.items() if g.enabled and device in g.devices and gnames[gid]]
-    sugg = []
+    scope_count = Counter(gnames[gid] for gid in scope)  # nombres entre los juegos activos de D
+    sugg = []  # (appid, juego, ¿iría al general?)
     for gid in scope:
         g, gn = games[gid], gnames[gid]
         exact = by_name.get(gn, [])
-        if g.steam_appid is not None:
-            if g.steam_appid in exact:
-                plan.unchanged.add(g.steam_appid)
-            continue  # con appid: nunca se pisa ni se sugiere
-        if exact:
-            if len(exact) == 1 and name_count[gn] == 1 and exact[0] not in used:
-                plan.associate[exact[0]] = gid
-                used[exact[0]] = gid
+        own = g.effective_appid(device)
+        if g.steam_appids and device in g.steam_appids:
+            if own in exact:
+                plan.unchanged.add(own)
+            continue  # con appid de D: nunca se pisa ni se sugiere
+        if g.steam_appid is not None and g.steam_appid in exact:
+            plan.unchanged.add(g.steam_appid)
+            continue
+        if (
+            g.steam_appid is not None
+        ):  # general distinto del de Steam: solo se le añade el de D, nunca se cambia el general
+            if len(exact) == 1 and scope_count[gn] == 1 and exact[0] not in used_dev:
+                plan.associate_dev[exact[0]] = gid
+                used_dev[exact[0]] = gid
+            elif exact:
+                sugg += [(a, gid, False) for a in exact]
             else:
-                sugg += [(a, gid) for a in exact]
+                sugg += [(a, gid, False) for a, n in ents if n and n not in name_count and similar(n, gn)]
+            continue
+        if exact:
+            if len(exact) == 1 and name_count[gn] == 1 and exact[0] not in used and exact[0] not in used_dev:
+                plan.associate[exact[0]] = gid
+                used[exact[0]] = used_dev[exact[0]] = gid
+            else:
+                sugg += [(a, gid, True) for a in exact]
         else:
-            sugg += [(a, gid) for a, n in ents if n and n not in name_count and similar(n, gn)]
-    plan.suggest = [(a, gid) for a, gid in sugg if a not in used]
+            sugg += [(a, gid, True) for a, n in ents if n and n not in name_count and similar(n, gn)]
+    plan.suggest = [(a, gid) for a, gid, general in sugg if a not in used_dev and not (general and a in used)]
+    plan.suggest_dev = {(a, gid) for a, gid, general in sugg if not general}
     return plan
 
 
 class _Sug:
-    __slots__ = ("id", "appid", "steam_name", "game", "device", "expires")
+    __slots__ = ("id", "appid", "steam_name", "game", "device", "expires", "per_device")
 
-    def __init__(self, appid, steam_name, game, device, expires):
+    def __init__(self, appid, steam_name, game, device, expires, per_device=False):
         self.id = secrets.token_urlsafe(9)
         self.appid, self.steam_name, self.game, self.device, self.expires = appid, steam_name, game, device, expires
+        self.per_device = per_device  # True: se acepta en `steam_appids[device]` (el juego ya tenía appid general)
 
 
 class SteamService:
@@ -209,12 +236,15 @@ class SteamService:
             raise ApiError(500, "err.main.config_file_invalid", cause=snap.error)
         return snap
 
-    def _write_appids(self, snap, assign: Dict[str, int]):
-        """Guarda `steam_appid` de cada juego de `assign` con la versión base de `snap` (mismas validaciones que
-        `PUT /api/config`). Lanza `Conflict` si el fichero cambió, `InvalidConfig` si el resultado no vale."""
+    def _write_appids(self, snap, assign: Dict[str, int], assign_dev: Dict[str, Tuple[str, int]] = None):
+        """Guarda `steam_appid` de cada juego de `assign` y `steam_appids[dispositivo]` de cada juego de `assign_dev`
+        ({juego: (dispositivo, appid)}) con la versión base de `snap` (mismas validaciones que `PUT /api/config`).
+        Lanza `Conflict` si el fichero cambió, `InvalidConfig` si el resultado no vale."""
         data = snap.cfg.model_dump(exclude_none=True)
         for gid, appid in assign.items():
             data["games"][gid]["steam_appid"] = appid
+        for gid, (device, appid) in (assign_dev or {}).items():
+            data["games"][gid]["steam_appids"] = {**data["games"][gid].get("steam_appids", {}), device: appid}
         cfg, errors = validate_config(data)
         if errors:
             raise InvalidConfig(errors)
@@ -255,7 +285,8 @@ class SteamService:
     def _join(self, snap, twins: List[str], device: str, appid: int, path: str):
         """Añade `device` (con `path`) al juego existente. Devuelve la respuesta, o None si `config.yaml` cambió (el
         llamador relee y repite). Solo une con UN juego de ese nombre, hueco libre (<2 dispositivos), el dispositivo fuera,
-        appid igual al del juego o juego sin appid, y appid no usado por otro juego. Un juego desactivado se une igual y
+        y appid no usado por otro juego (igual al general o juego sin appid: va al general; distinto del general: va a
+        `steam_appids[dispositivo]`, sin tocar el general). Un juego desactivado se une igual y
         sigue desactivado. Dispositivo ya dentro con el mismo appid: no cambia nada (`joined: false`). Cualquier otro
         caso es `422 game_invalid` (campo `name`) con motivo; nunca nombres ni dispositivos de otros juegos."""
         dup = {"field": "name", "reason": "err.config.name_duplicate"}
@@ -265,19 +296,30 @@ class SteamService:
         g = snap.cfg.games[gid]
         reply = {"id": gid, "name": g.name, "appid": g.steam_appid, "enabled": g.enabled}
         if device in g.devices:
-            if g.steam_appid == appid:
+            if g.effective_appid(device) == appid:
                 return {**reply, "path": g.paths[device], "devices": list(g.devices), "joined": False}
             raise ApiError(422, "err.steam.game_invalid", **dup)
         if len(g.devices) >= 2:
             raise ApiError(422, "err.steam.game_invalid", field="name", reason="err.steam.no_free_slot")
-        if g.steam_appid is not None and g.steam_appid != appid:
-            raise ApiError(422, "err.steam.game_invalid", field="name", reason="err.steam.appid_mismatch")
-        if any(o != gid and og.steam_appid == appid for o, og in snap.cfg.games.items()):
+        # Con appid general distinto del que manda el dispositivo (atajo que no es de Steam: un appid por dispositivo)
+        # se une igual y el suyo va a `steam_appids[dispositivo]`; el general y los de otros dispositivos no se tocan.
+        per_device = g.steam_appid is not None and g.steam_appid != appid
+        if per_device:
+            taken = any(
+                o != gid and device in og.devices and og.effective_appid(device) == appid
+                for o, og in snap.cfg.games.items()
+            )
+        else:
+            taken = any(o != gid and og.steam_appid == appid for o, og in snap.cfg.games.items())
+        if taken:
             raise ApiError(422, "err.steam.game_invalid", field="name", reason="err.steam.appid_in_use")
         data = snap.cfg.model_dump(exclude_none=True)
         data["games"][gid]["devices"] = [*g.devices, device]
         data["games"][gid]["paths"] = {**g.paths, device: path}
-        data["games"][gid]["steam_appid"] = appid
+        if per_device:
+            data["games"][gid]["steam_appids"] = {**data["games"][gid].get("steam_appids", {}), device: appid}
+        else:
+            data["games"][gid]["steam_appid"] = appid
         cfg, errors = validate_config(data)
         if errors:
             raise ApiError(422, "err.steam.game_invalid", **game_error(errors, gid))
@@ -386,9 +428,13 @@ class SteamService:
         for _ in range(SAVE_TRIES):
             snap = self._snap()
             plan = plan_matches(entries, snap.cfg.games, device)
-            if plan.associate:
+            if plan.associate or plan.associate_dev:
                 try:
-                    self._write_appids(snap, {gid: a for a, gid in plan.associate.items()})
+                    self._write_appids(
+                        snap,
+                        {gid: a for a, gid in plan.associate.items()},
+                        {gid: (device, a) for a, gid in plan.associate_dev.items()},
+                    )
                 except Conflict:
                     continue
                 except InvalidConfig:
@@ -411,23 +457,24 @@ class SteamService:
                     mine = sum(1 for s in self._sugg.values() if s.device == device)
                     if len(self._sugg) >= MAX_SUGGESTIONS or mine >= MAX_PER_DEVICE:
                         continue
-                    cur = _Sug(appid, names[appid], gid, device, now + TTL_S)
+                    cur = _Sug(appid, names[appid], gid, device, now + TTL_S, (appid, gid) in plan.suggest_dev)
                     self._sugg[cur.id] = cur
                 else:
                     cur.steam_name, cur.expires = names[appid], now + TTL_S
                 suggested.add(appid)
-        done = set(plan.associate) | plan.unchanged
+        assoc = {**plan.associate, **plan.associate_dev}
+        done = set(assoc) | plan.unchanged
         api_log.debug(
             "steam: dispositivo=%s entradas=%d asociadas=%d sugeridas=%d",
             device,
             len(entries),
-            len(plan.associate),
+            len(assoc),
             len(suggested),
         )
         return {
-            "associated": [{"appid": a, "game": gid} for a, gid in plan.associate.items()],
+            "associated": [{"appid": a, "game": gid} for a, gid in assoc.items()],
             "suggested": len(suggested - done),
-            "unchanged": len(plan.unchanged - set(plan.associate)),
+            "unchanged": len(plan.unchanged - set(assoc)),
             "ignored": len(entries) - len(done | suggested),
         }
 
@@ -437,12 +484,17 @@ class SteamService:
             cfg = self._snap().cfg
         except ApiError:
             return []
-        used = {g.steam_appid for g in cfg.games.values() if g.steam_appid is not None}
         with self._lock:
             self._purge()
             for k, s in list(self._sugg.items()):  # ya no aplicable: el juego se fue, tiene appid o el appid se usa
                 g = cfg.games.get(s.game)
-                if g is None or g.steam_appid is not None or s.appid in used:
+                if (
+                    g is None
+                    or s.device not in g.devices
+                    or (g.steam_appids and s.device in g.steam_appids)  # ya tiene el de este dispositivo
+                    or (not s.per_device and g.steam_appid is not None)  # le han puesto un general mientras tanto
+                    or self._appid_taken(cfg.games, s, g)
+                ):
                     del self._sugg[k]
             return [
                 {
@@ -456,6 +508,14 @@ class SteamService:
                 }
                 for s in sorted(self._sugg.values(), key=lambda s: (s.expires, s.id))
             ]
+
+    @staticmethod
+    def _appid_taken(games: dict, s: "_Sug", g) -> bool:
+        """¿Ya lo usa otro juego? En el dispositivo de la sugerencia (appid efectivo) y, si la sugerencia escribiría el
+        general, también entre los generales de todo el hub."""
+        if any(o is not g and o.effective_appid(s.device) == s.appid and s.device in o.devices for o in games.values()):
+            return True
+        return not s.per_device and any(o.steam_appid == s.appid for o in games.values())
 
     def _take(self, sid: str) -> _Sug:
         with self._lock:
@@ -480,14 +540,20 @@ class SteamService:
             if g is None:
                 self._drop(s)
                 raise ApiError(404, "err.steam.game_unknown")
-            if g.steam_appid is not None:
+            if s.device not in g.devices:
+                self._drop(s)
+                raise ApiError(404, "err.steam.game_unknown")
+            if (g.steam_appids and s.device in g.steam_appids) or (not s.per_device and g.steam_appid is not None):
                 self._drop(s)
                 raise ApiError(409, "err.steam.game_has_appid", game=g.name)
-            if any(o.steam_appid == s.appid for o in games.values()):
+            if self._appid_taken(games, s, g):
                 self._drop(s)
                 raise ApiError(409, "err.steam.appid_in_use", appid=s.appid)
             try:
-                self._write_appids(snap, {s.game: s.appid})
+                if not s.per_device:
+                    self._write_appids(snap, {s.game: s.appid})
+                else:  # con general: el de este dispositivo va aparte, el general no se toca
+                    self._write_appids(snap, {}, {s.game: (s.device, s.appid)})
             except Conflict:
                 continue
             self._drop(s, rivals=True)

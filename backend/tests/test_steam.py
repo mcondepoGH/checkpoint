@@ -191,9 +191,17 @@ def test_exact_unique_match_associates_and_writes_valid_config(hub):
 
 
 def test_game_with_other_appid_is_never_overwritten_nor_suggested(hub):
-    j = lib(hub, [(999, "Has Appid")]).json()
+    # nombre que no coincide ni se parece: el general (111) ni se toca ni se sugiere nada
+    j = lib(hub, [(999, "Otra Cosa Distinta")]).json()
     assert j == {"associated": [], "suggested": 0, "unchanged": 0, "ignored": 1}
     assert cfg_games(hub)["haspid"]["steam_appid"] == 111 and sugg(hub) == []
+
+
+def test_game_with_general_appid_gets_only_a_per_device_entry_on_exact_name(hub):
+    j = lib(hub, [(999, "Has Appid")]).json()
+    assert j == {"associated": [{"appid": 999, "game": "haspid"}], "suggested": 0, "unchanged": 0, "ignored": 0}
+    g = cfg_games(hub)["haspid"]
+    assert g["steam_appid"] == 111 and g["steam_appids"] == {"deck": 999}  # el general no se pisa
 
 
 def test_same_appid_is_idempotent(hub):

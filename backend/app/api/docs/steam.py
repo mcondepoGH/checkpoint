@@ -40,7 +40,10 @@ class SteamAssociated(BaseModel):
 
 
 class SteamLibraryResult(BaseModel):
-    associated: List[SteamAssociated] = Field(description="Juegos a los que se acaba de asignar `steam_appid`.")
+    associated: List[SteamAssociated] = Field(
+        description="Juegos a los que se acaba de asignar el appid (`steam_appid`, o `steam_appids` de este dispositivo "
+        "si el juego ya tenía un general distinto)."
+    )
     suggested: int = Field(description="Entradas dudosas: el usuario decide en la web (no se asocia nada).")
     unchanged: int = Field(description="Entradas cuyo juego ya tenía ese mismo appid (no se toca nada).")
     ignored: int = Field(description="Entradas sin juego de este dispositivo, o que no se pueden asignar.")
@@ -157,7 +160,6 @@ R422_GAME = error_response(
     ("name", "Nombre repetido", "err.steam.game_invalid", {"field": "name", "reason": "err.config.name_duplicate"}),
     ("path", "Ruta no válida", "err.steam.game_invalid", {"field": "path", "reason": "err.config.path_absolute"}),
     ("slot", "Sin hueco para unirse", "err.steam.game_invalid", {"field": "name", "reason": "err.steam.no_free_slot"}),
-    ("mismatch", "Otro appid", "err.steam.game_invalid", {"field": "name", "reason": "err.steam.appid_mismatch"}),
     ("inuse", "Appid de otro juego", "err.steam.game_invalid", {"field": "name", "reason": "err.steam.appid_in_use"}),
 )
 R404_GAME = error_response(
@@ -200,8 +202,13 @@ STEAM_LIBRARY = dict(
         "appid no lo usa otro juego.\n"
         "- **Sugiere** (la persona decide en la web; no se asocia nada): nombre igual pero ambiguo, o parecido (similitud "
         ">= 0,85). Las sugerencias viven en memoria 24 h; reenvía la lista al abrir.\n"
+        "- **Appid por dispositivo.** Un juego con `steam_appid` general distinto del de Steam y sin entrada de este "
+        "dispositivo, con coincidencia exacta de nombre normalizado única entre los juegos activos de este dispositivo, "
+        "recibe solo `steam_appids[este dispositivo]` (el general y los otros dispositivos no se tocan), siempre que "
+        "el appid no sea ya el efectivo de otro juego aquí. Si el juego ya tiene `steam_appids[este dispositivo]`: el "
+        "mismo es `unchanged` y uno distinto no se toca ni se sugiere.\n"
         "- **Nunca pisa** un appid existente: si es el mismo, no hace nada (`unchanged`); si es otro, lo ignora.\n\n"
-        "**Seguridad.** Esta key puede fijar el appid de SUS juegos que no lo tienen, nada más. La respuesta solo "
+        "**Seguridad.** Esta key puede fijar el appid de SUS juegos que no tienen appid efectivo propio, nada más. La respuesta solo "
         "habla de los juegos de este dispositivo. Máximo 5000 entradas y 1 MiB." + _NOSTORE
     ),
     responses={
@@ -237,15 +244,16 @@ STEAM_GAME_CREATE = dict(
         "config. La plataforma sale del dispositivo.\n\n"
         "**Unión automática.** Si el hub ya tiene UN juego con ese nombre (comparación normalizada, la misma que la "
         "asociación por nombre: sin mayúsculas, tildes ni ™ ® ©) NO se crea otro: este dispositivo se **añade** al "
-        "existente (`devices` + su ruta; si el juego no tenía `steam_appid` se le pone) y la respuesta lleva "
-        "`joined: true`. Condiciones: el juego tiene hueco (menos de 2 dispositivos), este dispositivo no está ya en él, "
-        "su appid es el de la petición (o no tiene) y ningún otro juego usa ese appid. Un juego desactivado se une pero "
+        "existente (`devices` + su ruta; si el juego no tenía `steam_appid` se le pone, y si tenía uno general distinto "
+        "el de este dispositivo se guarda en `steam_appids[dispositivo]` sin tocar el general ni otros dispositivos) y "
+        "la respuesta lleva `joined: true`. Condiciones: el juego tiene hueco (menos de 2 dispositivos), este "
+        "dispositivo no está ya en él y ningún otro juego usa ese appid (general sin appid propio; con appid distinto, "
+        "el efectivo en este dispositivo). Un juego desactivado se une pero "
         "sigue desactivado (`enabled: false` en la respuesta). Si el dispositivo ya está en el juego con ese mismo appid "
         "es idempotente: `200` con `joined: false` y nada cambia (se devuelve la ruta ya guardada). En cualquier otro "
         "caso es `422 game_invalid` con `field: name` y `reason` = `err.config.name_duplicate` (genérico: dispositivo ya "
         "en el juego con otro appid, o varios juegos con ese nombre), `err.steam.no_free_slot` (ya tiene 2 "
-        "dispositivos), `err.steam.appid_mismatch` (tiene otro appid) o `err.steam.appid_in_use` (otro juego usa ese "
-        "appid).\n\n**Seguridad.** Esta key solo puede añadirse a sí misma: no quita ni cambia otros dispositivos ni "
+        "dispositivos) o `err.steam.appid_in_use` (otro juego usa ese appid).\n\n**Seguridad.** Esta key solo puede añadirse a sí misma: no quita ni cambia otros dispositivos ni "
         "sus rutas, y la ruta se valida como en la creación. Los errores no revelan datos de otros juegos ni "
         "dispositivos. Máximo 8192 bytes." + _NOSTORE
     ),
@@ -335,9 +343,9 @@ STEAM_SUGGESTIONS = dict(
 STEAM_ACCEPT = dict(
     summary="Aceptar una sugerencia",
     description=(
-        "Escribe `steam_appid` en el juego propuesto (mismo camino y validaciones que `PUT /api/config`, con copia de "
-        "seguridad). Si entre tanto el juego ya tiene appid o el appid está en uso, `409` y no se escribe nada."
-        + _NOSTORE
+        "Escribe `steam_appid` en el juego propuesto (o `steam_appids[dispositivo]` si el juego ya tenía un general; "
+        "mismo camino y validaciones que `PUT /api/config`, con copia de seguridad). Si entre tanto el juego ya tiene "
+        "appid o el appid está en uso, `409` y no se escribe nada." + _NOSTORE
     ),
     responses={
         200: _ok(

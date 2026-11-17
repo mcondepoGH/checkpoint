@@ -250,6 +250,15 @@ class Game(BaseModel):
     # Id de Steam del juego (dato del juego, igual en todos los dispositivos; lo lee el plugin de Steam Deck).
     # Opcional: ausente o null = sin appid. Solo un entero positivo; ni 0, ni negativos, ni texto, ni booleanos.
     steam_appid: Optional[int] = None
+    # Appid por dispositivo ({id de dispositivo: appid}): un atajo que no es de Steam tiene un appid distinto en cada
+    # dispositivo. Opcional; el de un dispositivo manda sobre `steam_appid`, que sigue siendo el valor general.
+    steam_appids: Optional[Dict[str, int]] = None
+
+    def effective_appid(self, device: str) -> Optional[int]:
+        """Appid del juego en `device`: el de `steam_appids` si existe, si no el general `steam_appid` (o None)."""
+        if self.steam_appids and device in self.steam_appids:
+            return self.steam_appids[device]
+        return self.steam_appid
 
     @field_validator("name", mode="before")
     @classmethod
@@ -265,11 +274,21 @@ class Game(BaseModel):
             raise _pyd("err.config.steam_appid_invalid")
         return v
 
+    @field_validator("steam_appids", mode="before")
+    @classmethod
+    def _appids(cls, v):
+        # solo se comprueban los valores; que los dispositivos existan y sean del juego lo dice `semantic_errors`
+        if isinstance(v, dict) and any(not valid_appid(a) for a in v.values()):
+            raise _pyd("err.config.steam_appid_invalid")
+        return v
+
     @model_serializer(mode="wrap")
     def _ser(self, handler):
         d = handler(self)
         if self.enabled:  # solo se escribe `enabled: false`
             d.pop("enabled", None)
+        if not self.steam_appids:  # solo se escribe `steam_appids` si tiene algo
+            d.pop("steam_appids", None)
         return d
 
     @field_validator("on_conflict")
@@ -350,6 +369,9 @@ def semantic_errors(devices, games) -> List[Tuple[str, dict]]:
         if "http" in d and not isinstance(d["http"], bool):
             errs.append((f"devices.{i}.http", error_body("err.config.bool_required")))
     seen_appid: Dict[int, str] = {}  # appid -> nombre del primer juego que lo usa (solo valores válidos)
+    # (dispositivo, appid efectivo) -> (nombre del primer juego, ¿viene de `steam_appids`?). Un choque entre dos appids
+    # generales ya lo cubre `seen_appid`; aquí solo cuentan los choques en los que interviene un appid por dispositivo.
+    seen_dev: Dict[Tuple[str, int], Tuple[str, bool]] = {}
     for gname, g in games.items():
         gp = f"games.{gname}"
         if not isinstance(g, dict):
@@ -362,6 +384,27 @@ def semantic_errors(devices, games) -> List[Tuple[str, dict]]:
                 )
             else:
                 seen_appid[appid] = g["name"] if isinstance(g.get("name"), str) else str(gname)
+        gdevs = g.get("devices") if isinstance(g.get("devices"), list) else []
+        by_dev = g.get("steam_appids") if isinstance(g.get("steam_appids"), dict) else {}
+        for dk in by_dev:
+            if dk not in devices:
+                errs.append((f"{gp}.steam_appids.{dk}", error_body("err.config.steam_appids_device_unknown", id=dk)))
+            elif dk not in gdevs:
+                errs.append(
+                    (f"{gp}.steam_appids.{dk}", error_body("err.config.steam_appids_device_not_in_game", id=dk))
+                )
+        for dk in dict.fromkeys(d for d in gdevs if isinstance(d, str)):
+            eff = by_dev[dk] if dk in by_dev else appid
+            if not valid_appid(eff):
+                continue
+            gn = g["name"] if isinstance(g.get("name"), str) else str(gname)
+            from_map = dk in by_dev
+            prev = seen_dev.get((dk, eff))
+            if prev is None:
+                seen_dev[(dk, eff)] = (gn, from_map)
+            elif from_map or prev[1]:
+                field = f"{gp}.steam_appids.{dk}" if from_map else f"{gp}.steam_appid"
+                errs.append((field, error_body("err.config.steam_appid_duplicate", other=prev[0])))
         if "enabled" in g and not isinstance(g["enabled"], bool):
             errs.append((f"{gp}.enabled", error_body("err.config.bool_required")))
         devs = g.get("devices")
