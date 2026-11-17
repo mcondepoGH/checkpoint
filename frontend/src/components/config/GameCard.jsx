@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useState } from 'react';
 import Field from '#src/components/ui/Field.jsx';
-import { MAX_VERSIONS_LIMIT, NAME_HINT, NAME_MAX, VERSIONS_HINT } from './draft.js';
+import { MAX_VERSIONS_LIMIT, NAME_HINT, NAME_MAX, VERSIONS_HINT, pruneAppids } from './draft.js';
 import IdNote from './IdNote.jsx';
 import { ON_CONFLICT_OPTIONS } from '#src/lib/format.js';
 import { useI18n } from '#src/hooks/useI18n.js';
@@ -13,6 +13,8 @@ export default function GameCard({
   localError,
   keepError,
   steamError,
+  steamErrorA,
+  steamErrorB,
   globalMax,
   nameA,
   nameB,
@@ -24,15 +26,43 @@ export default function GameCard({
   onRemove,
 }) {
   const { t } = useI18n();
-  // Campos secundarios (proceso, versiones, conflicto, id) tras «Mostrar más»: la tarjeta arranca siempre plegada, tengan o no valor propio.
+  // Campos secundarios (proceso, versiones, conflicto, appids, id) tras «Mostrar más»: la tarjeta arranca siempre plegada, tengan o no valor propio.
   // Solo se despliega sola si aparece un error de validación en esos campos (si no, quedaría invisible). Después puede plegarlos.
   const extraId = useId();
-  const extraErr = Boolean(errors.process || errors.keep_versions || errors.on_conflict || keepError);
+  const extraErr = Boolean(
+    errors.process ||
+    errors.keep_versions ||
+    errors.on_conflict ||
+    errors.steam_appid ||
+    keepError ||
+    steamError ||
+    steamErrorA ||
+    steamErrorB,
+  );
   const [more, setMore] = useState(extraErr);
   useEffect(() => {
     if (extraErr) setMore(true);
   }, [extraErr]);
-  const set = (k) => (e) => onChange({ [k]: e.target.value });
+  const set = (k) => (e) => onChange(k === 'a' || k === 'b' ? pruneAppids(game, { [k]: e.target.value }) : { [k]: e.target.value });
+  const setDevAppid = (dev) => (e) => onChange({ steamAppids: { ...game.steamAppids, [dev]: e.target.value } });
+  const generalAppid = String(game.steamAppid ?? '').trim();
+  const devAppidPh = generalAppid ? t('game.steamAppidDevPh', { appid: generalAppid }) : t('game.steamAppidPh');
+  const devAppid = (dev, name, err) => (
+    <Field label={t('game.steamAppidOn', { device: name })} error={err}>
+      {(p) => (
+        <Input
+          {...p}
+          type="number"
+          inputMode="numeric"
+          min="1"
+          step="1"
+          value={game.steamAppids?.[dev] ?? ''}
+          onChange={setDevAppid(dev)}
+          placeholder={devAppidPh}
+        />
+      )}
+    </Field>
+  );
   const title = game.name || t('game.new');
   // Solo dispositivos con nombre; el elegido en el otro selector no se ofrece.
   const options = (other) => devices.filter((d) => d.name && d.key !== other);
@@ -90,20 +120,6 @@ export default function GameCard({
           {(p) => <Input {...p} value={game.pathB} onChange={set('pathB')} />}
         </Field>
       )}
-      <Field label={t('game.steamAppid')} hint={t('game.steamAppidHint')} error={steamError || errors.steam_appid}>
-        {(p) => (
-          <Input
-            {...p}
-            type="number"
-            inputMode="numeric"
-            min="1"
-            step="1"
-            value={game.steamAppid}
-            onChange={set('steamAppid')}
-            placeholder={t('game.steamAppidPh')}
-          />
-        )}
-      </Field>
       <div id={extraId} className="cfg-more" hidden={!more}>
         <div className="two">
           <Field label={t('game.process')} hint={t('game.processHint')} error={errors.process}>
@@ -137,6 +153,22 @@ export default function GameCard({
               onChange={set('onConflict')}
               placeholder={t('game.useGlobal')}
               options={ON_CONFLICT_OPTIONS.map(([v, l]) => ({ value: v, label: t(l) }))}
+            />
+          )}
+        </Field>
+        {game.a && devAppid(game.a, nameA, steamErrorA)}
+        {game.b && devAppid(game.b, nameB, steamErrorB)}
+        <Field label={t('game.steamAppid')} error={steamError || errors.steam_appid}>
+          {(p) => (
+            <Input
+              {...p}
+              type="number"
+              inputMode="numeric"
+              min="1"
+              step="1"
+              value={game.steamAppid}
+              onChange={set('steamAppid')}
+              placeholder={t('game.steamAppidPh')}
             />
           )}
         </Field>

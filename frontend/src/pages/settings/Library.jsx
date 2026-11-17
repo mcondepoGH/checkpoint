@@ -125,6 +125,8 @@ export default function Library({
               localError={local[g.key]}
               keepError={local[`keep-${g.key}`]}
               steamError={local[`steam-${g.key}`]}
+              steamErrorA={local[`steam-${g.key}-A`]}
+              steamErrorB={local[`steam-${g.key}-B`]}
               globalMax={draft.maxVersions}
               nameA={nameOf(draft, g.a)}
               nameB={nameOf(draft, g.b)}

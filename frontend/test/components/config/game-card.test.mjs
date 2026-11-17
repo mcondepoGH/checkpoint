@@ -82,6 +82,9 @@ test('con error en un campo extra: expandido; error en campos visibles no expand
     { errors: { keep_versions: 'mal' } },
     { errors: { on_conflict: 'mal' } },
     { keepError: 'mal' },
+    { steamError: 'mal' },
+    { steamErrorA: 'duplicado' },
+    { steamErrorB: 'duplicado' },
   ]) {
     const h = render({ errors: {}, ...p });
     assert.ok(!more(h)[2], JSON.stringify(p));
@@ -89,6 +92,14 @@ test('con error en un campo extra: expandido; error en campos visibles no expand
   }
   const h = render({ errors: { name: 'mal', 'devices.0': 'mal' }, localError: 'mal' });
   assert.ok(more(h)[2]);
+});
+
+test('error de appid de dispositivo: abre el plegable y el error sigue visible', { skip }, () => {
+  const h = render({ steamErrorA: 'Appid duplicado en PC' });
+  assert.ok(!more(h)[2]);
+  assert.equal(btn(h)[1], 'true');
+  const i = h.indexOf('Appid duplicado en PC');
+  assert.ok(i > h.indexOf('class="cfg-more"'));
 });
 
 test('dispositivo 2 opcional: con b vacío sale la ayuda de solo checkpoint y no la ruta B; con b no', { skip }, () => {
@@ -123,4 +134,24 @@ test('juego desactivado: interruptor visible sin desplegar, tarjeta atenuada y e
 test('juego sin el campo enabled (borradores antiguos) cuenta como activo', { skip }, () => {
   const h = render({ game: game() });
   assert.ok(has(h, 'checked=""') && !has(h, 'cfg-card-disabled'));
+});
+
+test('appid por dispositivo: solo para dispositivos elegidos, placeholder general o ejemplo', { skip }, () => {
+  const both = render({ game: game({ steamAppid: '555', steamAppids: { d2: '777' } }) });
+  assert.equal((both.match(/type="number"/g) || []).length >= 3, true);
+  assert.match(both, /placeholder="general: 555"/);
+  assert.match(both, /value="777"/);
+  const solo = render({ game: game({ b: '', steamAppid: '' }) });
+  assert.equal(has(solo, 'Appid de Deck'), false);
+  assert.equal(has(solo, 'Appid de PC'), true);
+  assert.equal(has(solo, 'general: '), false);
+  // dentro del plegable, antes del appid general (A, B, general)
+  const inMore = both.slice(both.indexOf('class="cfg-more"'));
+  const iA = inMore.indexOf('Appid de PC');
+  const iB = inMore.indexOf('Appid de Deck');
+  assert.ok(iA > 0 && iB > iA && inMore.indexOf('Appid de Steam general') > iB);
+  assert.ok(both.indexOf('Appid de PC') > both.indexOf('class="cfg-more"'));
+  assert.ok(both.indexOf('Appid de Deck') > both.indexOf('class="cfg-more"'));
+  const none = render({ game: game({ a: '', b: '' }) });
+  assert.equal(has(none, 'Appid de PC') || has(none, 'Appid de Deck'), false);
 });

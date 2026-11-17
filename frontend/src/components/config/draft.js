@@ -85,6 +85,7 @@ export const blankGame = () => ({
   onConflict: '',
   enabled: true,
   steamAppid: '',
+  steamAppids: {}, // {clave de dispositivo del borrador: texto}; sigue al dispositivo aunque cambie de lado (A/B)
 });
 
 // Versiones guardadas por juego: global (por defecto) y override por juego (vacío = usar el global). 0 = sin límite.
@@ -120,6 +121,11 @@ export function fromConfig(cfg) {
     onConflict: g.on_conflict || '',
     enabled: g.enabled !== false,
     steamAppid: g.steam_appid == null ? '' : String(g.steam_appid),
+    steamAppids: Object.fromEntries(
+      Object.entries(g.steam_appids || {})
+        .map(([dev, v]) => [keyOf(dev) || dev, v == null ? '' : String(v)])
+        .filter(([, v]) => v !== ''),
+    ),
   }));
   return { devices, games, maxVersions: String(cfg?.max_versions ?? DEFAULT_MAX_VERSIONS) };
 }
@@ -155,6 +161,24 @@ const versionsError = (v) =>
 // Appid de Steam: entero positivo (el mismo criterio que el backend). Vacío = sin appid.
 const appidText = (v) => String(v ?? '').trim();
 const appidValid = (v) => /^\d+$/.test(v) && Number.isSafeInteger(Number(v)) && Number(v) > 0;
+const appidNum = (v) => (appidValid(v) ? Number(v) : v);
+// Claves de dispositivo que el juego tiene ahora (A y B); las entradas de steamAppids de otros dispositivos no cuentan ni se envían.
+const gameDevKeys = (g) => [g.a, g.b].filter(Boolean);
+// Appids por dispositivo vigentes (solo los de dispositivos del juego y con texto), por clave de dispositivo del borrador.
+const deviceAppids = (g) =>
+  Object.fromEntries(
+    gameDevKeys(g)
+      .map((k) => [k, appidText(g.steamAppids?.[k])])
+      .filter(([, v]) => v !== ''),
+  );
+// Parche de borrador al cambiar dispositivos del juego: descarta los appids de los que ya no están.
+export const pruneAppids = (g, patch) => {
+  const next = { ...g, ...patch };
+  const keep = new Set(gameDevKeys(next));
+  const cur = next.steamAppids || {};
+  const out = Object.fromEntries(Object.entries(cur).filter(([k]) => keep.has(k)));
+  return Object.keys(out).length === Object.keys(cur).length ? patch : { ...patch, steamAppids: out };
+};
 
 export function localErrors(draft, runtime) {
   const errs = {};
@@ -169,14 +193,35 @@ export function localErrors(draft, runtime) {
     const e = String(g.keep).trim() === '' ? undefined : versionsError(g.keep);
     if (e) errs[`keep-${g.key}`] = e;
   }
-  const appids = new Map(); // appid -> nombre del primer juego que lo usa
+  const appids = new Map(); // appid general -> nombre del primer juego que lo usa
+  const seenDev = new Map(); // `${dispositivo}|${appid efectivo}` -> {name, fromMap} del primer juego (como el backend)
+  const dup = (other) => ({ code: 'err.config.steam_appid_duplicate', params: { other } });
   for (const g of draft.games) {
     const v = appidText(g.steamAppid);
-    if (v === '') continue;
-    if (!appidValid(v)) errs[`steam-${g.key}`] = { code: 'err.config.steam_appid_invalid', params: {} };
-    else if (appids.has(Number(v)))
-      errs[`steam-${g.key}`] = { code: 'err.config.steam_appid_duplicate', params: { other: appids.get(Number(v)) } };
-    else appids.set(Number(v), cleanName(g.name));
+    const gv = appidValid(v);
+    if (v !== '') {
+      if (!gv) errs[`steam-${g.key}`] = { code: 'err.config.steam_appid_invalid', params: {} };
+      else if (appids.has(Number(v))) errs[`steam-${g.key}`] = dup(appids.get(Number(v)));
+      else appids.set(Number(v), cleanName(g.name));
+    }
+    const per = deviceAppids(g);
+    [
+      ['A', g.a],
+      ['B', g.b],
+    ].forEach(([side, dk]) => {
+      if (!dk) return;
+      const mapped = dk in per;
+      if (mapped && !appidValid(per[dk])) {
+        errs[`steam-${g.key}-${side}`] = { code: 'err.config.steam_appid_invalid', params: {} };
+        return;
+      }
+      const eff = mapped ? per[dk] : gv ? v : '';
+      if (eff === '') return;
+      const k = `${dk}|${Number(eff)}`;
+      const prev = seenDev.get(k);
+      if (!prev) seenDev.set(k, { name: cleanName(g.name), fromMap: mapped });
+      else if (mapped || prev.fromMap) errs[mapped ? `steam-${g.key}-${side}` : `steam-${g.key}`] ??= dup(prev.name);
+    });
   }
   for (const list of [draft.devices, draft.games]) {
     const seen = new Map(); // nombre normalizado -> primer nombre que lo usó
@@ -212,6 +257,7 @@ export function toConfig(draft) {
   for (const g of draft.games) {
     const ia = deviceId(draft, g.a);
     const ib = deviceId(draft, g.b);
+    const perDev = deviceAppids(g);
     const paths = {};
     if (ia) paths[ia] = g.pathA;
     if (ib) paths[ib] = g.pathB;
@@ -223,8 +269,9 @@ export function toConfig(draft) {
       ...(g.process.trim() ? { process: g.process.trim() } : {}),
       ...(String(g.keep).trim() !== '' ? { keep_versions: num(g.keep) } : {}),
       ...(g.onConflict ? { on_conflict: g.onConflict } : {}),
-      ...(appidText(g.steamAppid) !== ''
-        ? { steam_appid: appidValid(appidText(g.steamAppid)) ? Number(appidText(g.steamAppid)) : appidText(g.steamAppid) }
+      ...(appidText(g.steamAppid) !== '' ? { steam_appid: appidNum(appidText(g.steamAppid)) } : {}),
+      ...(Object.keys(perDev).length
+        ? { steam_appids: Object.fromEntries(Object.entries(perDev).map(([k, v]) => [deviceId(draft, k), appidNum(v)])) }
         : {}),
       ...(g.enabled === false ? { enabled: false } : {}), // solo se escribe `enabled: false`
     };
@@ -256,6 +303,7 @@ export function removeDevice(draft, devKey) {
     b: g.b === devKey ? '' : g.b,
     pathA: g.a === devKey ? '' : g.pathA,
     pathB: g.b === devKey ? '' : g.pathB,
+    steamAppids: Object.fromEntries(Object.entries(g.steamAppids || {}).filter(([k]) => k !== devKey)),
   });
   return { ...draft, devices: draft.devices.filter((d) => d.key !== devKey), games: draft.games.map(clear) };
 }

@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { readFlat } from '../../helpers/source.mjs';
-import { baseKeyOf, blankGame, fromConfig, isDirty, localErrors, toConfig } from '#src/components/config/draft.js';
+import { baseKeyOf, blankGame, fromConfig, isDirty, localErrors, pruneAppids, toConfig } from '#src/components/config/draft.js';
 import { labelOf } from '#src/lib/names.js';
 
 // Lo que devuelve /api/config para un config.yaml LEGADO (claves por nombre, sin `name`): el backend lo
@@ -364,4 +364,76 @@ test('isHttpOnly: todos http -> true; mezcla, clásicos o sin dispositivos conoc
   assert.deepEqual(classicDevices({ devices: ['pc', 'deck', 'x'] }, devices), ['pc']);
   assert.equal(isHttpOnly({ devices: [] }, devices), true);
   assert.equal(isHttpOnly({ devices: ['deck'] }, undefined), true);
+});
+
+const PER_DEV = {
+  max_versions: 20,
+  devices: {
+    pc: { name: 'PC', host: '1.1.1.1', user: 'u', os: 'linux', port: 22 },
+    deck: { name: 'Deck', host: '1.1.1.2', user: 'u', os: 'linux', port: 22 },
+  },
+  games: {
+    'a-1': { name: 'A', devices: ['pc', 'deck'], paths: { pc: '/a', deck: '/b' }, steam_appid: 100, steam_appids: { deck: 200 } },
+    'b-2': { name: 'B', devices: ['pc'], paths: { pc: '/c' } },
+  },
+};
+
+test('steam_appids: ida y vuelta idéntica; vacío no se emite', () => {
+  assert.deepEqual(toConfig(fromConfig(PER_DEV)), PER_DEV);
+  assert.equal('steam_appids' in toConfig(fromConfig(PER_DEV)).games['b-2'], false);
+  const d = fromConfig(PER_DEV);
+  d.games[0].steamAppids = { deck: '  ' };
+  assert.equal('steam_appids' in toConfig(d).games['a-1'], false);
+  assert.deepEqual(blankGame().steamAppids, {});
+});
+
+test('steam_appids: se descartan los de dispositivos quitados o cambiados', () => {
+  let d = fromConfig(PER_DEV);
+  d = removeDevice(d, 'deck');
+  assert.deepEqual(d.games[0].steamAppids, {});
+  d = fromConfig(PER_DEV);
+  d.games[0].steamAppids = { deck: '200', pc: '150', ghost: '9' };
+  d.games[0].b = ''; // solo queda pc
+  assert.deepEqual(toConfig(d).games['a-1'].steam_appids, { pc: 150 });
+  const g = d.games[0];
+  assert.deepEqual(pruneAppids({ ...g, b: 'deck' }, { b: '' }).steamAppids, { pc: '150' });
+  assert.equal(pruneAppids({ ...g, steamAppids: { pc: '150' } }, { process: 'x' }).steamAppids, undefined);
+});
+
+test('steam_appids: el appid sigue al dispositivo si se intercambian A y B', () => {
+  const d = fromConfig(PER_DEV);
+  const g = d.games[0];
+  [g.a, g.b] = [g.b, g.a];
+  assert.deepEqual(toConfig(d).games['a-1'].steam_appids, { deck: 200 });
+});
+
+test('steam_appids: validación (inválido y duplicado por dispositivo)', () => {
+  const d = fromConfig(PER_DEV);
+  d.games[0].steamAppids = { deck: 'abc' };
+  assert.equal(localErrors(d)['steam-a-1-B'].code, 'err.config.steam_appid_invalid');
+  d.games[0].steamAppids = { deck: '0' };
+  assert.equal(localErrors(d)['steam-a-1-B'].code, 'err.config.steam_appid_invalid');
+  // B usa pc con efectivo 100 igual que A en pc: choque por general (ya lo cubre el general)
+  const e = fromConfig(PER_DEV);
+  e.games[1].steamAppid = '';
+  e.games[0].steamAppid = '';
+  e.games[0].steamAppids = { pc: '300' };
+  e.games[1].steamAppids = { pc: '300' };
+  const errs = localErrors(e);
+  assert.equal(errs['steam-b-2-A'].code, 'err.config.steam_appid_duplicate');
+  assert.equal(errs['steam-b-2-A'].params.other, 'A');
+  assert.equal(errs['steam-a-1-A'], undefined);
+  // mismo valor en dispositivos distintos: válido
+  e.games[1].steamAppids = {};
+  e.games[0].steamAppids = { pc: '300', deck: '300' };
+  assert.deepEqual(localErrors(e), {});
+});
+
+test('steam_appids: el efectivo (general heredado) choca con el de otro juego en el mismo dispositivo', () => {
+  const d = fromConfig(PER_DEV);
+  d.games[0].steamAppid = '';
+  d.games[0].steamAppids = { pc: '300' };
+  d.games[1].steamAppid = '300'; // general de B, efectivo en pc
+  const errs = localErrors(d);
+  assert.equal(errs['steam-b-2'].code, 'err.config.steam_appid_duplicate');
 });
