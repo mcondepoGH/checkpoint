@@ -1,5 +1,16 @@
 # Cambios
 
+## 2.3.0 (2026-11-18)
+
+### Novedades
+
+- Un appid de Steam por juego y dispositivo: el hub guarda `steam_appids` (un appid por dispositivo), `GET /api/games` lista los juegos con ellos, y la asociación y la unión de juegos se hacen por dispositivo.
+- Ficha del juego: los campos de appid de Steam por dispositivo aparecen en «Mostrar más».
+
+### Correcciones
+
+- Unir un juego existente con otro appid ya no falla: antes devolvía 422 `appid_mismatch`, que ya no se emite.
+
 ## 2.2.3 (2026-11-16)
 
 ### Cambios
