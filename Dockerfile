@@ -1,5 +1,5 @@
 # --- 1) build del frontend (React + SCSS con sass) ---
-FROM node:25-alpine AS web
+FROM node:26-alpine AS web
 WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -11,7 +11,7 @@ RUN npm run build
 # Para actualizarlo, cambia LUDUSAVI_MANIFEST_COMMIT (o `--build-arg LUDUSAVI_MANIFEST_COMMIT=<hash>`).
 # Si falla la descarga o el generador, el build FALLA (no se empaqueta sin manifiesto en silencio). Para saltarlo a
 # propósito (sin red de build): `--build-arg SKIP_SAVE_MANIFEST=1`; el zip sale sin manifiesto y «Sugerir carpeta» lo avisa.
-FROM python:3.12-slim AS savemanifest
+FROM python:3.15-slim AS savemanifest
 ARG LUDUSAVI_MANIFEST_COMMIT=0b39b9129e1d7024b3d45b8c1b577ec494ee470d
 ARG SKIP_SAVE_MANIFEST=0
 WORKDIR /gen
@@ -33,7 +33,7 @@ RUN mkdir -p /out \
     fi
 
 # --- 3) zip del plugin de Steam Deck (Decky Loader): el hub lo sirve en /api/deck/plugin ---
-FROM node:25-alpine AS deck
+FROM node:26-alpine AS deck
 ARG SKIP_SAVE_MANIFEST=0
 # package.sh necesita bash y python3 (zipfile); el build usa pnpm 9 (el de la plantilla de Decky y su pnpm-lock.yaml).
 RUN apk add --no-cache bash python3 && npm install -g pnpm@9 --no-audit --no-fund
@@ -47,7 +47,7 @@ RUN if [ "$SKIP_SAVE_MANIFEST" = "1" ]; then export SAVE_MANIFEST=none; else exp
  && pnpm run zip
 
 # --- 4) runtime ---
-FROM python:3.12-alpine
+FROM python:3.15-alpine
 # `apk upgrade` trae los paquetes de la base con sus correcciones de seguridad (p. ej. krb5-libs, que entra
 # por openssh-client); `setuptools` viene preinstalado en la imagen base y se sube a una versión corregida.
 RUN apk add --no-cache openssh-client rsync tar tzdata su-exec \
