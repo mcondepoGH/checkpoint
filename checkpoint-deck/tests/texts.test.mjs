@@ -352,6 +352,23 @@ test('changeConfirm: carpeta actual y nueva, con datos de la nueva solo si se co
   assert.ok(con.description.endsWith(`)\n${tail}`));
   assert.equal(changeConfirm('Hades', '/a', '/b', { size: 0, files: 0, mtime: null }).description, `Ahora: /a\nNueva: /b (vacía)\n${tail}`);
   assert.ok(changeConfirm('Hades', null, '/b').description.startsWith('Ahora: —\n'));
+  // singular correcto con 1 fichero (y plural si el recuento está truncado)
+  assert.ok(changeConfirm('Hades', '/a', '/b', { size: 5, files: 1, mtime: 1700000000 }).description.startsWith('Ahora: /a\nNueva: /b (5 B · 1 fichero · '));
+  assert.ok(changeConfirm('Hades', '/a', '/b', { size: 5, files: 1, mtime: 1700000000, truncated: true }).description.includes('· 1+ ficheros ·'));
+});
+
+test('newFolderInfoOf: datos del modal a partir de folder_info; sin datos si falla', { skip }, async () => {
+  const { newFolderInfoOf } = await load();
+  assert.deepEqual(newFolderInfoOf({ ok: true, size: 10, files: 2, mtime: 5, empty: false, truncated: false }), { size: 10, files: 2, mtime: 5, truncated: false });
+  assert.equal(newFolderInfoOf({ ok: true, size: 0, files: 0, mtime: 5, empty: true }).files, 0);
+  assert.equal(newFolderInfoOf({ ok: false, error: 'path_missing' }), undefined);
+  assert.equal(newFolderInfoOf({ ok: true }), undefined);
+  assert.equal(newFolderInfoOf(null), undefined);
+});
+
+test('PICKER_FAIL_DETAIL: texto aprobado del fallo del selector en el detalle del juego', { skip }, async () => {
+  const t = await load();
+  assert.equal(t.PICKER_FAIL_DETAIL, 'No se pudo abrir el selector. Inténtalo de nuevo.');
 });
 
 test('changeError: textos aprobados por código; «sugerida desaparecida» solo con la sugerencia; el resto reutiliza gameError', { skip }, async () => {

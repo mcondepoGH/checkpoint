@@ -134,6 +134,8 @@ import {
   GameFailure,
   pathHelp,
   PICKER_FAIL,
+  PICKER_FAIL_DETAIL,
+  newFolderInfoOf,
   SAVES_ADD,
   SAVES_ADDED,
   SAVES_AGAIN,
@@ -363,6 +365,7 @@ const getGamePaths = callable<[], { ok: boolean; paths: Record<string, string | 
 const suggestChanges = callable<[], { ok: boolean; error?: string; items?: ChangedItem[] }>("suggest_changes");
 const ignoreSuggestion = callable<[game: string, path: string], { ok: boolean; error?: string }>("ignore_suggestion");
 const gameDetail = callable<[game: string], GameDetailData>("game_detail");
+const folderInfo = callable<[path: string], { ok: boolean; size?: number | null; files?: number | null; mtime?: number | null; empty?: boolean; truncated?: boolean }>("folder_info");
 const changeGamePath = callable<[game: string, path: string], ChangedPath>("change_game_path");
 const reportError = callable<[message: string], { ok: boolean }>("report_error");
 
@@ -1412,7 +1415,7 @@ async function applyFolder(g: { id: string; name: string }, path: string, opts: 
   }
 }
 
-/** Modal de confirmación del cambio de carpeta; al aceptar se aplica. `info`: lo que ya se sabe de la carpeta nueva (solo la sugerida). */
+/** Modal de confirmación del cambio de carpeta; al aceptar se aplica. `info`: lo que se sabe de la carpeta nueva (sugerida, o medida con `folder_info`). */
 function askFolder(g: { id: string; name: string }, current: string | null, next: string, fromSuggestion: boolean, info?: NewFolderInfo): void {
   const c = changeConfirm(g.name, current, next, info);
   showModal(
@@ -1433,6 +1436,14 @@ function GameDetail({ ctx, g, changed, current, onBack, onIgnore, toggle }: { ct
   const [d, setD] = useState<GameDetailData | null>(null);
   const [failed, setFailed] = useState(false);
   const [rev, setRev] = useState(0); // sube al cambiar la carpeta: se vuelve a medir
+  const [pickerFailed, setPickerFailed] = useState(false); // el selector de Decky no pudo abrir la carpeta (fallo conocido)
+  useEffect(() => {
+    const f = () => setPickerFailed(true);
+    pickerListeners.add(f);
+    return () => {
+      pickerListeners.delete(f);
+    };
+  }, []);
   useFolders((k) => {
     if (k === "changed") setRev((n) => n + 1);
   });
@@ -1456,10 +1467,18 @@ function GameDetail({ ctx, g, changed, current, onBack, onIgnore, toggle }: { ct
   const undo = folders.undoOf(g.id);
   const pick = async () => {
     folders.clearError(g.id);
+    setPickerFailed(false);
     detailGame = g.id;
     const picked = await browseFolder(here ?? "", () => undefined);
     detailGame = null;
-    if (picked) askFolder(g, here, picked, false);
+    if (!picked) return;
+    let info: NewFolderInfo | undefined;
+    try {
+      info = newFolderInfoOf(await folderInfo(picked)); // si falla, el modal va solo con la ruta: el error real lo da `change_game_path`
+    } catch (e) {
+      capture("medir la carpeta nueva")(e);
+    }
+    askFolder(g, here, picked, false, info);
   };
   const badge = gameBadge(g.state, g.enabled);
   const f = d?.folder;
@@ -1545,6 +1564,11 @@ function GameDetail({ ctx, g, changed, current, onBack, onIgnore, toggle }: { ct
             <ButtonItem layout="below" disabled={block.disabled} description={block.hint ?? undefined} onClick={() => applyFolder(g, undo.previous, { undo: true })}>
               {CHANGE_UNDO}
             </ButtonItem>
+          </PanelSectionRow>
+        )}
+        {pickerFailed && (
+          <PanelSectionRow>
+            <div role="alert" style={WRAP}>{PICKER_FAIL_DETAIL}</div>
           </PanelSectionRow>
         )}
         {folders.errorOf(g.id) && (

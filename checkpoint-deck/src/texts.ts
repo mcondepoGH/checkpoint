@@ -262,6 +262,8 @@ export const BROWSE_LABEL = "Examinar…";
 export const BROWSE_HELP = "Selector de Decky, o escribe la ruta.";
 /** Fallo conocido del selector de Decky (su frontend hace `theError.match` sobre un error que llega como objeto). */
 export const PICKER_FAIL = "Decky no puede abrir esa carpeta; escribe la ruta.";
+/** Mismo fallo del selector, en el detalle de un juego («Cambiar carpeta»), donde no hay campo para escribir la ruta. */
+export const PICKER_FAIL_DETAIL = "No se pudo abrir el selector. Inténtalo de nuevo.";
 
 /** Argumentos de `openFilePicker` tras el tipo de selección, todos explícitos y aceptados por `filepicker_ls` de Decky:
  *  inicio, ficheros no, carpetas sí, filtro y extensiones sin definir (llegan como null; un RegExp viajaría como `{}` y el
@@ -597,11 +599,17 @@ export const CHANGE_UNDO = "Deshacer cambio de carpeta";
 export const FOLDER_CHANGED_TOAST = "Carpeta cambiada correctamente";
 export const FOLDER_RESTORED_TOAST = "Carpeta anterior restaurada";
 
-/** Datos de la carpeta nueva que ya se conocen (solo los de una carpeta sugerida; no hay llamada que mida una carpeta cualquiera). */
+/** Datos de la carpeta nueva que ya se conocen: los de una carpeta sugerida o los que da `folder_info` de la elegida con «Examinar…». */
 export interface NewFolderInfo {
   size?: number | null;
   files?: number | null;
   mtime?: number | null;
+  truncated?: boolean;
+}
+/** De la respuesta de `folder_info` a lo que muestra el modal; sin datos (undefined) si falló: el modal sigue con solo la ruta. */
+export function newFolderInfoOf(r: { ok?: boolean; size?: number | null; files?: number | null; mtime?: number | null; truncated?: boolean } | null | undefined): NewFolderInfo | undefined {
+  if (!r || r.ok !== true || typeof r.files !== "number") return undefined;
+  return { size: r.size, files: r.files, mtime: r.mtime, truncated: !!r.truncated };
 }
 /** Modal de confirmación del cambio de carpeta. Sin `info`, la carpeta nueva va sin paréntesis; con 0 ficheros, «(vacía)». */
 export function changeConfirm(
@@ -612,7 +620,9 @@ export function changeConfirm(
 ): { title: string; description: string; ok: string } {
   let nueva = `Nueva: ${next}`;
   if (info) {
-    nueva += info.files === 0 ? " (vacía)" : ` (${formatSize(info.size)} · ${info.files ?? 0} ficheros · ${formatDate(info.mtime)})`;
+    const n = info.files ?? 0;
+    const files = `${n}${info.truncated ? "+" : ""} ${n === 1 && !info.truncated ? "fichero" : "ficheros"}`;
+    nueva += n === 0 && !info.truncated ? " (vacía)" : ` (${formatSize(info.size)} · ${files} · ${formatDate(info.mtime)})`;
   }
   return {
     title: `Cambiar la carpeta de ${name}`,
