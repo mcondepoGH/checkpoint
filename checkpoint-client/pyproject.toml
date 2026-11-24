@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "checkpoint-client"
+version = "0.1.0"
+description = "Cliente de Checkpoint para Linux: sincroniza los guardados de tus juegos con el hub, sin SSH."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
+dependencies = []  # el núcleo solo usa la biblioteca estándar (psutil y keyring llegan con el vigilante y el llavero)
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+checkpoint-client = "checkpoint_client.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = ["**/__pycache__"]
+
+[tool.ruff.lint]
+# Mismas reglas que backend/ruff.toml: solo errores, sin estilo.
+select = ["E4", "E7", "E9", "F", "B"]
+ignore = ["B905"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["F811", "B017"]
