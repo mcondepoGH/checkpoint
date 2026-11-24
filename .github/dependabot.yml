@@ -38,6 +38,22 @@ updates:
       minor-and-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+  - package-ecosystem: pip
+    directory: /checkpoint-client
+    schedule:
+      interval: monthly
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: pip
+    directory: /checkpoint-core
+    schedule:
+      interval: monthly
+    groups:
+      minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: docker
     directory: /
     schedule:

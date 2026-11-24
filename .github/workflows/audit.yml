@@ -80,6 +80,38 @@ jobs:
           done < <(find . -name requirements.txt -not -path '*/node_modules/*' -not -path '*/.venv/*' -not -path './.git/*' | sort)
           if [ "$found" -eq 0 ]; then echo "Sin requirements.txt: nada que auditar con pip-audit."; fi
           exit "$status"
+      # Proyectos Python que solo tienen pyproject.toml (checkpoint-client): sus dependencias de ejecución
+      # (`[project].dependencies`) no salen en el bucle de arriba, que solo ve requirements.txt. Se vuelcan a un
+      # requirements temporal fuera del repositorio y se auditan igual; el informe se llama `pip-audit--<carpeta>.json`.
+      # Sin dependencias (checkpoint-core) o con requirements.txt al lado, se omite.
+      - name: pip-audit de las dependencias de ejecución de cada pyproject.toml
+        if: ${{ !cancelled() }}
+        run: |
+          set -uo pipefail
+          python -m pip install --disable-pip-version-check "pip-audit==2.10.1"
+          mkdir -p audit-reports
+          status=0
+          tmp="$(mktemp -d)"
+          while IFS= read -r proj; do
+            dir="$(dirname "$proj")"
+            dir="${dir#./}"
+            if [ -f "$dir/requirements.txt" ]; then continue; fi
+            slug="${dir//\//__}"
+            if [ "$dir" = "." ]; then slug="root"; fi
+            python - "$proj" "$tmp/$slug.txt" <<'PY'
+          import sys, tomllib
+
+          with open(sys.argv[1], "rb") as f:
+              deps = tomllib.load(f).get("project", {}).get("dependencies", [])
+          if deps:
+              with open(sys.argv[2], "w", encoding="utf-8") as out:
+                  out.write("\n".join(deps) + "\n")
+          PY
+            if [ ! -f "$tmp/$slug.txt" ]; then echo "$proj: sin dependencias de ejecución."; continue; fi
+            echo "$proj: $(wc -l < "$tmp/$slug.txt") dependencias de ejecución."
+            pip-audit -r "$tmp/$slug.txt" -f json -o "audit-reports/pip-audit--${slug}.json" || status=1
+          done < <(find . -name pyproject.toml -not -path '*/node_modules/*' -not -path '*/.venv/*' -not -path './.git/*' | sort)
+          exit "$status"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ always() && hashFiles('audit-reports/*.json') != '' }}
         with:
