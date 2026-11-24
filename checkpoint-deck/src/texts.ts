@@ -588,11 +588,58 @@ export const DETAIL_LOADING = "Midiendo la carpeta…";
 export const DETAIL_ERROR = "No se pudo leer la carpeta.";
 export const DETAIL_HISTORY_NOTE = "El historial completo está en el hub (Versiones).";
 export const CHANGED_TITLE = "Hay una carpeta distinta sugerida.";
-export const CHANGED_VIEW = "Ver y cambiar carpeta";
 export const CHANGED_IGNORE = "Ignorar la sugerencia";
+export const CHANGED_USE = "Usar esta carpeta";
 export const CHANGE_FOLDER = "Cambiar carpeta";
-export const COMING_SOON = "Próximamente";
-export const CHANGE_FOLDER_HELP = "Hoy el plugin no cambia la carpeta de un juego ya añadido: solo configura juegos nuevos. Llegará en una versión próxima.";
+export const CHANGE_FOLDER_HELP = "Elige otra carpeta de guardado para esta Deck. No se mueve ni se borra nada.";
+export const CHANGE_FOLDER_OPEN = "Cierra el juego para cambiar la carpeta";
+export const CHANGE_UNDO = "Deshacer cambio de carpeta";
+export const FOLDER_CHANGED_TOAST = "Carpeta cambiada correctamente";
+export const FOLDER_RESTORED_TOAST = "Carpeta anterior restaurada";
+
+/** Datos de la carpeta nueva que ya se conocen (solo los de una carpeta sugerida; no hay llamada que mida una carpeta cualquiera). */
+export interface NewFolderInfo {
+  size?: number | null;
+  files?: number | null;
+  mtime?: number | null;
+}
+/** Modal de confirmación del cambio de carpeta. Sin `info`, la carpeta nueva va sin paréntesis; con 0 ficheros, «(vacía)». */
+export function changeConfirm(
+  name: string,
+  current: string | null,
+  next: string,
+  info?: NewFolderInfo,
+): { title: string; description: string; ok: string } {
+  let nueva = `Nueva: ${next}`;
+  if (info) {
+    nueva += info.files === 0 ? " (vacía)" : ` (${formatSize(info.size)} · ${info.files ?? 0} ficheros · ${formatDate(info.mtime)})`;
+  }
+  return {
+    title: `Cambiar la carpeta de ${name}`,
+    description: `Ahora: ${current ?? "—"}\n${nueva}\nNo se mueve ni se borra nada; el hub conserva todas sus versiones. Si la nueva carpeta tiene otra partida, se avisará del conflicto; si está vacía, se bajará la del hub.`,
+    ok: CHANGE_FOLDER,
+  };
+}
+/** Texto de un fallo de `change_game_path`. `fromSuggestion`: la carpeta venía de «Usar esta carpeta» (si ya no existe, «sugerida desaparecida»). */
+export function changeError(f: GameFailure, fromSuggestion = false): string {
+  switch (f.error) {
+    case "run_in_progress":
+      return "El hub está sincronizando este juego. Inténtalo en un momento.";
+    case "game_running":
+      return `${CHANGE_FOLDER_OPEN}.`;
+    case "path_missing":
+      return fromSuggestion
+        ? "La carpeta sugerida ya no existe. No se ha cambiado nada: elige otra con Examinar…"
+        : "La carpeta no existe o no es una carpeta. No se ha cambiado nada: elige otra con Examinar… o escribe la ruta.";
+    case "hub_outdated":
+      return "El hub no es compatible. Actualízalo para cambiar la carpeta.";
+    case "game_invalid":
+      if (f.error_params?.field === "path") return "El hub no acepta esa carpeta.";
+      return gameError(f);
+    default:
+      return gameError(f);
+  }
+}
 
 // Pendientes (sin configurar)
 export const PEND_TITLE = "Sin configurar en el hub";

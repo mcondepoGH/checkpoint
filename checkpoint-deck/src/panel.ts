@@ -2,6 +2,7 @@
 // resumen y progreso de «Sincronizar todo», plan de la primera sincronización y avisos de versión.
 import {
   BANNER,
+  CHANGE_FOLDER_OPEN,
   FirstPlan,
   GAME_BADGES,
   HOME_STATUS,
@@ -347,3 +348,54 @@ export const LONG_TEXT_STYLE = {
   maxHeight: LONG_TEXT_MAX_HEIGHT,
   overflowY: "auto",
 } as const;
+
+// ---- cambiar la carpeta de un juego ya configurado ----
+/** Botones «Cambiar carpeta», «Usar esta carpeta» y «Deshacer»: con el juego abierto se desactivan y dicen por qué; con una tarea en marcha, sin texto. */
+export function changeFolderBlock(i: { playing: boolean; busy: boolean }): { disabled: boolean; hint: string | null } {
+  return { disabled: i.playing || i.busy, hint: i.playing ? CHANGE_FOLDER_OPEN : null };
+}
+
+export interface FolderChange {
+  path: string;
+  previous: string;
+}
+/** Memoria de módulo (el detalle se desmonta al «Volver» y el panel entero al abrir el selector): último cambio de carpeta por
+ *  juego, para «Deshacer», y último error. Solo recuerda el último cambio; sin ruta anterior (o misma ruta) no hay Deshacer. */
+export class FolderChanges {
+  private undo = new Map<string, FolderChange>();
+  private errors = new Map<string, string>();
+  private listeners = new Set<(kind: "changed" | "error") => void>();
+  private emit(kind: "changed" | "error"): void {
+    this.listeners.forEach((f) => f(kind));
+  }
+  subscribe(f: (kind: "changed" | "error") => void): () => void {
+    this.listeners.add(f);
+    return () => {
+      this.listeners.delete(f);
+    };
+  }
+  undoOf(game: string): FolderChange | undefined {
+    return this.undo.get(game);
+  }
+  errorOf(game: string): string | undefined {
+    return this.errors.get(game);
+  }
+  applied(game: string, r: { path: string; previous: string | null }): void {
+    this.errors.delete(game);
+    if (r.previous === null) this.undo.delete(game);
+    else if (r.previous !== r.path) this.undo.set(game, { path: r.path, previous: r.previous });
+    this.emit("changed");
+  }
+  undone(game: string): void {
+    this.undo.delete(game);
+    this.errors.delete(game);
+    this.emit("changed");
+  }
+  fail(game: string, text: string): void {
+    this.errors.set(game, text);
+    this.emit("error");
+  }
+  clearError(game: string): void {
+    if (this.errors.delete(game)) this.emit("error");
+  }
+}

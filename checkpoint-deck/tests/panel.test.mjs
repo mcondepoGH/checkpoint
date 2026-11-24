@@ -278,7 +278,8 @@ test('textos nuevos: toasts de menos de 45 caracteres', { skip }, async () => {
   assert.equal(t.VER_AUTO_TOAST('10.20.30-rc.1-con-sufijo-larguisimo').endsWith('…'), true);
   assert.equal(t.LINKED_TOAST, 'Deck vinculada con el hub correctamente');
   assert.deepEqual(t.TAB_ORDER, ['home', 'games', 'sugg', 'pend', 'set', 'ver']);
-  assert.equal(t.COMING_SOON, 'Próximamente');
+  assert.equal(t.COMING_SOON, undefined);
+  assert.equal(t.CHANGED_VIEW, undefined);
 });
 
 test('gameExpanded: plegada salvo conflicto o error activados; lo que elige el usuario manda', { skip }, async () => {
@@ -317,4 +318,68 @@ test('«Último aviso» y «Fallos detectados» pintan el texto largo con LongTe
   const crash = idx.slice(idx.indexOf('function CrashNotices'), idx.indexOf('// ---- textos (español)'));
   assert.match(crash, /<LongText/);
   assert.doesNotMatch(crash, /<Field /);
+});
+
+test('FolderChanges: solo recuerda el último cambio; sin ruta anterior o con la misma no hay Deshacer', { skip }, async () => {
+  const { FolderChanges } = await load('panel.ts');
+  const f = new FolderChanges();
+  let n = 0;
+  f.subscribe(() => n++);
+  assert.equal(f.undoOf('a'), undefined);
+  f.applied('a', { path: '/b', previous: '/a' });
+  assert.deepEqual(f.undoOf('a'), { path: '/b', previous: '/a' });
+  f.applied('a', { path: '/c', previous: '/b' });
+  assert.deepEqual(f.undoOf('a'), { path: '/c', previous: '/b' });
+  f.applied('a', { path: '/c', previous: '/c' }); // misma ruta: nada cambia
+  assert.deepEqual(f.undoOf('a'), { path: '/c', previous: '/b' });
+  f.applied('x', { path: '/n', previous: null }); // no había ruta: no se puede deshacer
+  assert.equal(f.undoOf('x'), undefined);
+  f.undone('a');
+  assert.equal(f.undoOf('a'), undefined);
+  assert.ok(n >= 3);
+});
+
+test('FolderChanges: el error se recuerda por juego y se limpia; un cambio bien hecho lo borra', { skip }, async () => {
+  const { FolderChanges } = await load('panel.ts');
+  const f = new FolderChanges();
+  f.fail('a', 'texto');
+  assert.equal(f.errorOf('a'), 'texto');
+  assert.equal(f.errorOf('b'), undefined);
+  f.applied('a', { path: '/b', previous: '/a' });
+  assert.equal(f.errorOf('a'), undefined);
+  f.fail('a', 'otro');
+  f.clearError('a');
+  assert.equal(f.errorOf('a'), undefined);
+});
+
+test('FolderChanges: subscribe devuelve la baja', { skip }, async () => {
+  const { FolderChanges } = await load('panel.ts');
+  const f = new FolderChanges();
+  let n = 0;
+  const off = f.subscribe(() => n++);
+  f.fail('a', 'x');
+  off();
+  f.fail('a', 'y');
+  assert.equal(n, 1);
+});
+
+test('changeFolderBlock: con el juego abierto se desactiva y dice por qué; con una tarea en marcha, sin texto', { skip }, async () => {
+  const { changeFolderBlock } = await load('panel.ts');
+  assert.deepEqual(changeFolderBlock({ playing: false, busy: false }), { disabled: false, hint: null });
+  assert.deepEqual(changeFolderBlock({ playing: true, busy: false }), { disabled: true, hint: 'Cierra el juego para cambiar la carpeta' });
+  assert.deepEqual(changeFolderBlock({ playing: false, busy: true }), { disabled: true, hint: null });
+  assert.equal(changeFolderBlock({ playing: true, busy: true }).hint, 'Cierra el juego para cambiar la carpeta');
+});
+
+test('FolderChanges: avisa «changed» al aplicar o deshacer y «error» al fallar o limpiar el error', { skip }, async () => {
+  const { FolderChanges } = await load('panel.ts');
+  const f = new FolderChanges();
+  const seen = [];
+  f.subscribe((k) => seen.push(k));
+  f.applied('a', { path: '/b', previous: '/a' });
+  f.fail('a', 'x');
+  f.clearError('a');
+  f.clearError('a'); // ya limpio: no avisa
+  f.undone('a');
+  assert.deepEqual(seen, ['changed', 'error', 'error', 'changed']);
 });

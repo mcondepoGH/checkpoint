@@ -324,3 +324,47 @@ test('sugerencias de guardado: el interruptor explica que solo se envía el nomb
   assert.match(SAVES_LOOKUP_HELP, /Solo se envía el nombre interno del juego/);
   assert.equal(pathHelp('/x', 'manifest'), PATH_FOUND.manifest);
 });
+
+test('cambiar carpeta: textos aprobados, modal y toasts dentro de TOAST_MAX', { skip }, async () => {
+  const t = await load();
+  assert.equal(t.CHANGE_FOLDER, 'Cambiar carpeta');
+  assert.equal(t.CHANGE_FOLDER_HELP, 'Elige otra carpeta de guardado para esta Deck. No se mueve ni se borra nada.');
+  assert.equal(t.CHANGE_FOLDER_OPEN, 'Cierra el juego para cambiar la carpeta');
+  assert.equal(t.CHANGED_USE, 'Usar esta carpeta');
+  assert.equal(t.CHANGE_UNDO, 'Deshacer cambio de carpeta');
+  assert.equal(t.FOLDER_CHANGED_TOAST, 'Carpeta cambiada correctamente');
+  assert.equal(t.FOLDER_RESTORED_TOAST, 'Carpeta anterior restaurada');
+  for (const s of [t.FOLDER_CHANGED_TOAST, t.FOLDER_RESTORED_TOAST]) assert.ok([...s].length <= t.TOAST_MAX, s);
+  assert.equal(t.COMING_SOON, undefined);
+  assert.equal(t.CHANGED_VIEW, undefined);
+});
+
+test('changeConfirm: carpeta actual y nueva, con datos de la nueva solo si se conocen', { skip }, async () => {
+  const { changeConfirm } = await load();
+  const tail =
+    'No se mueve ni se borra nada; el hub conserva todas sus versiones. Si la nueva carpeta tiene otra partida, se avisará del conflicto; si está vacía, se bajará la del hub.';
+  const sin = changeConfirm('Hades', '/a', '/b');
+  assert.equal(sin.title, 'Cambiar la carpeta de Hades');
+  assert.equal(sin.ok, 'Cambiar carpeta');
+  assert.equal(sin.description, `Ahora: /a\nNueva: /b\n${tail}`);
+  const con = changeConfirm('Hades', '/a', '/b', { size: 2048, files: 3, mtime: 1700000000 });
+  assert.ok(con.description.startsWith('Ahora: /a\nNueva: /b (2,0 KB · 3 ficheros · '), con.description);
+  assert.ok(con.description.endsWith(`)\n${tail}`));
+  assert.equal(changeConfirm('Hades', '/a', '/b', { size: 0, files: 0, mtime: null }).description, `Ahora: /a\nNueva: /b (vacía)\n${tail}`);
+  assert.ok(changeConfirm('Hades', null, '/b').description.startsWith('Ahora: —\n'));
+});
+
+test('changeError: textos aprobados por código; «sugerida desaparecida» solo con la sugerencia; el resto reutiliza gameError', { skip }, async () => {
+  const { changeError, gameError } = await load();
+  const e = (error, extra = {}) => changeError({ ok: false, error, ...extra });
+  assert.equal(e('run_in_progress'), 'El hub está sincronizando este juego. Inténtalo en un momento.');
+  assert.equal(e('game_running'), 'Cierra el juego para cambiar la carpeta.');
+  assert.equal(e('path_missing'), 'La carpeta no existe o no es una carpeta. No se ha cambiado nada: elige otra con Examinar… o escribe la ruta.');
+  assert.equal(changeError({ ok: false, error: 'path_missing' }, true), 'La carpeta sugerida ya no existe. No se ha cambiado nada: elige otra con Examinar…');
+  assert.equal(e('game_invalid', { error_params: { field: 'path', reason: 'err.config.path_dotdot' } }), 'El hub no acepta esa carpeta.');
+  assert.equal(e('hub_outdated'), 'El hub no es compatible. Actualízalo para cambiar la carpeta.');
+  assert.equal(e('path_forbidden'), 'Esa carpeta no se puede usar (sistema, Steam o Decky). Elige la carpeta de guardado del juego.');
+  for (const c of ['unknown_game', 'not_linked', 'plugin_outdated', 'unauthorized', 'connection', 'hub_error', 'config_changed', 'rate_limited']) {
+    assert.equal(e(c), gameError({ ok: false, error: c }), c);
+  }
+});
