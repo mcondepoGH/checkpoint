@@ -152,9 +152,7 @@ WATCH_RUNNING = "Ya hay un vigilante en marcha."
 # `sync` manual con el juego abierto y un vigilante activo.
 SYNC_RUNNING_WATCHED = "{game} está abierto: no se sincroniza. El vigilante lo sincronizará al cerrarlo."
 
-# ---------------------------------------------------------------- pendientes de aprobar (no están en la tarjeta)
-# `uninstall` en Linux hace `disable --now`: PARA el vigilante de systemd. El texto aprobado de la tarjeta («Desinstalado el
-# arranque automático. No detiene el vigilante que ya está en marcha.») es el de Windows y aquí no sería cierto.
+# `uninstall` en Linux hace `disable --now`: PARA el vigilante de systemd (el texto de la tarjeta es el de Windows).
 UNINSTALL_DONE_LINUX = "Desinstalado el arranque automático y detenido el vigilante de systemd."
 # Fallo al quitar la unidad (la tarjeta solo aprueba el fallo al crearla).
 UNINSTALL_FAILED = "No se pudo quitar la unidad systemd --user: {reason}."

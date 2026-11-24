@@ -36,6 +36,11 @@ def test_watcher_texts_approved_by_the_user():
     )
 
 
+def test_uninstall_texts_approved_by_the_user():
+    assert texts.UNINSTALL_DONE_LINUX == "Desinstalado el arranque automático y detenido el vigilante de systemd."
+    assert texts.UNINSTALL_FAILED.format(reason="x") == "No se pudo quitar la unidad systemd --user: x."
+
+
 def test_engine_error_texts_do_not_mention_deck():
     assert all("Deck" not in t for t in texts.SYNC_ERRORS.values())
     assert texts.SYNC_ERRORS["no_space"].endswith("en este equipo para bajar los ficheros.")

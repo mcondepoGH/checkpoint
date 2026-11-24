@@ -208,22 +208,28 @@ def systemctl(monkeypatch):
     return run
 
 
+@pytest.fixture
+def linked_home(home):
+    settings.save_settings(settings.config_dir(), {"hub_url": "http://h:1", "key": KEY, "device": "pc"})
+    return home
+
+
 def cli_run(capsys, *argv):
     code = cli.main(list(argv))
     cap = capsys.readouterr()
     return code, cap.out, cap.err
 
 
-def test_cli_install_and_uninstall_messages(home, systemctl, capsys):
+def test_cli_install_and_uninstall_messages(linked_home, systemctl, capsys):
     code, out, err = cli_run(capsys, "install")
     assert code == 0 and err == "" and out.strip() == texts.INSTALL_DONE
-    assert unit_path(home).is_file()
+    assert unit_path(linked_home).is_file()
     code, out, err = cli_run(capsys, "uninstall")
     assert code == 0 and err == "" and out.strip() == texts.UNINSTALL_DONE_LINUX
-    assert not unit_path(home).exists()
+    assert not unit_path(linked_home).exists()
 
 
-def test_cli_install_unavailable(home, monkeypatch, capsys):
+def test_cli_install_unavailable(linked_home, monkeypatch, capsys):
     monkeypatch.setattr(systemd, "run_command", Systemctl(**{"show-environment": (1, "bus")}))
     code, out, err = cli_run(capsys, "install")
     assert code == 1 and out == "" and err.strip() == texts.INSTALL_NO_SYSTEMD
@@ -231,7 +237,7 @@ def test_cli_install_unavailable(home, monkeypatch, capsys):
     assert code == 1 and err.strip() == texts.INSTALL_NO_SYSTEMD
 
 
-def test_cli_install_failure_shows_the_reason_without_secrets(home, monkeypatch, capsys):
+def test_cli_install_failure_shows_the_reason_without_secrets(linked_home, monkeypatch, capsys):
     run = Systemctl(**{"daemon-reload": (1, f"fallo con {KEY}")})
     monkeypatch.setattr(systemd, "run_command", run)
     monkeypatch.setattr(systemd, "exec_command", lambda python=None: EXEC)
@@ -241,11 +247,22 @@ def test_cli_install_failure_shows_the_reason_without_secrets(home, monkeypatch,
     assert err.strip().endswith("No se ha cambiado nada.")
 
 
-def test_cli_uninstall_failure_text(home, systemctl, capsys, monkeypatch):
+def test_cli_uninstall_failure_text(linked_home, systemctl, capsys, monkeypatch):
     cli_run(capsys, "install")
     monkeypatch.setattr(systemd, "run_command", Systemctl(**{"disable --now checkpoint-client.service": (1, "x")}))
     code, _, err = cli_run(capsys, "uninstall")
     assert code == 1 and err.strip() == texts.UNINSTALL_FAILED.format(reason="x")
+
+
+def test_cli_install_refuses_when_not_linked(home, systemctl, capsys):
+    code, out, err = cli_run(capsys, "install")
+    assert code == 1 and out == "" and err.strip() == texts.ERR_NOT_LINKED
+    assert systemctl.calls == [] and not unit_path(home).exists()
+
+
+def test_cli_uninstall_does_not_need_a_link(home, systemctl, capsys):
+    code, out, err = cli_run(capsys, "uninstall")
+    assert code == 0 and err == "" and out.strip() == texts.UNINSTALL_DONE_LINUX
 
 
 def test_cli_install_only_on_linux(home, systemctl, monkeypatch, capsys):

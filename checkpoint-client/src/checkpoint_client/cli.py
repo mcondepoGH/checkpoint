@@ -461,6 +461,7 @@ def _linux_only() -> None:
 
 def cmd_install(a: argparse.Namespace) -> int:
     _linux_only()
+    _linked()  # sin vinculación el vigilante no tendría a qué conectarse: no se escribe ni se activa nada
     try:
         systemd.install()
     except systemd.Unavailable:
