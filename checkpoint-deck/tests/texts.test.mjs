@@ -385,3 +385,15 @@ test('changeError: textos aprobados por código; «sugerida desaparecida» solo 
     assert.equal(e(c), gameError({ ok: false, error: c }), c);
   }
 });
+
+test('filesText: singular solo con 1 fichero exacto; truncado → «1+ ficheros»; index.tsx no formatea «ficheros» a mano', { skip }, async () => {
+  const { filesText } = await load();
+  assert.equal(filesText(1), '1 fichero');
+  assert.equal(filesText(0), '0 ficheros');
+  assert.equal(filesText(null), '0 ficheros');
+  assert.equal(filesText(3), '3 ficheros');
+  assert.equal(filesText(1, true), '1+ ficheros');
+  const src = readFileSync(join(here, '../src/index.tsx'), 'utf8');
+  assert.doesNotMatch(src, /\? "fichero" : "ficheros"/);
+  assert.doesNotMatch(src, /files(?: \?\? 0)?\} ficheros/);
+});

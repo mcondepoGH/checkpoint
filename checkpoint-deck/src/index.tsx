@@ -56,6 +56,7 @@ import {
   BANNER,
   CHANGED_IGNORE,
   CHANGED_TITLE,
+  filesText,
   CHANGED_USE,
   CHANGE_FOLDER,
   CHANGE_FOLDER_HELP,
@@ -534,7 +535,7 @@ function gameText(g: GameRow): string {
 
 function lastText(g: GameRow): string | null {
   if (!g.last) return null;
-  const n = g.last.files !== undefined ? ` (${g.last.files} ficheros)` : "";
+  const n = g.last.files !== undefined ? ` (${filesText(g.last.files)})` : "";
   if (g.last.state === "uploaded") return `Última sincronización: subido${n}.`;
   if (g.last.state === "downloaded")
     return `Última sincronización: bajado${n}. Tu carpeta anterior quedó como copia de seguridad.`;
@@ -1505,7 +1506,7 @@ function GameDetail({ ctx, g, changed, current, onBack, onIgnore, toggle }: { ct
         {f?.exists && (
           <PanelSectionRow>
             <Field label={DETAIL_SIZE} focusable>
-              {`${formatSize(f.size)} · ${f.files ?? 0}${f.truncated ? "+" : ""} ${f.files === 1 && !f.truncated ? "fichero" : "ficheros"}`}
+              {`${formatSize(f.size)} · ${filesText(f.files, f.truncated)}`}
             </Field>
           </PanelSectionRow>
         )}
@@ -1533,7 +1534,7 @@ function GameDetail({ ctx, g, changed, current, onBack, onIgnore, toggle }: { ct
             <div style={{ ...WRAP, borderLeft: `4px solid ${TONE_COLOR.info}`, paddingLeft: 8 }}>
               <b>{CHANGED_TITLE}</b>
               <div style={MONO}>{changed.path}</div>
-              <div style={MUTED}>{`${formatSize(changed.size)} · ${changed.files ?? 0} ficheros · ${formatDate(changed.mtime)}`}</div>
+              <div style={MUTED}>{`${formatSize(changed.size)} · ${filesText(changed.files)} · ${formatDate(changed.mtime)}`}</div>
             </div>
           </PanelSectionRow>
           <PanelSectionRow>

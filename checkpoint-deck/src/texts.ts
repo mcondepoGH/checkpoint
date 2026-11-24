@@ -387,13 +387,16 @@ export interface SavePath {
   truncated?: boolean;
   doubtful?: boolean;
 }
+/** «{n} ficheros» con su plural: «1 fichero» solo si es exactamente 1 y la medición no se truncó («1+ ficheros»). */
+export function filesText(files: number | null | undefined, truncated?: boolean): string {
+  const n = files ?? 0;
+  return `${n}${truncated ? "+" : ""} ${n === 1 && !truncated ? "fichero" : "ficheros"}`;
+}
 /** Línea de detalle de una ruta candidata: tamaño, ficheros y fecha (existe) o «No encontrada aún»; «dudosa» si lo es. */
 export function savePathDetail(p: SavePath): string {
   const tag = p.doubtful ? ` · ${SAVES_DOUBTFUL}` : "";
   if (!p.exists) return `${SAVES_NOT_FOUND}${tag}`;
-  const n = p.files ?? 0;
-  const files = `${n}${p.truncated ? "+" : ""} ${n === 1 && !p.truncated ? "fichero" : "ficheros"}`;
-  return `${formatSize(p.size)} · ${files} · modificada ${formatDate(p.mtime)}${tag}`;
+  return `${formatSize(p.size)} · ${filesText(p.files, p.truncated)} · modificada ${formatDate(p.mtime)}${tag}`;
 }
 export interface SaveConfirm {
   title: string;
@@ -621,7 +624,7 @@ export function changeConfirm(
   let nueva = `Nueva: ${next}`;
   if (info) {
     const n = info.files ?? 0;
-    const files = `${n}${info.truncated ? "+" : ""} ${n === 1 && !info.truncated ? "fichero" : "ficheros"}`;
+    const files = filesText(info.files, info.truncated);
     nueva += n === 0 && !info.truncated ? " (vacía)" : ` (${formatSize(info.size)} · ${files} · ${formatDate(info.mtime)})`;
   }
   return {
