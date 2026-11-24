@@ -10,8 +10,13 @@ import pytest
 from app.sync import locking
 from app.sync.locking import LockBusy, acquire, locked
 
+solo_posix = pytest.mark.skipif(sys.platform == "win32", reason="fcntl no existe en Windows")
+solo_windows = pytest.mark.skipif(sys.platform != "win32", reason="msvcrt solo existe en Windows")
 
-@pytest.mark.parametrize("backend", [None, "flock", "excl"])
+
+@pytest.mark.parametrize(
+    "backend", [None, pytest.param("flock", marks=solo_posix), "excl"]
+)  # en Windows None es el backend real (msvcrt)
 def test_exclusion_y_liberacion(tmp_path, backend):
     p = tmp_path / "locks" / "g.lock"
     h = acquire(p, backend)
@@ -22,7 +27,7 @@ def test_exclusion_y_liberacion(tmp_path, backend):
     h2.release()
 
 
-@pytest.mark.parametrize("backend", ["flock", "excl"])
+@pytest.mark.parametrize("backend", [pytest.param("flock", marks=solo_posix), "excl"])
 def test_context_manager_libera_con_excepcion(tmp_path, backend):
     p = tmp_path / "g.lock"
     with pytest.raises(RuntimeError):
@@ -31,6 +36,7 @@ def test_context_manager_libera_con_excepcion(tmp_path, backend):
     acquire(p, backend).release()
 
 
+@solo_posix
 def test_flock_compatible_con_fcntl_directo(tmp_path):
     """Los tests históricos y otros procesos toman el mismo fichero con fcntl.flock."""
     import fcntl
@@ -45,6 +51,7 @@ def test_flock_compatible_con_fcntl_directo(tmp_path):
     acquire(p, "flock").release()
 
 
+@solo_posix
 def test_flock_entre_procesos(tmp_path):
     p = tmp_path / "g.lock"
     code = (
@@ -66,6 +73,7 @@ def test_flock_entre_procesos(tmp_path):
             c.wait()
 
 
+@solo_posix  # _pid_alive devuelve siempre True en Windows (no hay comprobación segura): un PID muerto no se detecta
 def test_excl_pid_muerto_es_huerfano(tmp_path):
     p = tmp_path / "g.lock"
     dead = subprocess.Popen([sys.executable, "-c", "pass"])
@@ -123,6 +131,28 @@ def test_sin_fcntl_ni_msvcrt_elige_excl(monkeypatch, tmp_path):
     h = acquire(tmp_path / "g.lock")
     assert (tmp_path / "g.lock.excl").exists()
     h.release()
+
+
+@solo_windows
+def test_msvcrt_real_entre_procesos(tmp_path):
+    p = tmp_path / "g.lock"
+    code = (
+        "import sys,time;sys.path.insert(0,%r);from app.sync.locking import acquire;"
+        "h=acquire(%r);print('ok',flush=True);time.sleep(30)"
+        % (os.path.dirname(os.path.dirname(os.path.dirname(locking.__file__))), str(p))
+    )
+    c = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE)
+    try:
+        assert c.stdout.readline().strip() == b"ok"
+        with pytest.raises(LockBusy):
+            acquire(p)
+        c.kill()
+        c.wait()  # al morir el proceso, el SO libera el lock
+        acquire(p).release()
+    finally:
+        if c.poll() is None:
+            c.kill()
+            c.wait()
 
 
 def test_pid_alive_windows_no_mata(monkeypatch):

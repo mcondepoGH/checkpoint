@@ -13,6 +13,7 @@ from app.sync.engine import (
     run_sync,
     save_baseline,
 )
+from app.sync.locking import acquire
 from fakes import LocalTransport
 
 CFG = parse_config(
@@ -374,14 +375,13 @@ def test_restore_after_prune_still_works(env):
 
 
 def test_restore_blocked_while_game_locked(env):
-    import fcntl
-
     _mkver(env, OLD[0])
-    (env.data / "locks").mkdir(parents=True, exist_ok=True)
-    with open(env.data / "locks" / "g.lock", "w") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+    h = acquire(env.data / "locks" / "g.lock")  # lock real de la plataforma (flock o msvcrt)
+    try:
         with pytest.raises(SyncAbort):
             restore_version(_cfg(), "g", OLD[0], "pc", env.data)
+    finally:
+        h.release()
     assert _names(env) == [OLD[0]]
 
 
@@ -408,14 +408,12 @@ def test_unknown_game(env):
 
 
 def test_lock_prevents_overlap(env):
-    import fcntl
-
-    (env.data / "locks").mkdir(parents=True)
-    f = open(env.data / "locks/g.lock", "w")
-    fcntl.flock(f, fcntl.LOCK_EX)
-    with pytest.raises(SyncAbort, match="in_progress"):
-        env.sync()
-    f.close()
+    h = acquire(env.data / "locks" / "g.lock")  # lock real de la plataforma (flock o msvcrt)
+    try:
+        with pytest.raises(SyncAbort, match="in_progress"):
+            env.sync()
+    finally:
+        h.release()
 
 
 def test_free_names_use_id_paths_only(tmp_path):

@@ -4,6 +4,7 @@
 import json
 import os
 import subprocess
+import sys
 import threading
 
 import pytest
@@ -624,8 +625,8 @@ def test_symlink_en_saves_locales_no_filtra_ni_se_escribe_fuera(env):
 
 
 def test_ruta_local_inexistente_sin_permiso_error_claro_y_nada_cambia(env):
-    if os.geteuid() == 0:
-        pytest.skip("root")
+    if sys.platform == "win32" or (hasattr(os, "geteuid") and os.geteuid() == 0):
+        pytest.skip("los permisos POSIX no se pueden provocar en Windows ni como root")
     env.seed()
     env.write(env.laptop_dir, "s.sav", "lap-new", 3000)
     env.pc_dir.chmod(0)

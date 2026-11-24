@@ -12,7 +12,11 @@ from app.config.models import parse_config
 from app.sync.engine import fingerprint, relfiles
 from app.sync.transport import LocalDeviceTransport, TransportError, get_transport, local_folder_status, local_path
 
-root_only = pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root ignora permisos")
+# chmod en Windows solo conmuta el atributo de solo lectura: no puede negar lectura ni listado ni la creación en una carpeta.
+root_only = pytest.mark.skipif(
+    sys.platform == "win32" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+    reason="los permisos POSIX no se pueden provocar en Windows ni como root",
+)
 
 
 def put(d, rel, content="x", mtime=None):
@@ -529,6 +533,13 @@ def test_proceso_windows_tasklist(monkeypatch):
     assert t.process_running("game.exe") is False
     with pytest.raises(TransportError, match="tasklist"):
         run_with(monkeypatch, "win32", [cp(1, b"", b"x")], []).process_running("game.exe")
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="tasklist solo existe en Windows")
+def test_tasklist_real():
+    nombre = os.path.basename(sys.executable)  # python.exe: el propio intérprete de la prueba está en marcha
+    assert LocalDeviceTransport().process_running(nombre) is True
+    assert LocalDeviceTransport().process_running("nadie_" + os.urandom(6).hex() + ".exe") is False
 
 
 @pytest.mark.parametrize("n", ["", "-x", "a;b", "a|b", "$(id)", "a`b`", "x" * 70])

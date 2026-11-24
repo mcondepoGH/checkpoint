@@ -2,6 +2,7 @@
 
 import json
 import os
+import sys
 
 import pytest
 import yaml
@@ -166,7 +167,10 @@ def test_test_local_ruta_ok_inexistente_creable_y_fichero(client):
     assert not f["ok"] and f["code"] == "err.transport.not_a_folder_short"
 
 
-@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root")
+@pytest.mark.skipif(
+    sys.platform == "win32" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+    reason="los permisos POSIX no se pueden provocar en Windows ni como root",
+)
 def test_test_local_ruta_ilegible_y_no_escribible(client):
     t = client.tmp
     (t / "ni").mkdir()
