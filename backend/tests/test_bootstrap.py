@@ -17,16 +17,16 @@ from app.config.models import Device
 def test_ensure_config_creates_valid_empty(tmp_path):
     p = tmp_path / "config" / "config.yaml"
     assert bootstrap.ensure_config(p) is True
-    assert p.read_text() == "devices: {}\ngames: {}\n"
+    assert p.read_text(encoding="utf-8") == "devices: {}\ngames: {}\n"
     cfg = load_config(p)
     assert cfg.devices == {} and cfg.games == {}
 
 
 def test_ensure_config_keeps_existing(tmp_path):
     p = tmp_path / "config.yaml"
-    p.write_text("devices: {}\ngames: {}\n# mío\n")
+    p.write_text("devices: {}\ngames: {}\n# mío\n", encoding="utf-8")
     assert bootstrap.ensure_config(p) is False
-    assert "# mío" in p.read_text()
+    assert "# mío" in p.read_text(encoding="utf-8")
 
 
 # ---- clave SSH ----
@@ -62,7 +62,7 @@ def test_tofu_saves_first_use_then_does_not_rescan(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(bootstrap, "_keyscan", lambda h, p: calls.append((h, p)) or SCAN)
     assert bootstrap.ensure_host_key("10.0.0.5", 22, kh) is True
-    assert kh.read_text() == SCAN and stat.S_IMODE(kh.stat().st_mode) == 0o600
+    assert kh.read_text(encoding="utf-8") == SCAN and stat.S_IMODE(kh.stat().st_mode) == 0o600
     assert bootstrap.ensure_host_key("10.0.0.5", 22, kh) is False
     assert calls == [("10.0.0.5", 22)]
 
@@ -71,11 +71,11 @@ def test_tofu_never_overwrites_when_key_changes(tmp_path, monkeypatch):
     kh = tmp_path / "known_hosts"
     monkeypatch.setattr(bootstrap, "_keyscan", lambda h, p: SCAN)
     bootstrap.ensure_host_key("10.0.0.5", 22, kh)
-    before = kh.read_text()
+    before = kh.read_text(encoding="utf-8")
     # el host ahora presentaría otra clave: ni se consulta ni se toca el fichero
     monkeypatch.setattr(bootstrap, "_keyscan", lambda h, p: pytest.fail("no debe reescanear"))
     assert bootstrap.ensure_host_key("10.0.0.5", 22, kh) is False
-    assert kh.read_text() == before
+    assert kh.read_text(encoding="utf-8") == before
 
 
 def test_tofu_non_default_port_entry(tmp_path, monkeypatch):
@@ -229,5 +229,5 @@ def test_public_key_endpoint(tmp_path, monkeypatch):
     body = r.text
     assert r.json()["public_key"].startswith("ssh-ed25519 ")
     assert "PRIVATE" not in body
-    priv = open(settings.SSH_KEY).read().strip().splitlines()[1]
+    priv = open(settings.SSH_KEY, encoding="utf-8").read().strip().splitlines()[1]
     assert priv not in body

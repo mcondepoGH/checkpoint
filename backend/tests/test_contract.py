@@ -63,7 +63,7 @@ def test_contract_updates(api):
 def test_contract_status_keyed_by_game_id(api):
     sd = api.tmp / "data" / "status"
     sd.mkdir(parents=True)
-    (sd / f"{GID}.json").write_text(json.dumps({"game": GID, "result": "ok", "message": "m"}))
+    (sd / f"{GID}.json").write_text(json.dumps({"game": GID, "result": "ok", "message": "m"}), encoding="utf-8")
     got = api.get("/api/status").json()
     assert list(got) == [GID]
     assert set(got[GID]) >= {"game", "name", "result", "message"}

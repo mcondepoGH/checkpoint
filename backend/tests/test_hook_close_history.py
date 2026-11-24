@@ -143,9 +143,9 @@ def test_closed_with_lock_taken_is_skipped_busy_without_retry(cl, sim):
 # ---- c. juego borrado ----
 def test_game_removed_from_config_logs_game_removed(cl, sim):
     seen_running(cl)
-    cfg = yaml.safe_load(settings.CONFIG_PATH.read_text())
+    cfg = yaml.safe_load(settings.CONFIG_PATH.read_text(encoding="utf-8"))
     del cfg["games"]["g1"]
-    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg, allow_unicode=True))
+    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
     cl.proc.running = False
     e = only_closed()
     assert e["result"] == "skipped" and e["code"] == "err.hook.game_removed" and e["device"] == "dev-1"

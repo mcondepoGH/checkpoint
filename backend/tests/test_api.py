@@ -23,7 +23,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(settings, "STATIC_DIR", tmp_path / "static")
     (tmp_path / "static").mkdir()
-    (tmp_path / "static/index.html").write_text("<html>app</html>")
+    (tmp_path / "static/index.html").write_text("<html>app</html>", encoding="utf-8")
     t = [1000.0]
     a = Auth("admin", PW, 1, clock=lambda: t[0], rounds=4)
     c = TestClient(create_app(a))
@@ -156,7 +156,7 @@ def test_versions_limit_endpoint(client, tmp_path):
     (tmp_path / "config").mkdir(parents=True, exist_ok=True)
     import yaml
 
-    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg))
+    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
     (tmp_path / "data" / "versions" / "g" / "2026-01-01_100000" / "a").mkdir(parents=True)
     r = client.get("/api/versions/g/limit")
     assert r.status_code == 200 and r.json() == {
@@ -179,7 +179,7 @@ def test_versions_limit_latest_is_null_without_versions(client, tmp_path):
     import yaml
 
     (tmp_path / "config").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg))
+    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
     assert client.get("/api/versions/g/limit").json()["latest"] is None
 
 
@@ -191,7 +191,7 @@ def test_versions_limit_current_is_the_hub_state(client, tmp_path):
     login(client)
     cfg = dict(CFG, games={"g": {"name": "Juego g", "devices": ["a", "b"], "paths": {"a": "/x/y", "b": "C:/z"}}})
     (tmp_path / "config").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg))
+    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
     hub = tmp_path / "data" / "hub" / "g"
     hub.mkdir(parents=True)
     assert client.get("/api/versions/g/limit").json()["current"] is None  # carpeta vacía = sin datos
@@ -218,8 +218,8 @@ def _fmt_local(ts):
 
 def test_spa_cache_headers(client, tmp_path):
     (tmp_path / "static/assets").mkdir()
-    (tmp_path / "static/assets/app-abc123.js").write_text("x")
-    (tmp_path / "static/favicon.svg").write_text("<svg/>")
+    (tmp_path / "static/assets/app-abc123.js").write_text("x", encoding="utf-8")
+    (tmp_path / "static/favicon.svg").write_text("<svg/>", encoding="utf-8")
     for p in ("/", "/index.html", "/ruta/spa"):
         r = client.get(p)
         assert r.status_code == 200 and r.headers["cache-control"] == "no-cache", p

@@ -125,7 +125,7 @@ def test_clave_ssh_no_generada(client, monkeypatch):
 def test_config_yaml_invalido_500(client):
     login(client)
     settings.CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    settings.CONFIG_PATH.write_text("devices: [")
+    settings.CONFIG_PATH.write_text("devices: [", encoding="utf-8")
     r = client.get("/api/versions/g")
     assert r.status_code == 500
     code, params = det(r)

@@ -37,7 +37,7 @@ def _module_name(path: Path) -> str:
 
 def _imports(path: Path):
     """Módulos importados (relativos a `app`, p. ej. 'users.history') por un fichero."""
-    return _imports_of(path.read_text(), _module_name(path), path.name == "__init__.py")
+    return _imports_of(path.read_text(encoding="utf-8"), _module_name(path), path.name == "__init__.py")
 
 
 def _imports_of(source: str, mod: str, is_package: bool = False):

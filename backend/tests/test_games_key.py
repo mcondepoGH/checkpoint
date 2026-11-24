@@ -45,7 +45,8 @@ def test_status_leaks_nothing_internal(cl):
                 "started": "s",
                 "finished": "f",
             }
-        )
+        ),
+        encoding="utf-8",
     )
     g2 = next(g for g in games(cl).json() if g["id"] == "g2")
     assert g2["status"] == {"result": "conflict", "code": "err.sync.conflict", "started": "s", "finished": "f"}
@@ -55,7 +56,7 @@ def test_status_leaks_nothing_internal(cl):
 def test_status_of_removed_game_is_ignored(cl):
     sd = settings.DATA_DIR / "status"
     sd.mkdir(parents=True, exist_ok=True)
-    (sd / "fantasma.json").write_text(json.dumps({"result": "ok"}))
+    (sd / "fantasma.json").write_text(json.dumps({"result": "ok"}), encoding="utf-8")
     assert [g["id"] for g in games(cl).json()] == ["g1", "g2"]
 
 

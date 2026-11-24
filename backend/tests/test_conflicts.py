@@ -35,7 +35,7 @@ def versions(env):
 
 
 def status_file(env):
-    return json.loads((env.data / "status" / "g.json").read_text())
+    return json.loads((env.data / "status" / "g.json").read_text(encoding="utf-8"))
 
 
 def conflict(env):
@@ -305,7 +305,7 @@ def test_first_sync_one_online_differs_from_hub_is_conflict(env):
 
 def test_corrupt_baseline_is_ignored_safely(env):
     env.seed()
-    (env.data / "state" / "g.json").write_text("{no json")
+    (env.data / "state" / "g.json").write_text("{no json", encoding="utf-8")
     env.write(env.pc_dir, "s.sav", "a", 1000)
     assert env.sync()["result"] == "conflict"
 
@@ -428,7 +428,9 @@ def test_scheduler_on_conflict_validation_and_default(tmp_path, monkeypatch):
             validate_settings({"on_conflict": bad}, cur)
         assert "on_conflict" in e.value.args[0]
     monkeypatch.setattr(settings, "DATA_DIR", tmp_path)
-    (tmp_path / "scheduler.json").write_text(json.dumps(cur))  # scheduler.json antiguo, sin on_conflict
+    (tmp_path / "scheduler.json").write_text(
+        json.dumps(cur), encoding="utf-8"
+    )  # scheduler.json antiguo, sin on_conflict
     s = Scheduler(lambda: None, lambda g: False)
     assert s.state()["on_conflict"] == "skip"
     s.update({"on_conflict": "newest"})
@@ -497,7 +499,7 @@ def test_api_resolution_passthrough_and_validation(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(settings, "STATIC_DIR", tmp_path / "static")
     (tmp_path / "static").mkdir()
-    (tmp_path / "static/index.html").write_text("x")
+    (tmp_path / "static/index.html").write_text("x", encoding="utf-8")
     (tmp_path / "config").mkdir()
     (tmp_path / "config/config.yaml").write_text(
         yaml.safe_dump(
@@ -508,7 +510,8 @@ def test_api_resolution_passthrough_and_validation(tmp_path, monkeypatch):
                 },
                 "games": {"g": {"name": "g", "devices": ["pc", "l"], "paths": {"pc": "/a", "l": "/b"}}},
             }
-        )
+        ),
+        encoding="utf-8",
     )
     seen = {}
 

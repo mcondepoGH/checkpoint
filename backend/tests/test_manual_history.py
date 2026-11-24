@@ -66,7 +66,7 @@ def test_manual_abort_and_error_recorded(env, monkeypatch):
     run = go(env)
     e = history.read()[0]
     assert e["trigger"] == "manual" and e["result"] == "error" and run.status["result"] == "error"
-    assert "SECRETO-1" not in history.path().read_text()  # redactado
+    assert "SECRETO-1" not in history.path().read_text(encoding="utf-8")  # redactado
 
 
 def test_manual_conflict_recorded_with_code(env, monkeypatch):

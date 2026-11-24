@@ -29,7 +29,7 @@ class Env:
     def write(self, d, name, content, mtime):
         f = d / name
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         os.utime(f, (mtime, mtime))
 
     def sync(self, dry=False, opts=None, **kw):
@@ -50,7 +50,7 @@ def env(tmp_path):
 
 
 def read(d, name):
-    return (d / name).read_text()
+    return (d / name).read_text(encoding="utf-8")
 
 
 def test_primera_vez_copia_al_hub_sin_version(env):
@@ -203,7 +203,7 @@ def test_dos_dispositivos_sin_cambios_automatico_repone_la_ruta_ausente(tmp_path
     e.seed("x")
     shutil.rmtree(e.pc_dir)
     st = run_sync(ts.CFG, "g", False, e.data, e.logs.append, e.tr(), conflict_policy="skip", automatic=True)
-    assert st["result"] == "ok" and (e.pc_dir / "s.sav").read_text() == "x"
+    assert st["result"] == "ok" and (e.pc_dir / "s.sav").read_text(encoding="utf-8") == "x"
 
 
 def test_scheduler_ciclo_omite_y_queda_en_el_resumen(tmp_path, monkeypatch):

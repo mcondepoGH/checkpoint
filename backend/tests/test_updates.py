@@ -197,9 +197,9 @@ def test_redirect_to_http_refused():
 def test_installed_version_file(tmp_path, monkeypatch):
     f = tmp_path / "VERSION"
     monkeypatch.setattr(updates, "_version_files", lambda: [f])
-    f.write_text("v1.2.3\n")
+    f.write_text("v1.2.3\n", encoding="utf-8")
     assert updates.installed_version() == "1.2.3"
-    f.write_text("dev\n")
+    f.write_text("dev\n", encoding="utf-8")
     assert updates.installed_version() == "desconocida"
     monkeypatch.setattr(updates, "_version_files", lambda: [tmp_path / "nada"])
     assert updates.installed_version() == "desconocida"
@@ -333,9 +333,9 @@ def test_cache_without_channel_is_not_reused(env):
     make, _, calls = env
     make([rel("v0.5.0")]).state()
     p = settings.DATA_DIR / updates.CACHE_FILE
-    d = json.loads(p.read_text())
+    d = json.loads(p.read_text(encoding="utf-8"))
     d.pop("channel")
-    p.write_text(json.dumps(d))
+    p.write_text(json.dumps(d), encoding="utf-8")
     c2 = make([rel("v0.6.0")])
     assert c2.state()["ultima"] == "0.6.0" and len(calls) == 2
 
@@ -378,7 +378,7 @@ def test_no_downgrade(env, monkeypatch):
 
 def test_installed_version_accepts_prerelease(tmp_path, monkeypatch):
     f = tmp_path / "VERSION"
-    f.write_text("v0.5.0-rc.1\n")
+    f.write_text("v0.5.0-rc.1\n", encoding="utf-8")
     monkeypatch.setattr(updates, "_version_files", lambda: [f])
     assert updates.installed_version() == "0.5.0-rc.1"
 
@@ -390,10 +390,10 @@ def test_channel_persist_and_validation(env):
     c.set_channel("beta")
     assert make([]).channel() == "beta"
     c.set_channel("stable")
-    assert json.loads((settings.DATA_DIR / updates.SETTINGS_FILE).read_text()) == {"channel": "stable"}
+    assert json.loads((settings.DATA_DIR / updates.SETTINGS_FILE).read_text(encoding="utf-8")) == {"channel": "stable"}
     with pytest.raises(ValueError):
         c.set_channel("nightly")
-    (settings.DATA_DIR / updates.SETTINGS_FILE).write_text('{"channel": 7}')
+    (settings.DATA_DIR / updates.SETTINGS_FILE).write_text('{"channel": 7}', encoding="utf-8")
     assert make([]).channel() == "stable"  # fichero corrupto -> stable
 
 

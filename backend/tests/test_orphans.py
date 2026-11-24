@@ -31,7 +31,7 @@ V1, V2 = "2026-01-01_100000", "2026-02-03_040506"
 def mk(data, rel, content="x"):
     p = data / rel
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(content)
+    p.write_text(content, encoding="utf-8")
     return p
 
 
@@ -147,8 +147,8 @@ def test_mover_origen_a_la_papelera(tmp_path):
     assert not (tmp_path / "versions/g" / V1 / "gone").exists() and not (tmp_path / "versions/g" / V2 / "gone").exists()
     assert (tmp_path / "versions/g" / V1 / "pc/s.sav").exists()  # lo vigente intacto
     (entry,) = [p for p in (tmp_path / "trash").iterdir()]
-    assert (entry / "origin/g/versions" / V1 / "gone/s.sav").read_text() == "abcd"
-    man = json.loads((entry / "manifest.json").read_text())
+    assert (entry / "origin/g/versions" / V1 / "gone/s.sav").read_text(encoding="utf-8") == "abcd"
+    man = json.loads((entry / "manifest.json").read_text(encoding="utf-8"))
     assert (
         man["items"][0]["kind"] == "origin" and man["items"][0]["game"] == "g" and man["items"][0]["source"] == "gone"
     )
@@ -175,7 +175,7 @@ def test_mover_juego_a_la_papelera(tmp_path):
         assert not any(p.name.startswith("old-1a2b3c4d") for p in (tmp_path / rel).iterdir()), rel
     assert (tmp_path / "hub/g/s.sav").exists()
     (entry,) = list((tmp_path / "trash").iterdir())
-    assert (entry / "game/old-1a2b3c4d/hub/s.sav").read_text() == "12345"
+    assert (entry / "game/old-1a2b3c4d/hub/s.sav").read_text(encoding="utf-8") == "12345"
     assert (entry / "game/old-1a2b3c4d/state.json").exists()
     assert orphans.scan(CFG, tmp_path) == []
 
@@ -257,7 +257,7 @@ def test_enlace_simbolico_de_una_parte_no_se_sigue(tmp_path):
     (tmp_path / "hub").mkdir()
     (tmp_path / "hub" / "old").symlink_to(out_dir, target_is_directory=True)
     run(tmp_path, ["game:old"])
-    assert (out_dir / "s.sav").read_text() == "secreto"  # el destino del enlace no se toca
+    assert (out_dir / "s.sav").read_text(encoding="utf-8") == "secreto"  # el destino del enlace no se toca
     assert (tmp_path / "hub" / "old").is_symlink()  # y el enlace no se mueve
 
 
@@ -290,7 +290,7 @@ def entry(data, name, created=None, items=None):
     d = data / "trash" / name
     d.mkdir(parents=True)
     if created is not None:
-        (d / "manifest.json").write_text(json.dumps({"created": created, "items": items or []}))
+        (d / "manifest.json").write_text(json.dumps({"created": created, "items": items or []}), encoding="utf-8")
     return d
 
 
@@ -304,7 +304,7 @@ def test_purga_solo_lo_caducado(tmp_path):
     new = entry(tmp_path, "2026-05-20_000000", iso(now - timedelta(days=29)))
     border = entry(tmp_path, "2026-05-02_000000", iso(now - timedelta(days=30)))
     (old / "x").mkdir()
-    (old / "x" / "f").write_text("1")
+    (old / "x" / "f").write_text("1", encoding="utf-8")
     other = tmp_path / "trash" / "no-es-entrada"
     other.mkdir()
     assert trash.purge_expired(tmp_path, 30, now) == 1
@@ -323,7 +323,7 @@ def test_purga_sin_manifiesto_usa_el_mtime(tmp_path):
 
 def test_purga_manifiesto_ilegible_usa_el_mtime(tmp_path):
     e = entry(tmp_path, "2026-01-01_000000")
-    (e / "manifest.json").write_text("{no")
+    (e / "manifest.json").write_text("{no", encoding="utf-8")
     t = (datetime.now(timezone.utc) - timedelta(days=60)).timestamp()
     os.utime(e, (t, t))
     assert trash.purge_expired(tmp_path, 30) == 1
@@ -355,7 +355,7 @@ def test_restaurar_origen(tmp_path):
     run(tmp_path, ["origin:g:gone"])
     (e,) = orphans.list_trash(tmp_path, 30)
     orphans.restore_from_trash(tmp_path, e["entry"], 0)
-    assert (tmp_path / "versions/g" / V1 / "gone/s.sav").read_text() == "abcd"
+    assert (tmp_path / "versions/g" / V1 / "gone/s.sav").read_text(encoding="utf-8") == "abcd"
     assert (tmp_path / "versions/g" / V2 / "gone/s.sav").exists()
     assert orphans.list_trash(tmp_path, 30) == [] and not (tmp_path / "trash" / e["entry"]).exists()
 
@@ -365,7 +365,7 @@ def test_restaurar_juego(tmp_path):
     run(tmp_path, ["game:old-1a2b3c4d"])
     (e,) = orphans.list_trash(tmp_path, 30)
     orphans.restore_from_trash(tmp_path, e["entry"], 0)
-    assert (tmp_path / "hub/old-1a2b3c4d/s.sav").read_text() == "12345"
+    assert (tmp_path / "hub/old-1a2b3c4d/s.sav").read_text(encoding="utf-8") == "12345"
     assert (tmp_path / "state/old-1a2b3c4d.json").exists() and (tmp_path / "logs/old-1a2b3c4d").is_dir()
 
 
@@ -377,7 +377,7 @@ def test_restaurar_con_destino_ocupado_falla_sin_pisar(tmp_path):
     with pytest.raises(orphans.TrashError) as ex:
         orphans.restore_from_trash(tmp_path, e["entry"], 0)
     assert ex.value.code == "err.orphans.restore_conflict"
-    assert (tmp_path / f"versions/g/{V1}/gone/s.sav").read_text() == "otro"
+    assert (tmp_path / f"versions/g/{V1}/gone/s.sav").read_text(encoding="utf-8") == "otro"
     assert (tmp_path / "trash" / e["entry"]).exists()  # lo de la papelera sigue ahí
 
 
@@ -396,9 +396,9 @@ def test_manifiesto_manipulado_no_restaura_fuera_de_data(tmp_path):
     run(tmp_path, ["origin:g:gone"])
     (e,) = orphans.list_trash(tmp_path, 30)
     mp = tmp_path / "trash" / e["entry"] / "manifest.json"
-    man = json.loads(mp.read_text())
+    man = json.loads(mp.read_text(encoding="utf-8"))
     man["items"][0]["moves"][0]["from"] = "../../etc/x"
-    mp.write_text(json.dumps(man))
+    mp.write_text(json.dumps(man), encoding="utf-8")
     with pytest.raises(orphans.TrashError) as ex:
         orphans.restore_from_trash(tmp_path, e["entry"], 0)
     assert ex.value.code == "err.orphans.trash_unknown"
@@ -430,7 +430,8 @@ def cl(tmp_path, monkeypatch):
                 "devices": {"pc": {"name": "PC", "host": "h1", "user": "u", "os": "linux"}},
                 "games": {"g": {"name": "Juego", "devices": ["pc"], "paths": {"pc": "/p"}}},
             }
-        )
+        ),
+        encoding="utf-8",
     )
     c = TestClient(create_app(Auth("admin", "pw-test-1234", 1, rounds=4)))
     c.data = tmp_path / "data"
@@ -575,12 +576,18 @@ def test_reubicar_suma_versiones_sin_tocar_el_hub_del_destino(tmp_path):
     seed_target(tmp_path)
     out = reloc(tmp_path)
     assert out["ok"] and out["versions"] == 2 and out["hub"] is True and out["target"] == "tgt"
-    assert (tmp_path / "hub/tgt/keep.sav").read_text() == "actual"  # el hub del destino, intacto
-    assert (tmp_path / f"versions/tgt/{V1}/pc/t.sav").read_text() == "propia"  # la versión del destino, intacta
-    assert (tmp_path / f"versions/tgt/{V1}-1/hub/s.sav").read_text() == "123"  # V1 chocaba: llega con sufijo
-    assert (tmp_path / f"versions/tgt/{V2}/pc/s.sav").read_text() == "1"  # V2 no chocaba: igual
+    assert (tmp_path / "hub/tgt/keep.sav").read_text(encoding="utf-8") == "actual"  # el hub del destino, intacto
+    assert (tmp_path / f"versions/tgt/{V1}/pc/t.sav").read_text(
+        encoding="utf-8"
+    ) == "propia"  # la versión del destino, intacta
+    assert (tmp_path / f"versions/tgt/{V1}-1/hub/s.sav").read_text(
+        encoding="utf-8"
+    ) == "123"  # V1 chocaba: llega con sufijo
+    assert (tmp_path / f"versions/tgt/{V2}/pc/s.sav").read_text(encoding="utf-8") == "1"  # V2 no chocaba: igual
     hubs = [d for d in (tmp_path / "versions/tgt").iterdir() if (d / "hub/s.sav").exists() and d.name != f"{V1}-1"]
-    assert len(hubs) == 1 and (hubs[0] / "hub/s.sav").read_text() == "12345"  # el hub actual del huérfano, como versión
+    assert (
+        len(hubs) == 1 and (hubs[0] / "hub/s.sav").read_text(encoding="utf-8") == "12345"
+    )  # el hub actual del huérfano, como versión
     assert not (tmp_path / f"hub/{OLD}").exists() and not (tmp_path / f"versions/{OLD}").exists()
 
 
@@ -611,9 +618,9 @@ def test_reubicar_con_varias_colisiones_no_pisa_nada(tmp_path):
     mk(tmp_path, f"versions/tgt/{V1}/pc/a", "a")
     mk(tmp_path, f"versions/tgt/{V1}-1/pc/b", "b")
     reloc(tmp_path)
-    assert (tmp_path / f"versions/tgt/{V1}/pc/a").read_text() == "a"
-    assert (tmp_path / f"versions/tgt/{V1}-1/pc/b").read_text() == "b"
-    assert (tmp_path / f"versions/tgt/{V1}-2/hub/s.sav").read_text() == "123"
+    assert (tmp_path / f"versions/tgt/{V1}/pc/a").read_text(encoding="utf-8") == "a"
+    assert (tmp_path / f"versions/tgt/{V1}-1/pc/b").read_text(encoding="utf-8") == "b"
+    assert (tmp_path / f"versions/tgt/{V1}-2/hub/s.sav").read_text(encoding="utf-8") == "123"
 
 
 @pytest.mark.parametrize("target", ["nope", "", "../g", "a/b", "..", ".hid", "old-1a2b3c4d", None, 3])
@@ -673,7 +680,8 @@ def test_reubicar_fallo_a_medias_lo_deshace(tmp_path, monkeypatch, fail_at):
 
     def snap():
         return {
-            p.relative_to(tmp_path).as_posix(): (p.read_text() if p.is_file() else None) for p in tmp_path.rglob("*")
+            p.relative_to(tmp_path).as_posix(): (p.read_text(encoding="utf-8") if p.is_file() else None)
+            for p in tmp_path.rglob("*")
         }
 
     before = snap()
@@ -702,9 +710,9 @@ def test_api_reubicar(cl):
     seed_game(cl.data)
     body = cl.get("/api/orphans").json()
     assert body["games"] == [{"id": "g", "name": "Juego"}]
-    cfg = yaml.safe_load(settings.CONFIG_PATH.read_text())
+    cfg = yaml.safe_load(settings.CONFIG_PATH.read_text(encoding="utf-8"))
     cfg["games"]["tgt"] = {"name": "Destino", "devices": ["pc"], "paths": {"pc": "/p2"}}
-    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg))
+    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg), encoding="utf-8")
     games = cl.get("/api/orphans").json()["games"]
     assert games == [{"id": "g", "name": "Juego"}, {"id": "tgt", "name": "Destino"}]
     it = next(i for i in cl.get("/api/orphans").json()["items"] if i["kind"] == "game")

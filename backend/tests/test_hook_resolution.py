@@ -62,7 +62,7 @@ def hub_dir(c, game="g1"):
 def write_hub(c, content, game="g1"):
     d = hub_dir(c, game)
     d.mkdir(parents=True, exist_ok=True)
-    (d / "s.sav").write_text(content)
+    (d / "s.sav").write_text(content, encoding="utf-8")
 
 
 def base_all(c, content="base", game="g1"):
@@ -182,9 +182,11 @@ def test_resolution_device_via_device_key_uploads_and_commit_keeps_previous_vers
     man = [entry("s.sav", "dev nuevo", 2000)]
     r = commit(client, j["hub"]["hash"], man)
     assert r.status_code == 200 and r.json()["outcome"] == "ok", r.text
-    assert (hub_dir(client) / "s.sav").read_text() == "dev nuevo"
+    assert (hub_dir(client) / "s.sav").read_text(encoding="utf-8") == "dev nuevo"
     (v,) = list_versions(client.env.data, "g1")  # la copia previa del hub
-    assert (client.env.data / "versions" / "g1" / v["version"] / "hub" / "s.sav").read_text() == "hub nuevo"
+    assert (client.env.data / "versions" / "g1" / v["version"] / "hub" / "s.sav").read_text(
+        encoding="utf-8"
+    ) == "hub nuevo"
     h = fingerprint(hub_dir(client)).hash
     b = load_baseline(client.env.data, "g1")
     assert b["deck"] == h and b["hub"] == h
@@ -206,7 +208,9 @@ def test_forced_commit_without_resolution_is_rejected(client):
     upload(client)
     r = commit(client, j["hub"]["hash"], [entry("s.sav", "dev nuevo", 2000)])
     assert r.status_code == 409 and code(r) == "err.hook.commit_rejected"
-    assert (hub_dir(client) / "s.sav").read_text() == "hub nuevo" and list_versions(client.env.data, "g1") == []
+    assert (hub_dir(client) / "s.sav").read_text(encoding="utf-8") == "hub nuevo" and list_versions(
+        client.env.data, "g1"
+    ) == []
 
 
 def test_forced_commit_with_hub_resolution_is_rejected(client):
@@ -215,7 +219,7 @@ def test_forced_commit_with_hub_resolution_is_rejected(client):
     upload(client)
     r = commit(client, j["hub"]["hash"], [entry("s.sav", "dev nuevo", 2000)])
     assert r.status_code == 409 and code(r) == "err.hook.commit_rejected"
-    assert (hub_dir(client) / "s.sav").read_text() == "hub nuevo"
+    assert (hub_dir(client) / "s.sav").read_text(encoding="utf-8") == "hub nuevo"
 
 
 def test_forced_commit_with_other_manifest_than_resolved_is_rejected(client):
@@ -225,7 +229,7 @@ def test_forced_commit_with_other_manifest_than_resolved_is_rejected(client):
     r = commit(client, j["hub"]["hash"], [entry("s.sav", "otra cosa", 3000)])
     assert r.status_code == 409 and code(r) == "err.hook.commit_rejected"
     assert r.json()["detail"]["params"] == {"reason": "resolution_stale"}
-    assert (hub_dir(client) / "s.sav").read_text() == "hub nuevo"
+    assert (hub_dir(client) / "s.sav").read_text(encoding="utf-8") == "hub nuevo"
 
 
 def test_resolution_of_another_device_does_not_authorize_commit(client):
@@ -388,9 +392,9 @@ def test_resolution_while_lock_busy_is_409(client):
 
 def test_resolution_for_disabled_game_is_409(client):
     j = conflict(client)
-    cfg = yaml.safe_load(client.env.tmp.joinpath("config", "config.yaml").read_text())
+    cfg = yaml.safe_load(client.env.tmp.joinpath("config", "config.yaml").read_text(encoding="utf-8"))
     cfg["games"]["g1"]["enabled"] = False
-    client.env.tmp.joinpath("config", "config.yaml").write_text(yaml.safe_dump(cfg))
+    client.env.tmp.joinpath("config", "config.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
     r = session_put(client, {"device": "deck", "winner": "hub", "expect": expect_of(j)})
     assert r.status_code == 409 and code(r) == "err.sync.game_disabled"
 
@@ -408,7 +412,9 @@ def test_resolution_for_an_empty_winner_side_is_409(client):
 
 def test_damaged_records_file_is_ignored(client):
     (client.env.data / "resolutions").mkdir(parents=True)
-    (client.env.data / "resolutions" / "g1.json").write_text('{"conflicts": {"deck": {"reason": 1}}, "resolutions": 5}')
+    (client.env.data / "resolutions" / "g1.json").write_text(
+        '{"conflicts": {"deck": {"reason": 1}}, "resolutions": 5}', encoding="utf-8"
+    )
     assert pending(client)["conflicts"] == [] and pending(client)["resolutions"] == []
-    (client.env.data / "resolutions" / "g1.json").write_text("no json")
+    (client.env.data / "resolutions" / "g1.json").write_text("no json", encoding="utf-8")
     assert pending(client)["conflicts"] == []

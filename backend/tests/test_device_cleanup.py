@@ -22,16 +22,16 @@ H = "a" * 64
 def seed(data, game="g1", dev="old"):
     save_baseline(data, game, {dev: H, "keep": H, "hub": H})
     (data / "staging" / game / dev).mkdir(parents=True, exist_ok=True)
-    (data / "staging" / game / dev / "f.sav").write_text("x")
+    (data / "staging" / game / dev / "f.sav").write_text("x", encoding="utf-8")
     (data / "staging" / game / "keep").mkdir(parents=True, exist_ok=True)
-    (data / "staging" / game / "keep" / "f.sav").write_text("x")
+    (data / "staging" / game / "keep" / "f.sav").write_text("x", encoding="utf-8")
     now = datetime.now(timezone.utc)
     resolution.record_conflict(data, game, dev, "both-changed", H, H, now)
     resolution.record_conflict(data, game, "keep", "both-changed", H, H, now)
     (data / "hub" / game).mkdir(parents=True, exist_ok=True)
-    (data / "hub" / game / "s.sav").write_text("hub")
+    (data / "hub" / game / "s.sav").write_text("hub", encoding="utf-8")
     (data / "versions" / game / "2026-01-01_000000" / dev).mkdir(parents=True, exist_ok=True)
-    (data / "versions" / game / "2026-01-01_000000" / dev / "s.sav").write_text("v")
+    (data / "versions" / game / "2026-01-01_000000" / dev / "s.sav").write_text("v", encoding="utf-8")
 
 
 def test_quita_solo_metadatos_del_dispositivo(tmp_path):
@@ -43,8 +43,8 @@ def test_quita_solo_metadatos_del_dispositivo(tmp_path):
     r = resolution.load(tmp_path, "g1")
     assert list(r["conflicts"]) == ["keep"]
     # versiones y hub intactos
-    assert (tmp_path / "versions/g1/2026-01-01_000000/old/s.sav").read_text() == "v"
-    assert (tmp_path / "hub/g1/s.sav").read_text() == "hub"
+    assert (tmp_path / "versions/g1/2026-01-01_000000/old/s.sav").read_text(encoding="utf-8") == "v"
+    assert (tmp_path / "hub/g1/s.sav").read_text(encoding="utf-8") == "hub"
 
 
 def test_sin_datos_no_hace_nada(tmp_path):
@@ -77,15 +77,15 @@ def test_juego_con_lock_ocupado_se_salta(tmp_path):
 
 def test_baseline_ilegible_no_se_reescribe(tmp_path):
     (tmp_path / "state").mkdir()
-    (tmp_path / "state" / "g1.json").write_text("{no es json")
+    (tmp_path / "state" / "g1.json").write_text("{no es json", encoding="utf-8")
     purge_device_metadata(tmp_path, ["old"])
-    assert (tmp_path / "state" / "g1.json").read_text() == "{no es json"
+    assert (tmp_path / "state" / "g1.json").read_text(encoding="utf-8") == "{no es json"
 
 
 def test_staging_enlace_simbolico_no_se_sigue(tmp_path):
     outside = tmp_path / "fuera"
     outside.mkdir()
-    (outside / "keep.txt").write_text("x")
+    (outside / "keep.txt").write_text("x", encoding="utf-8")
     (tmp_path / "staging" / "g1").mkdir(parents=True)
     (tmp_path / "staging" / "g1" / "old").symlink_to(outside, target_is_directory=True)
     purge_device_metadata(tmp_path, ["old"])
@@ -107,7 +107,7 @@ def cl(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(settings, "STATIC_DIR", tmp_path / "static")
     (tmp_path / "config").mkdir()
-    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(CFG))
+    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(CFG), encoding="utf-8")
     c = TestClient(create_app(Auth("admin", "pw-test-1234", 1, rounds=4)))
     assert c.post("/api/login", json={"user": "admin", "password": "pw-test-1234"}).status_code == 200
     return c
@@ -157,5 +157,5 @@ def test_restaurar_copia_sin_el_dispositivo_tambien_limpia(cl, tmp_path):
 def test_el_fichero_json_de_estado_conserva_formato(tmp_path):
     seed(tmp_path)
     purge_device_metadata(tmp_path, ["old"])
-    raw = json.loads((tmp_path / "state" / "g1.json").read_text())
+    raw = json.loads((tmp_path / "state" / "g1.json").read_text(encoding="utf-8"))
     assert set(raw) == {"base", "updated"}

@@ -75,7 +75,7 @@ def test_steam_game_path_accepts_only_device_key(cl):
         r = call(cl, bad, "put", url, **body)
         assert r.status_code == 401 and code(r) == "err.apikey.invalid", bad
     assert cl.put(url, **body).status_code == 401  # la cookie de sesión tampoco vale
-    assert yaml.safe_load(settings.CONFIG_PATH.read_text())["games"]["g1"]["paths"]["deck"] == "/d"
+    assert yaml.safe_load(settings.CONFIG_PATH.read_text(encoding="utf-8"))["games"]["g1"]["paths"]["deck"] == "/d"
     cl.app.state.ctx.auth.hook_fails.clear()
     r = call(cl, cl.deck, "put", url, **body)
     assert r.status_code == 200 and r.json() == {"game": "g1", "path": "/d/nueva"}
@@ -223,7 +223,7 @@ def test_games_device_key_paths_verbatim(cl):
     cfg["devices"]["deck"]["os"] = "windows"
     cfg["games"]["g1"]["paths"]["deck"] = " C:\\Users\\x\\Saves "
     cfg["games"]["g1"]["paths"]["pc"] = "/home/u/otro"
-    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg, allow_unicode=True))
+    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
     j = call(cl, cl.deck, "get", "/api/games").json()
     assert j[0]["path"] == "C:/Users/x/Saves"  # el modelo ya recorta y normaliza `\` a `/`
     assert "otro" not in str(j)
@@ -330,9 +330,9 @@ def test_device_key_dies_with_config_even_if_file_remains(cl, tmp_path):
     """Config editada a mano (sin pasar por la API): el fichero sobrevive, pero no autentica a un dispositivo que ya
     no es `http`; y el arranque lo limpia."""
     path = tmp_path / "config" / "config.yaml"
-    data = yaml.safe_load(path.read_text())
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
     data["devices"]["lap"] = {"name": "Portátil", "host": "192.0.2.11", "user": "u", "os": "linux"}
-    path.write_text(yaml.safe_dump(data, allow_unicode=True))
+    path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
     assert call(cl, cl.lap, "get", "/api/hook/ping").status_code == 401
     assert "lap" in key_files(tmp_path)
     with TestClient(create_app(Auth("admin", PW, 1, rounds=4))):  # arranque: lifespan
@@ -394,7 +394,7 @@ def test_keys_never_leak_to_logs_or_errors(cl, caplog):
 
 # ---- config.yaml inválido: no se revela a quien no está autenticado ----
 def break_cfg(tmp_path):
-    (tmp_path / "config" / "config.yaml").write_text("devices: [")
+    (tmp_path / "config" / "config.yaml").write_text("devices: [", encoding="utf-8")
 
 
 @pytest.mark.parametrize("path", ["/api/hook/ping", "/api/games", "/api/hook/g1/manifest"])

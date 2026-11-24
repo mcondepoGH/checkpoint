@@ -201,7 +201,10 @@ def test_expired_cannot_be_accepted(hub):
     hub.clock[0] += 601
     r = accept(hub, req)
     assert r.status_code == 404 and code(r) == "err.pairing.request_unknown"
-    assert sorted(yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text())["devices"]) == ["deck", "pc"]
+    assert sorted(yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8"))["devices"]) == [
+        "deck",
+        "pc",
+    ]
 
 
 def test_scheduler_maintenance_purges_expired(hub):
@@ -263,7 +266,7 @@ def test_accept_creates_http_device_and_key_works(hub):
     j = r.json()
     assert set(j) == {"id", "device", "name", "created"} and j["created"] is True and j["name"] == "Deck nueva"
     assert re.fullmatch(r"deck-nueva-[0-9a-f]{8}", j["device"])
-    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text())
+    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8"))
     assert cfg["devices"][j["device"]] == {"name": "Deck nueva", "http": True, "os": "linux"}
     assert validate_config(cfg)[1] == {}
     assert j["id"] == req["id"] and "key" not in j and req["secret"] not in r.text
@@ -349,7 +352,7 @@ def test_reject(hub):
     g = poll(hub, req)
     assert g.status_code == 200 and g.json() == {"status": "rejected"} and "key" not in g.text
     assert poll(hub, req).status_code == 404  # se entrega una vez y se borra
-    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text())
+    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8"))
     assert sorted(cfg["devices"]) == ["deck", "pc"]  # nada creado
 
 
@@ -371,7 +374,7 @@ def test_accept_wrong_code_is_refused_and_locks_after_3(hub):
     assert hub.session.get("/api/pairing/pending").json() == []  # solicitud anulada
     assert accept(hub, req).status_code == 409  # anulada: ya no está pendiente
     assert poll(hub, req).json() == {"status": "rejected"}
-    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text())
+    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8"))
     assert sorted(cfg["devices"]) == ["deck", "pc"]
 
 
@@ -395,7 +398,7 @@ def test_accept_existing_non_http_name_is_409(hub):
     r = accept(hub, req)
     assert r.status_code == 409 and code(r) == "err.pairing.device_not_http"
     assert r.json()["detail"]["params"] == {"name": "pc"}
-    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text())
+    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8"))
     assert sorted(cfg["devices"]) == ["deck", "pc"] and cfg["devices"]["pc"]["user"] == "u"
     assert len(hub.session.get("/api/pairing/pending").json()) == 1  # sigue pendiente: se puede rechazar
 
@@ -405,7 +408,7 @@ def test_accept_existing_http_device_is_reused_and_key_regenerated_on_pickup(hub
     req = new(hub, name="STEAM DECK", os_="windows")
     j = accept(hub, req).json()
     assert j["device"] == "deck" and j["created"] is False and j["name"] == "Steam Deck"
-    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text())
+    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8"))
     assert cfg["devices"]["deck"] == {"name": "Steam Deck", "http": True, "os": "linux"}  # config intacta
     assert sorted(cfg["devices"]) == ["deck", "pc"]
     # hasta que el dispositivo recoge, la key vieja sigue valiendo
@@ -454,12 +457,12 @@ def test_id_is_ascii_prefix_plus_salt_and_not_reserved(hub):
 
 def test_accept_keeps_comments_and_other_edits_work(hub):
     path = hub.tmp / "config" / "config.yaml"
-    path.write_text("# mi config\n" + path.read_text())
+    path.write_text("# mi config\n" + path.read_text(encoding="utf-8"), encoding="utf-8")
     ctx = hub.app.state.ctx
     base = ctx.store.snapshot().version
     req = new(hub)
     accept(hub, req)
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     assert text.startswith("# mi config") and "Deck nueva" in text
     snap = hub.session.get("/api/config").json()
     assert snap["version"] != base and any(d["name"] == "Deck nueva" for d in snap["config"]["devices"].values())
@@ -470,13 +473,16 @@ def test_accept_keeps_comments_and_other_edits_work(hub):
     cfg["max_versions"] = 7
     r = hub.session.put("/api/config", json={"base_version": snap["version"], "config": cfg})
     assert r.status_code == 200
-    assert "Deck nueva" in path.read_text() and yaml.safe_load(path.read_text())["max_versions"] == 7
+    assert (
+        "Deck nueva" in path.read_text(encoding="utf-8")
+        and yaml.safe_load(path.read_text(encoding="utf-8"))["max_versions"] == 7
+    )
     assert list(ctx.store.list_backups())  # se hizo copia de seguridad antes de escribir
 
 
 def test_accept_with_invalid_config_file_is_500(hub):
     req = new(hub)
-    (hub.tmp / "config" / "config.yaml").write_text("devices: [")
+    (hub.tmp / "config" / "config.yaml").write_text("devices: [", encoding="utf-8")
     r = accept(hub, req)
     assert r.status_code == 500 and code(r) == "err.main.config_file_invalid"
     assert len(hub.session.get("/api/pairing/pending").json()) == 1

@@ -39,12 +39,12 @@ class Env:
             },
         }
         (tmp / "config").mkdir(parents=True, exist_ok=True)
-        (tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg, allow_unicode=True))
+        (tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
 
     def write(self, d, content, mtime, name="s.sav"):
         d.mkdir(parents=True, exist_ok=True)
         f = d / name
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         os.utime(f, (mtime, mtime))
 
     def seed(self, content="base"):
@@ -54,7 +54,7 @@ class Env:
         save_baseline(self.tmp / "data", "g1", {"dev-1": h, "dev-2": h, "hub": h})
 
     def read(self, d):
-        return (d / "s.sav").read_text()
+        return (d / "s.sav").read_text(encoding="utf-8")
 
 
 @pytest.fixture
@@ -139,9 +139,9 @@ def test_conflict_always_skips_even_with_newest_policies(client):
     e.write(e.d2, "pc2", 2000)
     client.put("/api/scheduler", json={"on_conflict": "newest"})  # global del scheduler
     cp = settings.CONFIG_PATH
-    cfg = yaml.safe_load(cp.read_text())
+    cfg = yaml.safe_load(cp.read_text(encoding="utf-8"))
     cfg["games"]["g1"]["on_conflict"] = "newest"  # y la del juego
-    cp.write_text(yaml.safe_dump(cfg, allow_unicode=True))
+    cp.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
     r = opened(client)
     assert (
         r.status_code == 200 and r.json()["outcome"] == "conflict" and r.json()["ok"] is False
@@ -268,9 +268,9 @@ def test_scheduler_untouched_by_hook(client):
 def set_enabled(e, game, value):
     """Reescribe el config en disco (el almacén lo recarga al detectar el cambio)."""
     p = settings.CONFIG_PATH
-    cfg = yaml.safe_load(p.read_text())
+    cfg = yaml.safe_load(p.read_text(encoding="utf-8"))
     cfg["games"][game]["enabled"] = value
-    p.write_text(yaml.safe_dump(cfg, allow_unicode=True))
+    p.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
     st = p.stat()
     os.utime(p, (st.st_atime, st.st_mtime + 5))
 

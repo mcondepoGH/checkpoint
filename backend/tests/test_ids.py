@@ -86,20 +86,20 @@ def test_loading_never_rewrites_file_but_saving_does(client, tmp_path):  # noqa:
     (tmp_path / "config").mkdir(parents=True, exist_ok=True)
     f = tmp_path / "config" / "config.yaml"
     text = "# mi config\n" + yaml.safe_dump(BASE, allow_unicode=True)
-    f.write_text(text)
+    f.write_text(text, encoding="utf-8")
     got = client.get("/api/config").json()
-    assert f.read_text() == text  # leer/arrancar no toca el fichero
+    assert f.read_text(encoding="utf-8") == text  # leer/arrancar no toca el fichero
     assert got["config"]["games"][GID]["name"] == GAME and got["error"] is None
     same = client.put("/api/config", json={"config": got["config"], "base_version": got["version"]})
-    assert same.json()["changed"] is False and f.read_text() == text  # sin cambios no se escribe nada
+    assert same.json()["changed"] is False and f.read_text(encoding="utf-8") == text  # sin cambios no se escribe nada
     cfg = copy.deepcopy(got["config"])
     cfg["devices"][PC]["name"] = "Torre"
     r = client.put("/api/config", json={"config": cfg, "base_version": got["version"]})
     assert r.status_code == 200 and r.json()["changed"] is True and r.json()["backup"]
-    raw = yaml.safe_load(f.read_text())
+    raw = yaml.safe_load(f.read_text(encoding="utf-8"))
     assert raw["devices"][PC]["name"] == "Torre" and raw["games"][GID]["devices"] == [PC, LAPTOP]
     assert raw["games"][GID]["name"] == GAME and raw["games"][GID]["paths"][PC] == "C:/Saves/dq"
-    assert (tmp_path / "data" / "config-backups" / r.json()["backup"]).read_text() == text
+    assert (tmp_path / "data" / "config-backups" / r.json()["backup"]).read_text(encoding="utf-8") == text
 
 
 # ---------- validación ----------
@@ -109,12 +109,15 @@ def errs(d):
 
 def test_duplicate_yaml_ids_are_a_clear_error(tmp_path):
     p = tmp_path / "c.yaml"
-    p.write_text("devices:\n  a: {name: A, host: h, user: u, os: linux}\n  a: {name: B, host: h, user: u, os: linux}\n")
+    p.write_text(
+        "devices:\n  a: {name: A, host: h, user: u, os: linux}\n  a: {name: B, host: h, user: u, os: linux}\n",
+        encoding="utf-8",
+    )
     with pytest.raises(ConfigError, match="yaml_duplicate_key"):
         load_config(p)
     from app.config.store import parse_text
 
-    cfg, err = parse_text(p.read_text())
+    cfg, err = parse_text(p.read_text(encoding="utf-8"))
     assert cfg is None and err["code"] == "err.config.yaml_duplicate_key"
 
 
@@ -205,12 +208,12 @@ class Disk:
         self.cfg = parse_config(BASE)
         for d in (self.pc_dir, self.lap_dir, self.hub):
             d.mkdir(parents=True)
-            (d / "s.sav").write_text("v1")
+            (d / "s.sav").write_text("v1", encoding="utf-8")
             os.utime(d / "s.sav", (500, 500))
         (self.data / "versions" / GID / "2026-01-01_100000" / PC).mkdir(parents=True)
-        (self.data / "versions" / GID / "2026-01-01_100000" / PC / "s.sav").write_text("old")
+        (self.data / "versions" / GID / "2026-01-01_100000" / PC / "s.sav").write_text("old", encoding="utf-8")
         (self.data / "logs" / GID).mkdir(parents=True)
-        (self.data / "logs" / GID / "2026-01-01_100000.log").write_text("x")
+        (self.data / "logs" / GID / "2026-01-01_100000.log").write_text("x", encoding="utf-8")
         h = fingerprint(self.pc_dir).hash
         save_baseline(self.data, GID, {PC: h, LAPTOP: h, "hub": h})
 
@@ -239,11 +242,13 @@ def test_rename_game_and_device_changes_no_disk_path_and_keeps_data(disk):
     assert list_versions(disk.data, GID)[0]["sources"][0]["source"] == PC
     assert count_versions(disk.data, GID) == 1 and load_baseline(disk.data, GID).keys() == {PC, LAPTOP, "hub"}
     # cambiar un save en el portátil y sincronizar tras renombrar: sin falsos conflictos, mismas carpetas
-    (disk.lap_dir / "s.sav").write_text("v2")
+    (disk.lap_dir / "s.sav").write_text("v2", encoding="utf-8")
     os.utime(disk.lap_dir / "s.sav", (900, 900))
     st = disk.sync(c)
     assert st["result"] == "ok" and st["winner"] == LAPTOP and st["game"] == GID and st["name"] == "DQ7 (renombrado)"
-    assert (disk.hub / "s.sav").read_text() == "v2" and (disk.pc_dir / "s.sav").read_text() == "v2"
+    assert (disk.hub / "s.sav").read_text(encoding="utf-8") == "v2" and (disk.pc_dir / "s.sav").read_text(
+        encoding="utf-8"
+    ) == "v2"
     after = disk.tree()
     new_dirs = set(after) - set(before)
     assert all(d.startswith(f"versions/{GID}/") for d in new_dirs), new_dirs  # solo una versión nueva, bajo el mismo id
@@ -259,14 +264,14 @@ def test_rename_game_and_device_changes_no_disk_path_and_keeps_data(disk):
 def test_logs_and_messages_show_names_not_ids(disk):
     disk.cfg.games[GID].name = "Mi juego"
     disk.cfg.devices[PC].name = "Ordenador de mesa"
-    (disk.lap_dir / "s.sav").write_text("v2")
+    (disk.lap_dir / "s.sav").write_text("v2", encoding="utf-8")
     os.utime(disk.lap_dir / "s.sav", (900, 900))
     lines = []
     st = run_sync(disk.cfg, "Mi juego", False, disk.data, lines.append, disk.tr())
     text = "\n".join(lines) + st["message"]
     assert "Mi juego" in text and "Ordenador de mesa" in text
     assert GID not in text and st["params"]["winner"] == "laptop" and "Ordenador de mesa" in st["params"]["updated"]
-    log = (disk.data / "logs" / GID / st["log"]).read_text()
+    log = (disk.data / "logs" / GID / st["log"]).read_text(encoding="utf-8")
     assert "Ordenador de mesa" in log and GID not in log
 
 
@@ -287,7 +292,7 @@ def test_game_resolution_by_id_name_and_unknown(disk):
 
 def test_conflict_with_ids_and_resolution_by_id_or_name(disk):
     for d, content, t in [(disk.pc_dir, "pc", 1000), (disk.lap_dir, "laptop", 2000)]:
-        (d / "s.sav").write_text(content)
+        (d / "s.sav").write_text(content, encoding="utf-8")
         os.utime(d / "s.sav", (t, t))
     st = disk.sync()
     assert st["result"] == "conflict"
@@ -298,13 +303,13 @@ def test_conflict_with_ids_and_resolution_by_id_or_name(disk):
     assert st["result"] == "ok" and st["winner"] == PC
     # por nombre, con expect por nombre
     for d, content, t in [(disk.pc_dir, "pc2", 3000), (disk.lap_dir, "laptop2", 4000)]:
-        (d / "s.sav").write_text(content)
+        (d / "s.sav").write_text(content, encoding="utf-8")
         os.utime(d / "s.sav", (t, t))
     fps = {s["id"]: s["hash"] for s in disk.sync()["conflict"]["sides"]}
     st = disk.sync(resolution="device:Ordenador de mesa", expect={"Ordenador de mesa": fps[PC], LAPTOP: fps[LAPTOP]})
     assert st["result"] == "ok" and st["winner"] == PC
     for d, content, t in [(disk.pc_dir, "pc3", 5000), (disk.lap_dir, "laptop3", 6000)]:
-        (d / "s.sav").write_text(content)
+        (d / "s.sav").write_text(content, encoding="utf-8")
         os.utime(d / "s.sav", (t, t))
     st = disk.sync(resolution="device:fantasma")
     assert st["result"] == "aborted" and "fantasma" in st["message"]
@@ -313,7 +318,7 @@ def test_conflict_with_ids_and_resolution_by_id_or_name(disk):
 def test_restore_version_by_source_id_or_name(disk):
     disk.cfg.devices[PC].name = "Ordenador de mesa"
     msg = restore_version(disk.cfg, GAME, "2026-01-01_100000", "Ordenador de mesa", disk.data)
-    assert msg["params"]["source"] == "Ordenador de mesa" and (disk.hub / "s.sav").read_text() == "old"
+    assert msg["params"]["source"] == "Ordenador de mesa" and (disk.hub / "s.sav").read_text(encoding="utf-8") == "old"
     with pytest.raises(SyncAbort):
         restore_version(disk.cfg, GID, "2026-01-01_100000", "../x", disk.data)
 
@@ -383,11 +388,11 @@ def cli_env(tmp_path, monkeypatch):
         "paths": {"pc-1a2b3c4d": "C:/m", "laptop-5e6f7a8b": "/home/usuario/m"},
     }
     d["games"]["mario-00000000"] = {**d["games"]["x"], "name": "x"}  # el nombre "x" es el id de otro juego
-    settings.CONFIG_PATH.write_text(yaml.safe_dump(d, allow_unicode=True))
+    settings.CONFIG_PATH.write_text(yaml.safe_dump(d, allow_unicode=True), encoding="utf-8")
     roots = {"h1": tmp_path / "pc", "h2": tmp_path / "laptop"}
     monkeypatch.setattr("app.sync.engine.get_transport", lambda dev: LocalTransport(roots[dev.host]))
     (roots["h1"] / "C:/Saves/z").mkdir(parents=True)
-    (roots["h1"] / "C:/Saves/z/s.sav").write_text("a")
+    (roots["h1"] / "C:/Saves/z/s.sav").write_text("a", encoding="utf-8")
     (roots["h2"] / "home/usuario/z").mkdir(parents=True)
     return tmp_path
 
@@ -413,7 +418,7 @@ def test_cli_ambiguous_name_is_clear_error(cli_env, capsys):
 def test_cli_versions_by_name(cli_env, capsys):
     v = settings.DATA_DIR / "versions" / "zelda-0a1b2c3d" / "2026-01-01_100000" / "pc-1a2b3c4d"
     v.mkdir(parents=True)
-    (v / "s.sav").write_text("o")
+    (v / "s.sav").write_text("o", encoding="utf-8")
     capsys.readouterr()
     assert cli.main(["versions", "Zelda"]) == 0
     assert "Mi PC(1)" in capsys.readouterr().out
@@ -424,11 +429,11 @@ def test_cli_versions_by_name(cli_env, capsys):
 def api(client, tmp_path, monkeypatch):  # noqa: F811
     login(client)
     (tmp_path / "config").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(NEW, allow_unicode=True))
+    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(NEW, allow_unicode=True), encoding="utf-8")
     roots = {"h1": tmp_path / "pc", "h2": tmp_path / "laptop"}
     monkeypatch.setattr("app.sync.engine.get_transport", lambda dev: LocalTransport(roots[dev.host]))
     (roots["h1"] / "C:/Saves/z").mkdir(parents=True)
-    (roots["h1"] / "C:/Saves/z/s.sav").write_text("a")
+    (roots["h1"] / "C:/Saves/z/s.sav").write_text("a", encoding="utf-8")
     (roots["h2"] / "home/usuario/z").mkdir(parents=True)
     return client
 
@@ -462,9 +467,9 @@ def test_api_rename_keeps_data_reachable(api, tmp_path):
     cfg["games"][gid]["name"] = "The Legend"
     r = api.put("/api/config", json={"config": cfg, "base_version": cur["version"]})
     assert r.status_code == 200
-    raw = yaml.safe_load((tmp_path / "config" / "config.yaml").read_text())
+    raw = yaml.safe_load((tmp_path / "config" / "config.yaml").read_text(encoding="utf-8"))
     assert list(raw["games"]) == [gid] and raw["games"][gid]["name"] == "The Legend"
-    assert (tmp_path / "data" / "hub" / gid / "s.sav").read_text() == "a"
+    assert (tmp_path / "data" / "hub" / gid / "s.sav").read_text(encoding="utf-8") == "a"
     assert api.post("/api/sync/The Legend", json={}).status_code == 200
     assert api.post("/api/sync/Zelda", json={}).status_code == 404  # el nombre viejo ya no existe
     d = api.post("/api/config/diff", json={"config": cfg}).json()["diff"]
@@ -476,7 +481,7 @@ def test_api_conflict_resolution_device_by_name(api, tmp_path):
     roots = {"pc": tmp_path / "pc/C:/Saves/z", "lap": tmp_path / "laptop/home/usuario/z"}
     wait_run(api, api.post(f"/api/sync/{gid}", json={}).json()["run_id"])
     for d, c, t in [(roots["pc"], "pc", 1000), (roots["lap"], "lap", 2000)]:
-        (d / "s.sav").write_text(c)
+        (d / "s.sav").write_text(c, encoding="utf-8")
         os.utime(d / "s.sav", (t, t))
     st = wait_run(api, api.post(f"/api/sync/{gid}", json={}).json()["run_id"])
     assert st["result"] == "conflict" and {s["name"] for s in st["conflict"]["sides"]} == {"Mi PC", "Portátil"}
@@ -509,7 +514,7 @@ def test_api_validate_reports_id_paths_and_test_device_without_name(api):
 def _legacy_api(client, tmp_path):
     login(client)
     (tmp_path / "config").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(BASE, allow_unicode=True))
+    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(BASE, allow_unicode=True), encoding="utf-8")
     return client
 
 
@@ -524,8 +529,10 @@ def test_api_status_name_is_current_config_name_not_id(client, tmp_path):
     sd = tmp_path / "data" / "status"
     sd.mkdir(parents=True)
     # estado guardado con el id (o sin nombre) en lugar del nombre: la UI no debe verlo como título
-    (sd / f"{GID}.json").write_text(json.dumps({"game": GID, "name": GID, "result": "ok", "message": "m"}))
+    (sd / f"{GID}.json").write_text(
+        json.dumps({"game": GID, "name": GID, "result": "ok", "message": "m"}), encoding="utf-8"
+    )
     got = api.get("/api/status").json()[GID]
     assert got["game"] == GID and got["name"] == GAME
-    (sd / f"{GID}.json").write_text(json.dumps({"result": "ok", "message": "m"}))
+    (sd / f"{GID}.json").write_text(json.dumps({"result": "ok", "message": "m"}), encoding="utf-8")
     assert api.get("/api/status").json()[GID]["name"] == GAME

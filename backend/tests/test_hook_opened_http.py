@@ -165,9 +165,9 @@ def test_disabled_game_is_skipped_and_not_playing(env, client):
     import yaml
 
     p = env.tmp / "config" / "config.yaml"
-    d = yaml.safe_load(p.read_text())
+    d = yaml.safe_load(p.read_text(encoding="utf-8"))
     d["games"]["g1"]["enabled"] = False
-    p.write_text(yaml.safe_dump(d, allow_unicode=True))
+    p.write_text(yaml.safe_dump(d, allow_unicode=True), encoding="utf-8")
     r = opened(client)
     assert r.status_code == 200 and r.json()["outcome"] == "skipped" and r.json()["code"] == "err.sync.game_disabled"
     assert view(client)["playing"] == []

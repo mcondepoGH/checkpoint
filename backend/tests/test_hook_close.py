@@ -32,14 +32,14 @@ def mk(tmp_path, monkeypatch):
     from fakes import LocalTransport
 
     e = Env(tmp_path)
-    cfg = yaml.safe_load((tmp_path / "config" / "config.yaml").read_text())
+    cfg = yaml.safe_load((tmp_path / "config" / "config.yaml").read_text(encoding="utf-8"))
     cfg["games"]["g1"]["process"] = "game.exe"
     cfg["games"]["g2"] = {
         "name": "Sin Proceso",
         "devices": ["dev-1", "dev-2"],
         "paths": {"dev-1": str(tmp_path / "p2"), "dev-2": "/home/u/g2"},
     }
-    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg, allow_unicode=True))
+    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
     p = Proc()
 
     class T(LocalTransport):
@@ -177,9 +177,9 @@ def test_closed_with_conflict_skips_never_resolves(cl):
     assert wait_for(lambda: watches(cl).json() and watches(cl).json()[0]["state"] == "running")
     e.write(e.d1, "pc1", 1000)
     e.write(e.d2, "pc2", 2000)
-    cfg = yaml.safe_load(settings.CONFIG_PATH.read_text())
+    cfg = yaml.safe_load(settings.CONFIG_PATH.read_text(encoding="utf-8"))
     cfg["games"]["g1"]["on_conflict"] = "newest"  # la política del juego se ignora
-    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg, allow_unicode=True))
+    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
     cl.proc.running = False
     assert wait_for(lambda: hist("hook_closed"))
     assert hist("hook_closed")[0]["result"] == "conflict"
@@ -283,9 +283,9 @@ def test_skipped_close_shows_reason_in_hook_status(cl):
 
 def test_game_removed_before_close_is_logged(cl):
     _seen_running(cl)
-    cfg = yaml.safe_load(settings.CONFIG_PATH.read_text())
+    cfg = yaml.safe_load(settings.CONFIG_PATH.read_text(encoding="utf-8"))
     del cfg["games"]["g1"]
-    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg, allow_unicode=True))
+    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
     cl.proc.running = False
     assert wait_for(lambda: hist("hook_closed"))
     e = hist("hook_closed")[0]
@@ -294,7 +294,9 @@ def test_game_removed_before_close_is_logged(cl):
 
 def test_checkpoint_error_is_logged_without_message(cl):
     _seen_running(cl)
-    settings.CONFIG_PATH.write_text("games: [no es un mapa\n  secreto-xyz")  # config ilegible: el checkpoint lanza
+    settings.CONFIG_PATH.write_text(
+        "games: [no es un mapa\n  secreto-xyz", encoding="utf-8"
+    )  # config ilegible: el checkpoint lanza
     cl.proc.running = False
     assert wait_for(lambda: hist("hook_closed"))
     e = hist("hook_closed")[0]

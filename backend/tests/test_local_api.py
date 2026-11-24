@@ -26,7 +26,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "SSH_KEY", str(tmp_path / "keys" / "k"))
     monkeypatch.setattr(settings, "KNOWN_HOSTS", str(tmp_path / "keys" / "kh"))
     (tmp_path / "static").mkdir()
-    (tmp_path / "static/index.html").write_text("<html>app</html>")
+    (tmp_path / "static/index.html").write_text("<html>app</html>", encoding="utf-8")
     c = TestClient(create_app(Auth("admin", PW, 1, rounds=4)))
     assert c.post("/api/login", json={"user": "admin", "password": PW}).status_code == 200
     c.tmp = tmp_path
@@ -80,7 +80,7 @@ def test_guardar_local_ok_en_native(client):
     assert r.status_code == 200 and r.json()["changed"] is True
     saved = client.get("/api/config").json()["config"]["devices"][PC]
     assert saved == {"name": "PC", "local": True, "os": "linux"}
-    txt = settings.CONFIG_PATH.read_text()
+    txt = settings.CONFIG_PATH.read_text(encoding="utf-8")
     assert "local: true" in txt
     assert yaml.safe_load(txt)["devices"][LAP]["host"] == "192.0.2.10"
 
@@ -90,7 +90,7 @@ def test_guardar_local_en_docker_422_con_mensaje(client, monkeypatch):
     r = put_config(client, cfg(client.tmp))
     assert r.status_code == 422
     assert r.json()["errors"][f"devices.{PC}.local"]["code"] == "err.config.local_docker"
-    assert not settings.CONFIG_PATH.exists() or "local" not in settings.CONFIG_PATH.read_text()
+    assert not settings.CONFIG_PATH.exists() or "local" not in settings.CONFIG_PATH.read_text(encoding="utf-8")
 
 
 def test_validate_en_vivo_docker_y_native(client, monkeypatch):
@@ -128,7 +128,9 @@ def test_diff_y_yaml_con_local(client):
 def test_config_con_local_ya_en_fichero_y_docker_se_ve_el_error(client, monkeypatch):
     put_config(client, cfg(client.tmp))
     monkeypatch.setenv("CHECKPOINT_RUNTIME", "docker")
-    settings.CONFIG_PATH.write_text(settings.CONFIG_PATH.read_text() + "\n")  # fuerza recarga
+    settings.CONFIG_PATH.write_text(
+        settings.CONFIG_PATH.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+    )  # fuerza recarga
     j = client.get("/api/config").json()
     assert j["error"]["params"]["causes"][0]["code"] == "err.config.local_docker" and j["runtime"] == "docker"
 
@@ -160,7 +162,7 @@ def test_test_local_ruta_ok_inexistente_creable_y_fichero(client):
         "/api/devices/test", json={"device": {"local": True, "os": "linux"}, "paths": [str(t / "a" / "b")]}
     ).json()
     assert nueva["ok"] and nueva["code"] == "err.transport.folder_will_be_created"
-    (t / "f").write_text("x")
+    (t / "f").write_text("x", encoding="utf-8")
     f = client.post(
         "/api/devices/test", json={"device": {"local": True, "os": "linux"}, "paths": [str(t / "f")]}
     ).json()
@@ -263,7 +265,7 @@ def wait_run(c, run_id):
 
 def w(path, content, mtime):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8")
     os.utime(path, (mtime, mtime))
 
 
@@ -272,8 +274,8 @@ def test_sync_por_api_con_local(papi):
     w(t / "pc saves/s.sav", "pc1", 1000)
     st = wait_run(papi, papi.post("/api/sync/g1", json={}).json()["run_id"])
     assert st["result"] == "ok" and st["winner"] == PC
-    assert (t / "laptop/home/usuario/g/s.sav").read_text() == "pc1"
-    assert (t / "data/hub/g1/s.sav").read_text() == "pc1"
+    assert (t / "laptop/home/usuario/g/s.sav").read_text(encoding="utf-8") == "pc1"
+    assert (t / "data/hub/g1/s.sav").read_text(encoding="utf-8") == "pc1"
     assert papi.get("/api/status").json()["g1"]["result"] == "ok"
 
 
@@ -287,12 +289,12 @@ def test_conflicto_y_resolucion_por_api_con_local(papi):
     assert st["result"] == "conflict"
     sides = {s["id"]: s for s in st["conflict"]["sides"]}
     assert set(sides) == {PC, LAP} and sides[PC]["name"] == "PC" and "hash" in sides[PC]
-    assert (t / "pc saves/s.sav").read_text() == "pc2"  # nada tocado
+    assert (t / "pc saves/s.sav").read_text(encoding="utf-8") == "pc2"  # nada tocado
     expect = {k: v["hash"] for k, v in sides.items()}
     r = papi.post("/api/sync/g1", json={"resolution": f"device:{PC}", "expect": expect})
     st = wait_run(papi, r.json()["run_id"])
     assert st["result"] == "ok" and st["winner"] == PC
-    assert (t / "laptop/home/usuario/g/s.sav").read_text() == "pc2"
+    assert (t / "laptop/home/usuario/g/s.sav").read_text(encoding="utf-8") == "pc2"
     # el perdedor quedó versionado y la API de versiones lo muestra con el nombre actual
     vs = papi.get("/api/versions/g1").json()
     assert vs and any(s["name"] == "Laptop" for v in vs for s in v["sources"])
@@ -313,7 +315,7 @@ def test_resolucion_por_nombre_del_local_via_api(papi):
 def test_sync_por_api_en_docker_con_local_no_arranca(papi, monkeypatch):
     """Un config con local en Docker queda inválido: la API se niega a sincronizar (500 con el motivo)."""
     monkeypatch.setenv("CHECKPOINT_RUNTIME", "docker")
-    settings.CONFIG_PATH.write_text(settings.CONFIG_PATH.read_text() + "\n")
+    settings.CONFIG_PATH.write_text(settings.CONFIG_PATH.read_text(encoding="utf-8") + "\n", encoding="utf-8")
     r = papi.post("/api/sync/g1", json={})
     assert (
         r.status_code == 500
@@ -331,7 +333,7 @@ def test_remoto_offline_via_api_con_local(papi, monkeypatch):
     w(t / "pc saves/s.sav", "pc1", 1000)
     st = wait_run(papi, papi.post("/api/sync/g1", json={}).json()["run_id"])
     assert st["result"] == "ok" and st["offline"] == [LAP]
-    assert (t / "data/hub/g1/s.sav").read_text() == "pc1"
+    assert (t / "data/hub/g1/s.sav").read_text(encoding="utf-8") == "pc1"
 
 
 # ---- CLI serve ----

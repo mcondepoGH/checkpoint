@@ -35,7 +35,7 @@ def test_does_not_sync_or_touch_files(client):
     before = sorted(str(p.relative_to(e.data)) for p in e.data.rglob("*") if "history" not in str(p))
     assert closed(client).status_code == 200
     after = sorted(str(p.relative_to(e.data)) for p in e.data.rglob("*") if "history" not in str(p))
-    assert before == after and (e.hub / "s.sav").read_text() == "base"
+    assert before == after and (e.hub / "s.sav").read_text(encoding="utf-8") == "base"
 
 
 def test_by_name_and_device_deduced(client):
@@ -108,9 +108,9 @@ def test_scheduler_current_is_busy(client):
 
 
 def test_disabled_game_records_skipped(tmp_path, env):
-    cfg = yaml.safe_load((tmp_path / "config" / "config.yaml").read_text())
+    cfg = yaml.safe_load((tmp_path / "config" / "config.yaml").read_text(encoding="utf-8"))
     cfg["games"]["g1"]["enabled"] = False
-    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg))
+    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
     c = TestClient(create_app(Auth("admin", PW, 1, rounds=4)))
     c.post("/api/login", json={"user": "admin", "password": PW})
     c.key = c.post("/api/devices/deck/apikey").json()["key"]

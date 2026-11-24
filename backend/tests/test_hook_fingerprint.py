@@ -46,12 +46,12 @@ class Env:
             },
         }
         (tmp / "config").mkdir(parents=True, exist_ok=True)
-        (tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg, allow_unicode=True))
+        (tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
 
     def write_hub(self, content, mtime=500):
         self.hub.mkdir(parents=True, exist_ok=True)
         f = self.hub / "s.sav"
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         os.utime(f, (mtime, mtime))
 
     def hash_of(self, content):
@@ -291,9 +291,9 @@ def test_409_scheduler_current(client):
 
 
 def test_409_game_disabled(tmp_path, monkeypatch, env):
-    cfg = yaml.safe_load((tmp_path / "config" / "config.yaml").read_text())
+    cfg = yaml.safe_load((tmp_path / "config" / "config.yaml").read_text(encoding="utf-8"))
     cfg["games"]["g1"]["enabled"] = False
-    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg))
+    (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
     c = TestClient(create_app(Auth("admin", PW, 1, rounds=4)))
     c.post("/api/login", json={"user": "admin", "password": PW})
     c.key = c.post("/api/devices/deck/apikey").json()["key"]
@@ -372,7 +372,7 @@ def test_opened_without_device_picks_the_ssh_one(client, monkeypatch):
         return LocalTransport(e.tmp / "pcroot")
 
     (e.tmp / "pcroot/home/u/g").mkdir(parents=True)
-    (e.tmp / "pcroot/home/u/g/s.sav").write_text("pc")
+    (e.tmp / "pcroot/home/u/g/s.sav").write_text("pc", encoding="utf-8")
     monkeypatch.setattr(sync, "get_transport", fake)
     r = opened(client)
     assert r.status_code == 200, r.text

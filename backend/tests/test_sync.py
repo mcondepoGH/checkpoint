@@ -53,7 +53,7 @@ class Env:
     def write(self, d: Path, name, content, mtime):
         f = d / name
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         os.utime(f, (mtime, mtime))
 
     def sync(self, dry=False, opts=None, **kw):
@@ -73,7 +73,7 @@ def env(tmp_path):
 
 
 def read(d, name):
-    return (d / name).read_text()
+    return (d / name).read_text(encoding="utf-8")
 
 
 def test_changed_side_wins_and_loser_versioned(env):
@@ -179,7 +179,7 @@ def test_keep_versions_prunes(env, monkeypatch):
 def _mkver(env, name, game="g", src="pc", content="x"):
     d = env.data / "versions" / game / name / src
     d.mkdir(parents=True)
-    (d / "s.sav").write_text(content)
+    (d / "s.sav").write_text(content, encoding="utf-8")
     return d.parent
 
 
@@ -320,14 +320,14 @@ def test_prune_stays_inside_game_dir_ignores_symlinks(env, tmp_path):
 
     outside = tmp_path / "outside" / "2026-01-01_100000"
     (outside / "pc").mkdir(parents=True)
-    (outside / "pc" / "s.sav").write_text("precious")
+    (outside / "pc" / "s.sav").write_text("precious", encoding="utf-8")
     base = env.data / "versions" / "g"
     base.mkdir(parents=True)
     (base / "2025-12-31_100000").symlink_to(outside, target_is_directory=True)  # nombre de versión, pero symlink
     for n in OLD[:2]:
         _mkver(env, n)
     prune_versions(env.data, "g", 1)
-    assert (outside / "pc" / "s.sav").read_text() == "precious"
+    assert (outside / "pc" / "s.sav").read_text(encoding="utf-8") == "precious"
     assert (base / "2025-12-31_100000").is_symlink()
     # carpeta del juego que es symlink fuera de data/versions: no se poda nada
     other = tmp_path / "elsewhere"
@@ -432,13 +432,13 @@ def test_free_names_use_id_paths_only(tmp_path):
     (pc / "C:/S/g").mkdir(parents=True)
     (laptop / "home/d/g").mkdir(parents=True)
     for d, c, t in [(pc / "C:/S/g", "old", 1000), (laptop / "home/d/g", "new", 2000)]:
-        (d / "s.sav").write_text(c)
+        (d / "s.sav").write_text(c, encoding="utf-8")
         os.utime(d / "s.sav", (t, t))
     tr = {a: LocalTransport(pc), b: LocalTransport(laptop)}
     st = run_sync(cfg, g, False, data, lambda m: None, tr, conflict_policy="newest")
     assert st["result"] == "ok"
     slug = g
-    assert (data / "hub" / slug / "s.sav").read_text() == "new"
+    assert (data / "hub" / slug / "s.sav").read_text(encoding="utf-8") == "new"
     assert (data / "status" / f"{slug}.json").exists() and (data / "locks" / f"{slug}.lock").exists()
     # nada con el nombre crudo en disco
     for sub in data.rglob("*"):
@@ -447,7 +447,7 @@ def test_free_names_use_id_paths_only(tmp_path):
     assert len(v) == 1 and v[0]["sources"][0]["source"] == a
     msg = restore_version(cfg, g, v[0]["version"], v[0]["sources"][0]["source"], data)
     assert msg["code"] == "err.sync.restored" and msg["params"]["source"] == "Mi PC (salón)"
-    assert (data / "hub" / slug / "s.sav").read_text() == "old"
+    assert (data / "hub" / slug / "s.sav").read_text(encoding="utf-8") == "old"
     with pytest.raises(SyncAbort):
         restore_version(cfg, g, v[0]["version"], "../x", data)
 

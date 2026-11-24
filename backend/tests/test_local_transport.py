@@ -111,7 +111,7 @@ def test_pull_copia_arbol_con_mtime(tr, tmp_path):
     (s / "carpeta_vacia").mkdir()
     d.mkdir()
     tr.pull(str(s), d)
-    assert (d / "a.sav").read_text() == "A" and (d / "sub/dir/b.sav").read_text() == "B"
+    assert (d / "a.sav").read_text(encoding="utf-8") == "A" and (d / "sub/dir/b.sav").read_text(encoding="utf-8") == "B"
     assert (d / "vacio.bin").read_bytes() == b""
     assert int((d / "sub/dir/b.sav").stat().st_mtime) == 2000 and int((d / "vacio.bin").stat().st_mtime) == 3000
     assert (d / "carpeta_vacia").is_dir()
@@ -135,7 +135,7 @@ def test_pull_nombres_raros(tr, tmp_path):
     tr.pull(str(s), d)
     assert relfiles(d) == set(nombres)
     for n in nombres:
-        assert (d / n).read_text() == n
+        assert (d / n).read_text(encoding="utf-8") == n
 
 
 def test_pull_fichero_grande(tr, tmp_path):
@@ -160,7 +160,7 @@ def test_pull_ignora_symlinks_fuera_de_ruta(tr, tmp_path):
     tr.pull(str(s), d)
     assert relfiles(d) == {"ok.sav"}
     assert not any(p.is_symlink() for p in d.rglob("*"))
-    assert "SECRETO" not in "".join(p.read_text() for p in d.rglob("*") if p.is_file())
+    assert "SECRETO" not in "".join(p.read_text(encoding="utf-8") for p in d.rglob("*") if p.is_file())
 
 
 def test_pull_carpeta_de_saves_es_symlink_se_resuelve(tr, tmp_path):
@@ -171,7 +171,7 @@ def test_pull_carpeta_de_saves_es_symlink_se_resuelve(tr, tmp_path):
     d.mkdir()
     assert tr.exists(str(tmp_path / "enlace"))
     tr.pull(str(tmp_path / "enlace"), d)
-    assert (d / "a.sav").read_text() == "A"
+    assert (d / "a.sav").read_text(encoding="utf-8") == "A"
 
 
 @root_only
@@ -212,7 +212,7 @@ def test_push_crea_carpeta_y_padres(tr, tmp_path):
     put(src, "x/y/b.sav", "B", 4321)
     dst = tmp_path / "no" / "existe" / "saves"
     tr.push(src, str(dst))
-    assert (dst / "a.sav").read_text() == "A" and (dst / "x/y/b.sav").read_text() == "B"
+    assert (dst / "a.sav").read_text(encoding="utf-8") == "A" and (dst / "x/y/b.sav").read_text(encoding="utf-8") == "B"
     assert int((dst / "a.sav").stat().st_mtime) == 1234 and int((dst / "x/y/b.sav").stat().st_mtime) == 4321
     assert fingerprint(src).hash == fingerprint(dst).hash
 
@@ -224,7 +224,7 @@ def test_push_borra_extras_y_reemplaza(tr, tmp_path):
     put(dst, "sub/otro.sav", "O")
     put(dst, "nuevo.sav", "antiguo")
     tr.push(src, str(dst), extras=["viejo.sav"])
-    assert relfiles(dst) == {"nuevo.sav"} and (dst / "nuevo.sav").read_text() == "N"
+    assert relfiles(dst) == {"nuevo.sav"} and (dst / "nuevo.sav").read_text(encoding="utf-8") == "N"
     assert not (dst / "sub").exists()
 
 
@@ -261,7 +261,7 @@ def test_push_atomico_si_falla_la_copia_el_destino_queda_intacto(tr, tmp_path, m
     monkeypatch.setattr(T.shutil, "copy2", flaky)
     with pytest.raises(TransportError, match="space"):
         tr.push(src, str(dst))
-    assert relfiles(dst) == {"a.sav"} and (dst / "a.sav").read_text() == "ORIGINAL"
+    assert relfiles(dst) == {"a.sav"} and (dst / "a.sav").read_text(encoding="utf-8") == "ORIGINAL"
     assert sorted(p.name for p in dst.parent.iterdir()) == ["saves"]  # temporal retirado
 
 
@@ -281,7 +281,7 @@ def test_push_si_falla_el_rename_final_se_deshace(tr, tmp_path, monkeypatch):
     monkeypatch.setattr(T.os, "rename", rn)
     with pytest.raises(TransportError, match="Input/output"):
         tr.push(src, str(dst))
-    assert (dst / "a.sav").read_text() == "ORIGINAL"
+    assert (dst / "a.sav").read_text(encoding="utf-8") == "ORIGINAL"
     assert sorted(p.name for p in dst.parent.iterdir()) == ["saves"]
 
 
@@ -300,7 +300,7 @@ def test_push_padre_sin_escritura_usa_reemplazo_en_sitio(tr, tmp_path):
         tr.push(src, str(dst))
     finally:
         padre.chmod(0o755)
-    assert relfiles(dst) == {"a.sav", "sub/c.sav"} and (dst / "a.sav").read_text() == "NUEVO"
+    assert relfiles(dst) == {"a.sav", "sub/c.sav"} and (dst / "a.sav").read_text(encoding="utf-8") == "NUEVO"
     assert int((dst / "a.sav").stat().st_mtime) == 111
     assert not (dst / "dir_extra").exists()
     assert fingerprint(src).hash == fingerprint(dst).hash
@@ -341,15 +341,15 @@ def test_push_no_sigue_symlinks_del_destino(tr, tmp_path, monkeypatch):
             monkeypatch.setattr(LocalDeviceTransport, "_swap", lambda self, s, t: False)
         fuera = tmp_path / f"fuera{swap}"
         fuera.mkdir()
-        (fuera / "intacto.txt").write_text("INTACTO")
+        (fuera / "intacto.txt").write_text("INTACTO", encoding="utf-8")
         src, dst = tmp_path / f"src{swap}", tmp_path / f"saves{swap}"
         put(src, "enlace/a.sav", "A")
         put(dst, "base.sav", "B")
         os.symlink(fuera, dst / "enlace")
         tr.push(src, str(dst))
         assert sorted(p.name for p in fuera.iterdir()) == ["intacto.txt"]
-        assert (fuera / "intacto.txt").read_text() == "INTACTO"
-        assert (dst / "enlace" / "a.sav").read_text() == "A"
+        assert (fuera / "intacto.txt").read_text(encoding="utf-8") == "INTACTO"
+        assert (dst / "enlace" / "a.sav").read_text(encoding="utf-8") == "A"
         assert not (dst / "enlace").is_symlink()
 
 
@@ -409,7 +409,7 @@ def test_push_sin_permiso_error_claro_y_sin_cambios(tr, tmp_path):
     finally:
         padre.chmod(0o755)
         dst.chmod(0o755)
-    assert (dst / "a.sav").read_text() == "ORIGINAL"
+    assert (dst / "a.sav").read_text(encoding="utf-8") == "ORIGINAL"
 
 
 @root_only

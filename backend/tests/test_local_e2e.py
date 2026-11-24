@@ -63,7 +63,7 @@ class LEnv:
     def write(self, d, name, content, mtime):
         f = d / name
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         os.utime(f, (mtime, mtime))
 
     def sync(self, dry=False, laptop=None, pc=None, **kw):
@@ -87,7 +87,7 @@ def env(tmp_path):
 
 
 def read(d, n="s.sav"):
-    return (d / n).read_text()
+    return (d / n).read_text(encoding="utf-8")
 
 
 def fake_run(running):
@@ -327,7 +327,7 @@ def test_dry_run_conflicto_conserva_marca_pendiente(env):
     env.conflict()
     assert env.sync()["result"] == "conflict"
     env.sync(dry=True)
-    assert json.loads((env.data / "status" / "g.json").read_text())["result"] == "conflict"
+    assert json.loads((env.data / "status" / "g.json").read_text(encoding="utf-8"))["result"] == "conflict"
 
 
 # ---- proceso abierto (detección local con subprocess simulado) ----
@@ -609,7 +609,7 @@ def test_restaurar_version_y_sincronizar_propaga_al_local(env):
 def test_symlink_en_saves_locales_no_filtra_ni_se_escribe_fuera(env):
     fuera = env.tmp / "fuera"
     fuera.mkdir()
-    (fuera / "secreto.txt").write_text("SECRETO")
+    (fuera / "secreto.txt").write_text("SECRETO", encoding="utf-8")
     env.write(env.pc_dir, "s.sav", "pc", 1000)
     os.symlink(fuera, env.pc_dir / "enlace")
     st = env.sync()
@@ -620,7 +620,8 @@ def test_symlink_en_saves_locales_no_filtra_ni_se_escribe_fuera(env):
     env.write(env.laptop_dir, "s.sav", "lap-new", 3000)
     assert env.sync()["result"] == "ok"
     assert (
-        sorted(p.name for p in fuera.iterdir()) == ["secreto.txt"] and (fuera / "secreto.txt").read_text() == "SECRETO"
+        sorted(p.name for p in fuera.iterdir()) == ["secreto.txt"]
+        and (fuera / "secreto.txt").read_text(encoding="utf-8") == "SECRETO"
     )
 
 

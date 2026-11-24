@@ -23,7 +23,7 @@ V = "2026-01-01_100000"
 def mk(data, source, content="x", game="g", ver=V):
     d = data / "versions" / game / ver / source
     d.mkdir(parents=True)
-    (d / "s.sav").write_text(content)
+    (d / "s.sav").write_text(content, encoding="utf-8")
 
 
 def test_list_marca_origen_desconocido(tmp_path):
@@ -43,10 +43,10 @@ def test_list_sin_nombres_no_marca_desconocidos(tmp_path):
 def test_restaurar_desde_origen_desconocido_copia_al_hub(tmp_path):
     mk(tmp_path, "gone-device", "viejo")
     (tmp_path / "hub" / "g").mkdir(parents=True)
-    (tmp_path / "hub" / "g" / "s.sav").write_text("actual")
+    (tmp_path / "hub" / "g" / "s.sav").write_text("actual", encoding="utf-8")
     msg = restore_version(CFG, "g", V, "gone-device", tmp_path)
     assert msg["code"] == "err.sync.restored" and msg["params"]["source"] == "gone-device"
-    assert (tmp_path / "hub" / "g" / "s.sav").read_text() == "viejo"
+    assert (tmp_path / "hub" / "g" / "s.sav").read_text(encoding="utf-8") == "viejo"
     # el hub actual se guardó antes como versión nueva
     names = [v["version"] for v in list_versions(tmp_path, "g")]
     assert len(names) == 2
@@ -57,7 +57,7 @@ def test_restaurar_desde_origen_desconocido_copia_al_hub(tmp_path):
 def test_restaurar_origen_con_espacios_de_nombre_antiguo(tmp_path):
     mk(tmp_path, "Steam Deck", "deck")
     restore_version(CFG, "g", V, "Steam Deck", tmp_path)
-    assert (tmp_path / "hub" / "g" / "s.sav").read_text() == "deck"
+    assert (tmp_path / "hub" / "g" / "s.sav").read_text(encoding="utf-8") == "deck"
 
 
 @pytest.mark.parametrize("src", ["../x", "a/b", "a\\b", "..", ".", "", "x\x00y"])
@@ -79,7 +79,7 @@ def test_origen_inexistente_es_version_unknown(tmp_path):
 def test_origen_enlace_simbolico_no_se_restaura(tmp_path):
     out = tmp_path / "fuera"
     out.mkdir()
-    (out / "s.sav").write_text("secreto")
+    (out / "s.sav").write_text("secreto", encoding="utf-8")
     (tmp_path / "versions" / "g" / V).mkdir(parents=True)
     (tmp_path / "versions" / "g" / V / "lnk").symlink_to(out, target_is_directory=True)
     with pytest.raises(SyncAbort) as e:
@@ -99,7 +99,8 @@ def test_endpoint_restaura_desconocido_y_lista_unknown(tmp_path, monkeypatch):
                 "devices": {"pc": {"name": "PC", "host": "h1", "user": "u", "os": "linux"}},
                 "games": {"g": {"name": "Juego", "devices": ["pc"], "paths": {"pc": "/p"}}},
             }
-        )
+        ),
+        encoding="utf-8",
     )
     mk(tmp_path / "data", "gone-device", "viejo")
     c = TestClient(create_app(Auth("admin", "pw-test-1234", 1, rounds=4)))
@@ -108,4 +109,4 @@ def test_endpoint_restaura_desconocido_y_lista_unknown(tmp_path, monkeypatch):
     assert s["unknown"] is True and s["source"] == "gone-device"
     r = c.post("/api/versions/g/restore", json={"version": V, "source": "gone-device"})
     assert r.status_code == 200 and r.json()["ok"] is True
-    assert (tmp_path / "data" / "hub" / "g" / "s.sav").read_text() == "viejo"
+    assert (tmp_path / "data" / "hub" / "g" / "s.sav").read_text(encoding="utf-8") == "viejo"

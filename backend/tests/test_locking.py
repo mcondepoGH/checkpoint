@@ -42,7 +42,7 @@ def test_flock_compatible_con_fcntl_directo(tmp_path):
     import fcntl
 
     p = tmp_path / "g.lock"
-    f = open(p, "w")
+    f = open(p, "w", encoding="utf-8")
     fcntl.flock(f, fcntl.LOCK_EX)
     with pytest.raises(LockBusy):
         acquire(p, "flock")
@@ -78,7 +78,7 @@ def test_excl_pid_muerto_es_huerfano(tmp_path):
     p = tmp_path / "g.lock"
     dead = subprocess.Popen([sys.executable, "-c", "pass"])
     dead.wait()
-    (tmp_path / "g.lock.excl").write_text(str(dead.pid))
+    (tmp_path / "g.lock.excl").write_text(str(dead.pid), encoding="utf-8")
     acquire(p, "excl").release()
 
 
@@ -86,7 +86,7 @@ def test_excl_pid_vivo_bloquea(tmp_path):
     p = tmp_path / "g.lock"
     live = subprocess.Popen([sys.executable, "-c", "import time;time.sleep(30)"])
     try:
-        (tmp_path / "g.lock.excl").write_text(str(live.pid))
+        (tmp_path / "g.lock.excl").write_text(str(live.pid), encoding="utf-8")
         with pytest.raises(LockBusy):
             acquire(p, "excl")
     finally:
@@ -95,7 +95,7 @@ def test_excl_pid_vivo_bloquea(tmp_path):
 
 
 def test_excl_fichero_basura_se_retira(tmp_path):
-    (tmp_path / "g.lock.excl").write_text("no-es-un-pid")
+    (tmp_path / "g.lock.excl").write_text("no-es-un-pid", encoding="utf-8")
     acquire(tmp_path / "g.lock", "excl").release()
 
 

@@ -34,13 +34,13 @@ class Env:
             },
         }
         (tmp / "config").mkdir(parents=True, exist_ok=True)
-        (tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg, allow_unicode=True))
+        (tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
         self.running = False
 
     def write(self, d, content, mtime, name="s.sav"):
         d.mkdir(parents=True, exist_ok=True)
         f = d / name
-        f.write_text(content)
+        f.write_text(content, encoding="utf-8")
         os.utime(f, (mtime, mtime))
 
     def seed(self, content="base"):
@@ -50,7 +50,7 @@ class Env:
         save_baseline(self.tmp / "data", "g1", {"dev-1": h, "hub": h})
 
     def read(self, d):
-        return (d / "s.sav").read_text()
+        return (d / "s.sav").read_text(encoding="utf-8")
 
 
 @pytest.fixture
@@ -128,7 +128,7 @@ def test_ciclo_del_scheduler_con_un_dispositivo(tmp_path, monkeypatch):
     e = Env(tmp_path)
     e.seed("old")
     e.write(e.d1, "new", 2000)
-    cfg = parse_config(yaml.safe_load((tmp_path / "config" / "config.yaml").read_text()))
+    cfg = parse_config(yaml.safe_load((tmp_path / "config" / "config.yaml").read_text(encoding="utf-8")))
     data = tmp_path / "data"
     s = Scheduler(
         lambda: cfg, lambda g: False, runner=lambda c, g, dry, log, **kw: run_sync(c, g, dry, data, log, **kw)

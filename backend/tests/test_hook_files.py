@@ -75,7 +75,9 @@ def test_upload_complete_goes_to_staging_not_hub(client):
         "complete": True,
     }
     assert (stage(e) / "tree" / "slot" / "s.sav").read_bytes() == b"nuevo"
-    assert (e.hub / "s.sav").read_text() == "base" and sorted(p.name for p in e.hub.iterdir()) == ["s.sav"]
+    assert (e.hub / "s.sav").read_text(encoding="utf-8") == "base" and sorted(p.name for p in e.hub.iterdir()) == [
+        "s.sav"
+    ]
 
 
 def test_upload_resume_with_offset(client):
@@ -252,9 +254,9 @@ def test_disabled_game_is_409(client):
     import yaml
 
     p = settings.CONFIG_PATH
-    cfg = yaml.safe_load(p.read_text())
+    cfg = yaml.safe_load(p.read_text(encoding="utf-8"))
     cfg["games"]["g1"]["enabled"] = False
-    p.write_text(yaml.safe_dump(cfg))
+    p.write_text(yaml.safe_dump(cfg), encoding="utf-8")
     assert put(client, "a.sav", b"x").status_code == 409
     assert code(put(client, "a.sav", b"x")) == "err.sync.game_disabled"
 
@@ -288,7 +290,7 @@ def test_commit_replaces_hub_and_records_everything(client):
     assert int(os.stat(e.hub / "s.sav").st_mtime) == 2000  # mtime del manifiesto
     (v,) = list_versions(e.data, "g1")
     assert v["version"] == r.json()["version"] and v["sources"][0]["source"] == "hub"
-    assert (e.data / "versions" / "g1" / v["version"] / "hub" / "s.sav").read_text() == "base"
+    assert (e.data / "versions" / "g1" / v["version"] / "hub" / "s.sav").read_text(encoding="utf-8") == "base"
     base = load_baseline(e.data, "g1")
     assert base["deck"] == new.hash and base["hub"] == new.hash
     (h,) = [x for x in history.read() if x["trigger"] == "hook"]
@@ -311,7 +313,7 @@ def test_commit_removes_hub_files_not_in_manifest(client):
     e = client.env
     e.write_hub("base")
     e.baseline()
-    (e.hub / "viejo.dat").write_text("v")
+    (e.hub / "viejo.dat").write_text("v", encoding="utf-8")
     h = fingerprint(e.hub).hash
     save_baseline(e.data, "g1", {"deck": h, "pc": h, "hub": h})
     man = full_upload(client, {"s.sav": b"nuevo"})
@@ -332,7 +334,7 @@ def test_commit_with_stale_expect_is_409_and_hub_untouched(client):
     man = full_upload(client, {"s.sav": b"nuevo"})
     r = commit(client, "0" * 64, man)
     assert r.status_code == 409 and code(r) == "err.hook.hub_changed"
-    assert (e.hub / "s.sav").read_text() == "base" and list_versions(e.data, "g1") == []
+    assert (e.hub / "s.sav").read_text(encoding="utf-8") == "base" and list_versions(e.data, "g1") == []
     assert (stage(e) / "tree" / "s.sav").exists()  # la subida sigue en staging
 
 
@@ -352,7 +354,7 @@ def test_commit_incomplete_set_is_422(client):
     r = commit(client, h, man)
     assert r.status_code == 422 and code(r) == "err.hook.upload_incomplete"
     assert r.json()["detail"]["params"] == {"missing": 1, "paths": ["falta.sav"]}
-    assert (e.hub / "s.sav").read_text() == "base"
+    assert (e.hub / "s.sav").read_text(encoding="utf-8") == "base"
 
 
 def test_commit_staged_size_differs_from_manifest_is_incomplete(client):
@@ -378,7 +380,7 @@ def test_commit_conflict_is_skipped(client):
     r = commit(client, h, man)
     assert r.status_code == 409 and code(r) == "err.hook.commit_rejected"
     assert r.json()["detail"]["params"] == {"reason": "both-changed"}
-    assert (e.hub / "s.sav").read_text() == "hub nuevo" and list_versions(e.data, "g1") == []
+    assert (e.hub / "s.sav").read_text(encoding="utf-8") == "hub nuevo" and list_versions(e.data, "g1") == []
     assert load_baseline(e.data, "g1")["deck"] != fingerprint(e.hub).hash
 
 
@@ -398,7 +400,7 @@ def test_commit_when_hub_wins_is_rejected(client):
     man = full_upload(client, {"s.sav": b"base"})  # el dispositivo no cambió: debe BAJAR, no subir
     r = commit(client, h, man)
     assert r.status_code == 409 and r.json()["detail"]["params"] == {"reason": "hub"}
-    assert (e.hub / "s.sav").read_text() == "hub nuevo"
+    assert (e.hub / "s.sav").read_text(encoding="utf-8") == "hub nuevo"
 
 
 def test_commit_identical_content_is_unchanged_and_remembers(client):
@@ -427,9 +429,9 @@ def test_commit_prunes_versions(client):
     import yaml
 
     p = settings.CONFIG_PATH
-    cfg = yaml.safe_load(p.read_text())
+    cfg = yaml.safe_load(p.read_text(encoding="utf-8"))
     cfg["max_versions"] = 1
-    p.write_text(yaml.safe_dump(cfg))
+    p.write_text(yaml.safe_dump(cfg), encoding="utf-8")
     e = client.env
     e.write_hub("v0")
     e.baseline("v0")
@@ -480,17 +482,17 @@ def test_upload_through_planted_symlink_is_rejected(client, tmp_path):
 
 def test_upload_over_planted_symlink_file_is_rejected(client, tmp_path):
     target = tmp_path / "secret.txt"
-    target.write_text("keep")
+    target.write_text("keep", encoding="utf-8")
     tree = stage(client.env) / "tree"
     tree.mkdir(parents=True)
     (tree / "f").symlink_to(target)
     assert put(client, "f", b"pwned").status_code == 400
-    assert target.read_text() == "keep"
+    assert target.read_text(encoding="utf-8") == "keep"
 
 
 def test_commit_never_copies_through_symlinks(client, tmp_path):
     secret = tmp_path / "secret.txt"
-    secret.write_text("secreto")
+    secret.write_text("secreto", encoding="utf-8")
     man = full_upload(client, {"a.sav": b"a"})
     (stage(client.env) / "tree" / "leak").symlink_to(secret)
     assert commit(client, None, man).status_code == 200
@@ -550,7 +552,7 @@ def test_download_unknown_file_and_directory_are_404(client):
 @pytest.mark.parametrize("rel", ["../x", "a/../../x", "/etc/passwd", "a\\..\\..\\x", "..", "a\0b"])
 def test_download_rejects_unsafe_paths(client, rel):
     client.env.write_hub("x")
-    (client.env.data / "x").write_text("fuera del hub")
+    (client.env.data / "x").write_text("fuera del hub", encoding="utf-8")
     r = get_file(client, rel)
     assert r.status_code in (400, 422) and code(r) in ("err.hook.file_path_invalid", "err.hook.param_invalid")
 
@@ -560,7 +562,7 @@ def test_download_through_symlinks_is_rejected(client, tmp_path):
     e.write_hub("x")
     secret = tmp_path / "outside"
     secret.mkdir()
-    (secret / "secret.txt").write_text("secreto")
+    (secret / "secret.txt").write_text("secreto", encoding="utf-8")
     (e.hub / "dirlink").symlink_to(secret, target_is_directory=True)
     (e.hub / "filelink").symlink_to(secret / "secret.txt")
     for rel in ("dirlink/secret.txt", "filelink"):
@@ -573,7 +575,7 @@ def test_download_drive_like_name_is_just_a_name(client):
     e = client.env
     e.write_hub("x")
     (e.hub / "C:").mkdir()
-    (e.hub / "C:" / "x").write_text("ok")
+    (e.hub / "C:" / "x").write_text("ok", encoding="utf-8")
     assert get_file(client, "C:/x").content == b"ok"
 
 

@@ -119,7 +119,7 @@ def test_versions_limit_error_messages():
 def test_save_roundtrip_without_override(tmp_path):
     c = parse_config(mod(max_versions=9))
     save_config(tmp_path / "c.yaml", c)
-    assert "keep_versions" not in (tmp_path / "c.yaml").read_text()
+    assert "keep_versions" not in (tmp_path / "c.yaml").read_text(encoding="utf-8")
     assert load_config(tmp_path / "c.yaml").max_versions == 9
 
 

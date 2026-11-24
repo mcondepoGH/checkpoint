@@ -105,7 +105,7 @@ def with_appids(c, appids):
         cfg["games"][gid]["steam_appid"] = a
     from app.core import settings
 
-    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg, allow_unicode=True))
+    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
 
 
 def test_user_key_sees_steam_appid_or_null(cl):

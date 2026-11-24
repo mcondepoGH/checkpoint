@@ -128,7 +128,7 @@ def test_history_fixed_cap_200(tmp_path, monkeypatch):
     assert history.MAX_ENTRIES == 200
     for i in range(210):
         history.append(_entry(i), now=NOW)
-    assert len(history.path().read_text().splitlines()) == 200
+    assert len(history.path().read_text(encoding="utf-8").splitlines()) == 200
     assert [e["message"] for e in history.read(200)][:2] == ["e209", "e208"]
     assert len(history.read(200)) == 200
 
@@ -137,20 +137,22 @@ def test_history_prunes_old_file_on_read(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "DATA_DIR", tmp_path)
     import json
 
-    tmp_path.joinpath(history.FILE).write_text("".join(json.dumps(_entry(i)) + "\n" for i in range(275)))
+    tmp_path.joinpath(history.FILE).write_text(
+        "".join(json.dumps(_entry(i)) + "\n" for i in range(275)), encoding="utf-8"
+    )
     r = history.read(200)
     assert [e["message"] for e in r] == [f"e{i}" for i in range(274, 74, -1)]
-    assert len(history.path().read_text().splitlines()) == 200
+    assert len(history.path().read_text(encoding="utf-8").splitlines()) == 200
 
 
 def test_history_corrupt_lines_ignored(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "DATA_DIR", tmp_path)
     history.append(_entry(1), now=NOW)
-    with open(history.path(), "a") as f:
+    with open(history.path(), "a", encoding="utf-8") as f:
         f.write("{no json\n[1,2]\n\n" + json.dumps({"id": 1}) + "\n")
     assert [e["message"] for e in history.read()] == ["e1"]
     history.append(_entry(2), now=NOW)  # reescribe sin las malas
-    assert len(history.path().read_text().splitlines()) == 2
+    assert len(history.path().read_text(encoding="utf-8").splitlines()) == 2
     history.path().write_bytes(b"\xff\xfe\x00garbage")
     assert history.read() == []
 

@@ -15,7 +15,7 @@ from app.sync.scheduler import Scheduler, validate_settings
 from app.sync.engine import SyncAbort
 
 APP = Path(__file__).parents[1] / "app"
-ES = json.loads((Path(__file__).parents[2] / "frontend/src/locales/es.json").read_text())
+ES = json.loads((Path(__file__).parents[2] / "frontend/src/locales/es.json").read_text(encoding="utf-8"))
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 CUR = {"enabled": False, "interval_hours": 24.0, "run_on_start": False}
 
@@ -28,7 +28,9 @@ def has(code):
 
 
 def test_codes_in_es_json():
-    src = (APP / "sync/scheduler.py").read_text() + (APP / "users/history.py").read_text()
+    src = (APP / "sync/scheduler.py").read_text(encoding="utf-8") + (APP / "users/history.py").read_text(
+        encoding="utf-8"
+    )
     codes = set(re.findall(r'"(err\.scheduler\.[a-z_]+)"', src))
     assert len(codes) >= 6, codes
     assert not sorted(c for c in codes if not has(c))
@@ -127,7 +129,7 @@ def test_old_entries_read_as_is(tmp_path, monkeypatch):
         "message": "g: no se pudo",
     }
     raw = json.dumps(old, ensure_ascii=False) + "\n"
-    history.path().write_text(raw)
+    history.path().write_text(raw, encoding="utf-8")
     assert history.read()[0] == old
     history.append(history.make_entry(NOW, 1, "scheduled", "ok", {}), now=NOW)
     assert [e["id"] for e in history.read()][-1] == "old1" and history.read()[-1] == old

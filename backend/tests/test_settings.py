@@ -11,8 +11,8 @@ APP = Path(__file__).resolve().parents[1]
 
 def _run(code, **env):
     e = {k: v for k, v in os.environ.items() if not k.startswith("CHECKPOINT_")}
-    e.update(CHECKPOINT_RUNTIME="native", PYTHONPATH=str(APP), **env)
-    return subprocess.run([sys.executable, "-c", code], env=e, capture_output=True, text=True)
+    e.update(CHECKPOINT_RUNTIME="native", PYTHONPATH=str(APP), PYTHONIOENCODING="utf-8", **env)
+    return subprocess.run([sys.executable, "-c", code], env=e, capture_output=True, text=True, encoding="utf-8")
 
 
 @pytest.mark.slow

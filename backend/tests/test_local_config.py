@@ -123,7 +123,7 @@ def test_round_trip_yaml(tmp_path):
     c = parse_config(cfg_dict())
     p = tmp_path / "config.yaml"
     save_config(p, c)
-    txt = p.read_text()
+    txt = p.read_text(encoding="utf-8")
     assert "local: true" in txt and "host" not in txt.split("laptop-bbbb2222")[0]
     c2, err = parse_text(txt)
     assert err is None and c2 == c

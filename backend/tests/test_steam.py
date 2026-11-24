@@ -76,7 +76,7 @@ def code(r):
 
 
 def cfg_games(hub):
-    return yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text())["games"]
+    return yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8"))["games"]
 
 
 def sugg(hub):
@@ -184,7 +184,7 @@ def test_exact_unique_match_associates_and_writes_valid_config(hub):
     ]
     games = cfg_games(hub)
     assert games["hades"]["steam_appid"] == 1145360 and games["witcher"]["steam_appid"] == 292030
-    assert validate_config(yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text()))[1] == {}
+    assert validate_config(yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8")))[1] == {}
     # visible en GET /api/games
     g = {x["id"]: x for x in hub.anon.get("/api/games", headers=bearer(hub.key)).json()}
     assert g["hades"]["steam_appid"] == 1145360
@@ -205,10 +205,10 @@ def test_game_with_general_appid_gets_only_a_per_device_entry_on_exact_name(hub)
 
 
 def test_same_appid_is_idempotent(hub):
-    before = (hub.tmp / "config" / "config.yaml").read_text()
+    before = (hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8")
     j = lib(hub, [(111, "Has Appid")]).json()
     assert j == {"associated": [], "suggested": 0, "unchanged": 1, "ignored": 0}
-    assert (hub.tmp / "config" / "config.yaml").read_text() == before
+    assert (hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8") == before
 
 
 def test_second_call_is_idempotent_after_associating(hub):
@@ -383,9 +383,9 @@ def test_accept_removes_rival_suggestions_of_same_game_or_appid(hub):
 def test_accept_409_when_game_got_an_appid_meanwhile(hub):
     lib(hub, [(9, "The Witcher 3 Wild Hunt GOTY")])
     sid = sugg(hub)[0]["id"]
-    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text())
+    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8"))
     cfg["games"]["witcher"]["steam_appid"] = 55
-    (hub.tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg))
+    (hub.tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
     r = hub.session.post(f"/api/steam/suggestions/{sid}/accept")
     assert r.status_code == 409 and code(r) == "err.steam.game_has_appid"
     assert cfg_games(hub)["witcher"]["steam_appid"] == 55
@@ -394,9 +394,9 @@ def test_accept_409_when_game_got_an_appid_meanwhile(hub):
 def test_accept_409_when_appid_in_use_meanwhile(hub):
     lib(hub, [(9, "The Witcher 3 Wild Hunt GOTY")])
     sid = sugg(hub)[0]["id"]
-    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text())
+    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8"))
     cfg["games"]["hades"]["steam_appid"] = 9
-    (hub.tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg))
+    (hub.tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
     r = hub.session.post(f"/api/steam/suggestions/{sid}/accept")
     assert r.status_code == 409 and code(r) == "err.steam.appid_in_use"
     assert "steam_appid" not in cfg_games(hub)["witcher"]
@@ -405,9 +405,9 @@ def test_accept_409_when_appid_in_use_meanwhile(hub):
 def test_accept_404_when_game_removed(hub):
     lib(hub, [(9, "The Witcher 3 Wild Hunt GOTY")])
     sid = sugg(hub)[0]["id"]
-    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text())
+    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8"))
     del cfg["games"]["witcher"]
-    (hub.tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg))
+    (hub.tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
     r = hub.session.post(f"/api/steam/suggestions/{sid}/accept")
     assert r.status_code == 404 and code(r) == "err.steam.game_unknown"
 
@@ -444,9 +444,9 @@ def test_accept_config_changed_retries_then_409(hub, monkeypatch):
 
 def test_suggestion_stale_after_game_gets_appid_is_hidden(hub):
     lib(hub, [(9, "The Witcher 3 Wild Hunt GOTY")])
-    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text())
+    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8"))
     cfg["games"]["witcher"]["steam_appid"] = 55
-    (hub.tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg))
+    (hub.tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
     assert sugg(hub) == []
 
 
@@ -472,7 +472,7 @@ def test_dismiss_is_remembered_and_not_proposed_again(hub):
 def test_dismiss_survives_service_restart_and_has_no_secrets(hub):
     lib(hub, [(9, "The Witcher 3 Wild Hunt GOTY")])
     hub.session.post(f"/api/steam/suggestions/{sugg(hub)[0]['id']}/dismiss")
-    raw = dismissed_file(hub).read_text()
+    raw = dismissed_file(hub).read_text(encoding="utf-8")
     assert json.loads(raw)
     assert hub.key not in raw and "ckd_" not in raw and "ck_" not in raw
     app2 = create_app(hub.auth)
@@ -507,7 +507,7 @@ def test_dismiss_only_blocks_that_pair(hub):
 
 def test_corrupt_dismissed_file_is_empty_not_a_crash(hub):
     dismissed_file(hub).parent.mkdir(parents=True)
-    dismissed_file(hub).write_text("{no json")
+    dismissed_file(hub).write_text("{no json", encoding="utf-8")
     assert hub.session.get("/api/steam/dismissed").json() == []
     assert lib(hub, [(9, "The Witcher 3 Wild Hunt GOTY")]).json()["suggested"] == 1
 
@@ -525,9 +525,9 @@ def test_dismissed_cap_drops_oldest(hub, monkeypatch):
 def test_purge_forgets_dismissals_of_removed_games(hub):
     lib(hub, [(9, "The Witcher 3 Wild Hunt GOTY")])
     hub.session.post(f"/api/steam/suggestions/{sugg(hub)[0]['id']}/dismiss")
-    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text())
+    cfg = yaml.safe_load((hub.tmp / "config" / "config.yaml").read_text(encoding="utf-8"))
     del cfg["games"]["witcher"]
-    (hub.tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg))
+    (hub.tmp / "config" / "config.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
     hub.ctx.steam.purge()
     assert hub.session.get("/api/steam/dismissed").json() == []
 

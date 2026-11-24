@@ -110,8 +110,8 @@ def test_no_spanish_in_emitted_errors():
 def test_codes_in_es_json():
     import json
 
-    es = json.loads((Path(__file__).parents[2] / "frontend/src/locales/es.json").read_text())
-    src = "".join((Path(C.__file__).parent / f).read_text() for f in ("models.py", "store.py"))
+    es = json.loads((Path(__file__).parents[2] / "frontend/src/locales/es.json").read_text(encoding="utf-8"))
+    src = "".join((Path(C.__file__).parent / f).read_text(encoding="utf-8") for f in ("models.py", "store.py"))
     codes = set(re.findall(r'"(err\.(?:config|configstore)\.[a-z_]+)"', src))
     assert len(codes) > 30
     for c in codes:

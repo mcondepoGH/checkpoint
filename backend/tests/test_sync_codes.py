@@ -15,7 +15,7 @@ from tests.test_api import client, login  # noqa: F401
 from tests.test_sync import CFG, env  # noqa: F401
 
 APP = Path(__file__).parents[1] / "app"
-ES = json.loads((Path(__file__).parents[2] / "frontend/src/locales/es.json").read_text())
+ES = json.loads((Path(__file__).parents[2] / "frontend/src/locales/es.json").read_text(encoding="utf-8"))
 
 
 def has(code):
@@ -26,8 +26,10 @@ def has(code):
 
 
 def test_codes_in_es_json():
-    src = "".join(f.read_text() for f in [*sorted((APP / "sync").rglob("*.py")), APP / "core" / "bootstrap.py"])
-    src += (APP / "main.py").read_text()
+    src = "".join(
+        f.read_text(encoding="utf-8") for f in [*sorted((APP / "sync").rglob("*.py")), APP / "core" / "bootstrap.py"]
+    )
+    src += (APP / "main.py").read_text(encoding="utf-8")
     codes = set(re.findall(r'"(err\.(?:sync|transport|bootstrap)\.[a-z_]+)"', src))
     codes.discard("err.sync.conflict_")  # prefijo: los cinco motivos se añaden a mano
     codes |= {
@@ -180,5 +182,5 @@ def test_status_json_has_no_spanish_text(env):
     env.write(env.pc_dir, "s.sav", "pc-new", 3000)
     st = env.sync()
     _no_spanish({k: st[k] for k in ("code", "params", "message")})
-    saved = json.loads((env.data / "status" / "g.json").read_text())
+    saved = json.loads((env.data / "status" / "g.json").read_text(encoding="utf-8"))
     assert saved["code"] == st["code"] and saved["params"] == st["params"]

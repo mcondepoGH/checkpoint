@@ -84,7 +84,7 @@ def test_round_trip_yaml(tmp_path):
     c = parse_config(cfg_dict())
     p = tmp_path / "config.yaml"
     save_config(p, c)
-    txt = p.read_text()
+    txt = p.read_text(encoding="utf-8")
     assert "http: true" in txt and "local" not in txt
     c2, err = parse_text(txt)
     assert err is None and c2 == c
@@ -112,7 +112,7 @@ def _mixed(tmp_path, monkeypatch, both_http=False):
         c = parse_config(d)
     laptop = tmp_path / "laptop"
     (laptop / "home/usuario/g").mkdir(parents=True)
-    (laptop / "home/usuario/g/s.sav").write_text("laptop")
+    (laptop / "home/usuario/g/s.sav").write_text("laptop", encoding="utf-8")
     asked = []
 
     def fake(dev):
@@ -130,7 +130,7 @@ def test_sync_mixto_ignora_el_http(tmp_path, monkeypatch):
     st = run_sync(c, "g-cccc3333", data_dir=tmp_path / "data", log=lambda m: None)
     assert st["result"] == "ok", st
     assert asked == ["Laptop"]
-    assert (tmp_path / "data/hub/g-cccc3333/s.sav").read_text() == "laptop"
+    assert (tmp_path / "data/hub/g-cccc3333/s.sav").read_text(encoding="utf-8") == "laptop"
 
 
 def test_sync_solo_http_aborta_con_codigo(tmp_path, monkeypatch):
@@ -148,7 +148,7 @@ def test_sync_ssh_sigue_igual_sin_http(tmp_path, monkeypatch):
     root = tmp_path / "r"
     for p in ("home/deck/saves", "home/usuario/g"):
         (root / p).mkdir(parents=True)
-        (root / p / "s.sav").write_text("x")
+        (root / p / "s.sav").write_text("x", encoding="utf-8")
     monkeypatch.setattr(sync, "get_transport", lambda dev: LocalTransport(root))
     st = run_sync(c, "g-cccc3333", data_dir=tmp_path / "data", log=lambda m: None)
     assert st["result"] == "ok"

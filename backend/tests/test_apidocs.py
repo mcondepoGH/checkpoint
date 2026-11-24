@@ -56,7 +56,7 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(settings, "STATIC_DIR", tmp_path / "static")
     (tmp_path / "static" / "docs-assets").mkdir(parents=True)
-    (tmp_path / "static" / "index.html").write_text("<html>SPA</html>")
+    (tmp_path / "static" / "index.html").write_text("<html>SPA</html>", encoding="utf-8")
     for n, b in ASSET_BODIES.items():
         (tmp_path / "static" / "docs-assets" / n).write_bytes(b)
     return create_app(Auth("admin", PW, 1, rounds=4))
@@ -124,7 +124,7 @@ def test_openapi_only_has_the_api_key_paths(client):
         ("/api/steam/dismissed/{dismissed_id}", "delete"),
     }
     assert j["info"]["title"] == "API de Checkpoint (avisos del lanzador)"
-    assert j["info"]["version"] == (Path(__file__).resolve().parents[2] / "VERSION").read_text().strip()
+    assert j["info"]["version"] == (Path(__file__).resolve().parents[2] / "VERSION").read_text(encoding="utf-8").strip()
     assert [t["name"] for t in j["tags"]] == [
         apidocs.TAG,
         apidocs.GAMES_TAG,

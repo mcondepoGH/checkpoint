@@ -33,7 +33,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "CONFIG_PATH", tmp_path / "config" / "config.yaml")
     monkeypatch.setattr(settings, "DATA_DIR", tmp_path / "data")
     (tmp_path / "config").mkdir()
-    settings.CONFIG_PATH.write_text(SEED)
+    settings.CONFIG_PATH.write_text(SEED, encoding="utf-8")
     clock = [datetime(2026, 1, 1, 12, 0, 0)]
     monkeypatch.setattr(configstore, "_now", lambda: clock[0])
     return ConfigStore(), clock
@@ -116,10 +116,10 @@ def test_save_preserves_comments_and_backs_up(env):
     d["devices"]["c"] = {"name": "Equipo C", "host": "10.0.0.3", "user": "u", "os": "linux", "port": 22}
     res = store.save(snap.version, validate_config(d)[0])
     assert res["changed"] and res["backup"] == "config.yaml.bak-2026-01-01_120000"
-    text = settings.CONFIG_PATH.read_text()
+    text = settings.CONFIG_PATH.read_text(encoding="utf-8")
     assert "# mis dispositivos" in text and "# servidor" in text and "# uno o dos" in text
     assert "host: 10.0.0.9" in text and "c:" in text and '"/home/u/saves"' in text  # comillas conservadas
-    assert (settings.DATA_DIR / "config-backups" / res["backup"]).read_text() == SEED
+    assert (settings.DATA_DIR / "config-backups" / res["backup"]).read_text(encoding="utf-8") == SEED
     assert parse_config(__import__("yaml").safe_load(text)).devices["c"].host == "10.0.0.3"
     assert [f.name for f in settings.CONFIG_PATH.parent.iterdir()] == ["config.yaml"]  # sin temporales
     assert store.snapshot().cfg.devices["a"].host == "10.0.0.9"  # recargado en memoria al instante
@@ -130,7 +130,7 @@ def test_save_noop_makes_no_backup(env):
     snap = store.snapshot()
     res = store.save(snap.version, snap.cfg)
     assert res["changed"] is False and store.list_backups() == []
-    assert settings.CONFIG_PATH.read_text() == SEED
+    assert settings.CONFIG_PATH.read_text(encoding="utf-8") == SEED
 
 
 def test_permissions(env):
@@ -162,7 +162,7 @@ def test_non_backup_files_ignored(env):
     store, _ = env
     bdir = settings.DATA_DIR / "config-backups"
     bdir.mkdir(parents=True)
-    (bdir / "otro.txt").write_text("x")
+    (bdir / "otro.txt").write_text("x", encoding="utf-8")
     assert store.list_backups() == []
     with pytest.raises(FileNotFoundError):
         store.read_backup("../../etc/passwd")
@@ -174,20 +174,20 @@ def test_invalid_rejected_file_untouched(env):
     d["devices"]["a"]["host"] = "x y"
     cfg, errs = validate_config(d)
     assert cfg is None and "devices.a.host" in errs
-    assert settings.CONFIG_PATH.read_text() == SEED
+    assert settings.CONFIG_PATH.read_text(encoding="utf-8") == SEED
 
 
 # ---------- conflicto por cambio externo / recarga en vivo ----------
 def test_conflict_on_external_change(env):
     store, _ = env
     base = store.snapshot().version
-    settings.CONFIG_PATH.write_text(SEED.replace("10.0.0.1", "10.0.0.77"))  # edición a mano
+    settings.CONFIG_PATH.write_text(SEED.replace("10.0.0.1", "10.0.0.77"), encoding="utf-8")  # edición a mano
     d = draft_of(store)
     d["devices"]["a"]["port"] = 2222
     with pytest.raises(Conflict) as e:
         store.save(base, validate_config(d)[0])
     assert e.value.current_version != base
-    assert "10.0.0.77" in settings.CONFIG_PATH.read_text()  # no se pisó
+    assert "10.0.0.77" in settings.CONFIG_PATH.read_text(encoding="utf-8")  # no se pisó
     assert store.list_backups() == []
 
 
@@ -199,7 +199,7 @@ def test_live_reload_and_events(env):
     gen = config_events_gen(store, interval=0, keepalive=0, max_ticks=3, sleep=lambda s: ticks.append(1))
     first = next(gen)
     assert first.startswith("event: config") and s1.version in first
-    settings.CONFIG_PATH.write_text(SEED.replace("10.0.0.1", "10.0.0.55"))
+    settings.CONFIG_PATH.write_text(SEED.replace("10.0.0.1", "10.0.0.55"), encoding="utf-8")
     rest = list(gen)
     assert any(r.startswith("event: config") for r in rest)  # el cambio externo se anuncia
     assert store.snapshot().cfg.devices["a"].host == "10.0.0.55"
@@ -207,10 +207,10 @@ def test_live_reload_and_events(env):
 
 def test_invalid_external_edit_reported_not_crashing(env):
     store, _ = env
-    settings.CONFIG_PATH.write_text("devices: [\n")
+    settings.CONFIG_PATH.write_text("devices: [\n", encoding="utf-8")
     snap = store.snapshot()
     assert snap.error and snap.cfg is None
-    settings.CONFIG_PATH.write_text("devices:\n  a: {host: 'x y', user: u, os: linux}\n")
+    settings.CONFIG_PATH.write_text("devices:\n  a: {host: 'x y', user: u, os: linux}\n", encoding="utf-8")
     assert {"path": "devices.a.host", "code": "err.config.host_invalid", "params": {}} in store.snapshot().error[
         "params"
     ]["causes"]
@@ -225,7 +225,7 @@ def test_restore_backup_roundtrip(env):
     [b] = store.list_backups()
     clock[0] += timedelta(minutes=1)
     res = store.restore(store.snapshot().version, b["name"])
-    assert res["changed"] and settings.CONFIG_PATH.read_text() == SEED  # exacto, con comentarios
+    assert res["changed"] and settings.CONFIG_PATH.read_text(encoding="utf-8") == SEED  # exacto, con comentarios
     assert len(store.list_backups()) == 2  # la versión previa a restaurar también se respalda
 
 
@@ -234,10 +234,10 @@ def test_restore_conflict_and_invalid(env):
     bdir = settings.DATA_DIR / "config-backups"
     bdir.mkdir(parents=True)
     name = "config.yaml.bak-2025-01-01_000000"
-    (bdir / name).write_text("devices:\n  a: {host: 'x y', user: u, os: linux}\n")
+    (bdir / name).write_text("devices:\n  a: {host: 'x y', user: u, os: linux}\n", encoding="utf-8")
     with pytest.raises(InvalidConfig):
         store.restore(store.snapshot().version, name)
-    (bdir / name).write_text(SEED)
+    (bdir / name).write_text(SEED, encoding="utf-8")
     with pytest.raises(Conflict):
         store.restore("0000", name)
 
@@ -282,7 +282,7 @@ def test_api_flow(client):
     assert "port: 2222" in y
     assert client.post("/api/config/yaml", json={"config": {"devices": {"a": {}}}}).status_code == 422
     # edición externa -> 409 con versión actual
-    settings.CONFIG_PATH.write_text(settings.CONFIG_PATH.read_text() + "\n# a mano\n")
+    settings.CONFIG_PATH.write_text(settings.CONFIG_PATH.read_text(encoding="utf-8") + "\n# a mano\n", encoding="utf-8")
     r = client.put("/api/config", json={"config": d2, "base_version": v1})
     assert r.status_code == 409 and r.json()["current_version"] != v1
     assert client.get("/api/config").json()["version"] == r.json()["current_version"]
@@ -322,11 +322,11 @@ def test_enabled_false_written_and_true_omitted(env):
     d["games"]["g"]["enabled"] = False
     res = store.save(snap.version, validate_config(d)[0])
     assert res["changed"]
-    assert "enabled: false" in settings.CONFIG_PATH.read_text()
+    assert "enabled: false" in settings.CONFIG_PATH.read_text(encoding="utf-8")
     assert store.snapshot().cfg.games["g"].enabled is False
     snap = store.snapshot()
     d = draft_of(store)
     d["games"]["g"]["enabled"] = True
     store.save(snap.version, validate_config(d)[0])
-    assert "enabled" not in settings.CONFIG_PATH.read_text()
+    assert "enabled" not in settings.CONFIG_PATH.read_text(encoding="utf-8")
     assert store.snapshot().cfg.games["g"].enabled is True
