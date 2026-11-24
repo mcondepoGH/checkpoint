@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from conftest import KEY, set_hash
 
-from checkpoint_client import cli, hub, locks, settings, texts, watcher
+from checkpoint_client import cli, hub, locks, settings, texts, update, watcher
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "checkpoint_client"
 GAME = "g1"
@@ -520,7 +520,7 @@ def test_help_texts_come_from_texts_module(capsys):
     for cmd in ("link", "games", "sync", "run", "status", "unlink", "watch", "install", "uninstall"):
         assert cmd in out
     assert texts.HELP_WATCH in out and texts.HELP_INSTALL in out and texts.HELP_UNINSTALL in out
-    assert "check-update" not in out  # llegará con su subtarea
+    assert texts.HELP_VERSION in out and texts.HELP_CHECK_UPDATE in out
 
 
 def test_cli_has_no_loose_text_literals():
@@ -661,3 +661,89 @@ def test_second_watch_is_refused(linked, run):
 def test_watch_needs_a_link(home, run):
     code, _, err = run("watch")
     assert code == 1 and err.strip() == texts.ERR_NOT_LINKED
+
+
+# ---------------------------------------------------------------- version y check-update
+WHEEL_URL = "https://github.com/mcondepoGH/checkpoint/releases/download/v1.4.0/checkpoint_client-1.2.0-py3-none-any.whl"
+
+
+def test_version_prints_the_installed_version_without_network(fakegithub, home, run):
+    code, out, err = run("version")
+    assert code == 0 and out == cli.__version__ + "\n" and err == ""
+    assert fakegithub.requests == []
+
+
+def test_version_and_check_update_have_the_approved_help(run, capsys):
+    assert texts.HELP_VERSION == "muestra la versión instalada"
+    assert texts.HELP_CHECK_UPDATE == "comprueba si hay una versión nueva (no instala nada)"
+    cli.main(["--help"])
+    out = capsys.readouterr().out
+    assert "version" in out and texts.HELP_VERSION in out and texts.HELP_CHECK_UPDATE in out
+
+
+def test_check_update_announces_a_new_version_and_how_to_update(fakegithub, home, run):
+    code, out, err = run("check-update")
+    assert code == 0 and err == ""
+    assert out.splitlines() == [
+        texts.UPDATE_AVAILABLE.format(v="1.2.0", c=cli.__version__),
+        texts.UPDATE_COMMAND.format(url=WHEEL_URL),
+    ]
+    assert out.splitlines()[1] == f"pipx install --force {WHEEL_URL}"
+
+
+def test_check_update_up_to_date(fakegithub, home, run, monkeypatch):
+    monkeypatch.setattr(cli, "__version__", "1.2.0")
+    code, out, err = run("check-update")
+    assert code == 0 and out.strip() == texts.UPDATE_UP_TO_DATE.format(v="1.2.0") and err == ""
+
+
+def test_check_update_release_without_wheel_means_up_to_date(fakegithub, home, run):
+    from conftest import release
+
+    fakegithub.response = (200, release(wheels=()), {})
+    code, out, err = run("check-update")
+    assert code == 0 and out.strip() == texts.UPDATE_UP_TO_DATE.format(v=cli.__version__) and err == ""
+
+
+@pytest.mark.parametrize(
+    ("response", "reason"),
+    [
+        ((403, {"message": "rate limit"}, {}), "rate_limited"),
+        ((500, {}, {}), "http"),
+        ((200, b"no json", {}), "invalid"),
+    ],
+)
+def test_check_update_failure_is_reported_and_exits_1(fakegithub, home, run, response, reason):
+    fakegithub.response = response
+    code, out, err = run("check-update")
+    assert code == 1 and out == ""
+    assert err.strip() == texts.UPDATE_FAILED.format(reason=texts.UPDATE_REASONS[reason])
+
+
+def test_check_update_connection_failure(home, run):  # sin fakegithub: puerto cerrado
+    code, out, err = run("check-update")
+    assert code == 1 and out == "" and err.strip() == texts.UPDATE_FAILED.format(reason=texts.UPDATE_REASONS["network"])
+
+
+def test_check_update_works_unlinked_and_never_sends_the_key_nor_installs(fakegithub, linked, run):
+    before = sorted(os.listdir(settings.config_dir()))
+    code, _, _ = run("check-update")
+    assert code == 0
+    assert all("authorization" not in r["headers"] for r in fakegithub.requests) and len(fakegithub.requests) == 1
+    assert all(KEY not in str(r) for r in fakegithub.requests)
+    assert not any(r["path"].endswith(".whl") for r in fakegithub.requests)  # solo avisa: no descarga el wheel
+    assert linked.requests == []  # ni habla con el hub
+    assert set(os.listdir(settings.config_dir())) - set(before) <= {update.CACHE_FILE}
+
+
+def test_check_update_uses_the_cache_for_six_hours(fakegithub, home, run):
+    run("check-update")
+    run("check-update")
+    assert len(fakegithub.requests) == 1
+
+
+def test_other_commands_never_check_for_updates(fakegithub, linked, run):
+    put(linked.save, "a.sav", b"1")
+    for argv in (("status",), ("games",), ("sync", GAME), ("sync", "--all"), ("sync", GAME, "--dry-run")):
+        run(*argv)
+    assert fakegithub.requests == []

@@ -21,6 +21,8 @@ HELP_INSTALL = "deja el vigilante arrancando solo al iniciar sesión (systemd --
 HELP_UNINSTALL = "quita el arranque automático (no borra la vinculación ni los datos)"
 HELP_STATUS = "muestra la vinculación, la conexión con el hub, el vigilante y la versión"
 HELP_UNLINK = "borra la clave de este equipo (la revocación real se hace en el hub, en Dispositivos)"
+HELP_VERSION = "muestra la versión instalada"
+HELP_CHECK_UPDATE = "comprueba si hay una versión nueva (no instala nada)"
 
 # ---------------------------------------------------------------- vinculación
 LINK_CODE = (
@@ -74,6 +76,12 @@ INSTALL_DONE = (
 INSTALL_FAILED = "No se pudo crear la unidad systemd --user: {reason}. No se ha cambiado nada."
 INSTALL_NO_SYSTEMD = "systemd --user no está disponible en esta sesión."
 INSTALL_ONLY_LINUX = "El arranque automático solo está disponible en Linux (systemd)."
+
+# ---------------------------------------------------------------- versión
+UPDATE_UP_TO_DATE = "El cliente está al día ({v})."
+UPDATE_AVAILABLE = "Hay una versión nueva: {v} (instalada: {c})."
+UPDATE_COMMAND = "pipx install --force {url}"
+UPDATE_FAILED = "No se pudo comprobar la versión nueva: {reason}."
 
 # ---------------------------------------------------------------- errores
 ERR_CONNECTION = "No se pudo conectar con el hub. Revisa la dirección y la red. Hub: {url}."
@@ -170,3 +178,14 @@ KEYRING_LOCKED = (
 )
 LOCATION_KEYRING = "llavero"
 LOCATION_FILE = "fichero"
+
+# ---------------------------------------------------------------- PENDIENTES DE APROBAR (no los cubre la tarjeta)
+# El «{motivo}» de «No se pudo comprobar la versión nueva: {motivo}.». La tarjeta no dice qué motivos hay: estas frases
+# son una PROPUESTA y están pendientes de que el usuario las apruebe o las cambie. Claves = `UpdateError.reason`.
+UPDATE_REASONS = {
+    "network": "no se pudo conectar con GitHub",
+    "timeout": "GitHub no respondió a tiempo",
+    "rate_limited": "GitHub limitó las consultas, inténtalo más tarde",
+    "http": "GitHub respondió con un error",
+    "invalid": "la respuesta de GitHub no es válida",
+}

@@ -1,4 +1,4 @@
-"""CLI de checkpoint-client: link, unlink, games, sync, run, watch y status.
+"""CLI de checkpoint-client: link, unlink, games, sync, run, watch, install, uninstall, status, version y check-update.
 
 Códigos de salida (como `backend/app/cli.py`): 0 correcto, 1 error, 2 uso, 3 conflicto. Los errores van a stderr y todo
 texto visible sale de `texts`. Nunca se imprime ni se registra la clave (`redact`).
@@ -16,7 +16,7 @@ from checkpoint_core.names import DeviceNameError, normalize_device_name
 from checkpoint_core.redaction import redact
 from checkpoint_core.urls import HubUrlError, normalize_hub_url
 
-from . import PROTOCOL, __version__, hub, locks, keystore, settings, texts, watcher
+from . import PROTOCOL, __version__, hub, locks, keystore, settings, texts, update, watcher
 from .hubclient import HubApiError
 from .hub import HubNetworkError
 from .install import systemd
@@ -95,6 +95,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("install", help=texts.HELP_INSTALL, description=texts.HELP_INSTALL)
     sub.add_parser("uninstall", help=texts.HELP_UNINSTALL, description=texts.HELP_UNINSTALL)
     sub.add_parser("status", help=texts.HELP_STATUS, description=texts.HELP_STATUS)
+    sub.add_parser("version", help=texts.HELP_VERSION, description=texts.HELP_VERSION)
+    sub.add_parser("check-update", help=texts.HELP_CHECK_UPDATE, description=texts.HELP_CHECK_UPDATE)
     return ap
 
 
@@ -521,6 +523,24 @@ def cmd_status(a: argparse.Namespace) -> int:
     return code
 
 
+def cmd_version(a: argparse.Namespace) -> int:
+    _out(__version__)
+    return OK
+
+
+def cmd_check_update(a: argparse.Namespace) -> int:
+    """Consulta (con caché) la última Release de GitHub y AVISA; no instala ni descarga nada ni usa la vinculación."""
+    r = update.check(settings.config_dir(), __version__)
+    if r["state"] == "error":
+        raise _fail(texts.UPDATE_FAILED.format(reason=texts.UPDATE_REASONS.get(r["reason"], texts.UPDATE_REASONS["http"])))
+    if r["state"] == "available":
+        _out(texts.UPDATE_AVAILABLE.format(v=r["latest"], c=r["current"]))
+        _out(texts.UPDATE_COMMAND.format(url=r["wheel_url"]))
+    else:
+        _out(texts.UPDATE_UP_TO_DATE.format(v=r["current"]))
+    return OK
+
+
 COMMANDS = {
     "link": cmd_link,
     "unlink": cmd_unlink,
@@ -531,6 +551,8 @@ COMMANDS = {
     "install": cmd_install,
     "uninstall": cmd_uninstall,
     "status": cmd_status,
+    "version": cmd_version,
+    "check-update": cmd_check_update,
 }
 
 

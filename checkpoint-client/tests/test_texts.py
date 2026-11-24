@@ -48,6 +48,13 @@ def test_keyring_locked_text_approved_by_the_user():
     )
 
 
+def test_version_texts_approved_in_the_card():
+    assert texts.UPDATE_UP_TO_DATE.format(v="1.0.0") == "El cliente está al día (1.0.0)."
+    assert texts.UPDATE_AVAILABLE.format(v="1.2.0", c="1.0.0") == "Hay una versión nueva: 1.2.0 (instalada: 1.0.0)."
+    assert texts.UPDATE_COMMAND.format(url="https://x/w.whl") == "pipx install --force https://x/w.whl"
+    assert texts.UPDATE_FAILED.format(reason="x") == "No se pudo comprobar la versión nueva: x."
+
+
 def test_engine_error_texts_do_not_mention_deck():
     assert all("Deck" not in t for t in texts.SYNC_ERRORS.values())
     assert texts.SYNC_ERRORS["no_space"].endswith("en este equipo para bajar los ficheros.")
@@ -55,7 +62,7 @@ def test_engine_error_texts_do_not_mention_deck():
 
 def test_every_format_field_is_filled_by_known_names():
     allowed = {"code", "device", "where", "game", "n", "path", "i", "name", "message", "ok", "c", "e", "url", "min",
-              "s", "log", "key", "value", "reason"}  # fmt: skip
+              "s", "log", "key", "value", "reason", "v"}  # fmt: skip
     for name in dir(texts):
         value = getattr(texts, name)
         if isinstance(value, str):

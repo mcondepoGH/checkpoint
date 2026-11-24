@@ -10,6 +10,7 @@ import hashlib
 import json
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -216,6 +217,69 @@ class FakeHub:
     def stop(self):
         self.server.shutdown()
         self.server.server_close()
+
+
+class FakeGitHub:
+    """API de Releases de GitHub falsa (`GET .../releases/latest`). `response` = (estado, cuerpo bytes|dict|list, cabeceras);
+    `delay` = segundos de espera antes de responder (para el tiempo agotado). Guarda cada petición (ruta y cabeceras)."""
+
+    def __init__(self):
+        self.requests = []
+        self.response = (200, release(), {})
+        self.delay = 0.0
+        gh = self
+
+        class H(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                gh.requests.append({"path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()}})
+                if gh.delay:
+                    time.sleep(gh.delay)
+                status, body, headers = gh.response
+                raw = body if isinstance(body, bytes) else json.dumps(body).encode()
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(raw)))
+                for k, v in headers.items():
+                    self.send_header(k, v)
+                self.end_headers()
+                try:
+                    self.wfile.write(raw)
+                except OSError:
+                    pass
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}/repos/x/y/releases/latest"
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def stop(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+def release(tag="v1.4.0", wheels=("checkpoint_client-1.2.0-py3-none-any.whl",), prerelease=False):
+    """Cuerpo de una Release de GitHub con sus assets (los del hub, sin wheel, si `wheels` está vacío)."""
+    base = "https://github.com/mcondepoGH/checkpoint/releases/download/" + tag
+    assets = [{"name": n, "browser_download_url": f"{base}/{n}"} for n in wheels]
+    assets.append({"name": "Checkpoint.zip", "browser_download_url": f"{base}/Checkpoint.zip"})
+    return {"tag_name": tag, "draft": False, "prerelease": prerelease, "assets": assets}
+
+
+@pytest.fixture
+def fakegithub(monkeypatch):
+    g = FakeGitHub()
+    monkeypatch.setenv("CHECKPOINT_CLIENT_RELEASES_URL", g.url)
+    yield g
+    g.stop()
+
+
+@pytest.fixture(autouse=True)
+def never_real_github(monkeypatch):
+    """Ningún test llega a GitHub de verdad: por defecto la consulta apunta a un puerto cerrado."""
+    monkeypatch.setenv("CHECKPOINT_CLIENT_RELEASES_URL", "http://127.0.0.1:1/releases/latest")
 
 
 @pytest.fixture

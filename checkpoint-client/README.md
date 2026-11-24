@@ -2,7 +2,7 @@
 
 Cliente de [Checkpoint](../README.md) para Linux: sincroniza los guardados de tus juegos con el hub por HTTP, con una clave de dispositivo `ckd_` y **sin SSH**. Es una CLI (sin interfaz gráfica ni bandeja). Windows y el modo «Solo cliente» van aparte.
 
-Estado: núcleo, vigilante, arranque automático y llavero en Linux (`0.1.0`, sin publicar). Todavía no hay comprobación de versiones nuevas.
+Estado: núcleo, vigilante, arranque automático, llavero y aviso de versión nueva en Linux (`0.1.0`, sin publicar).
 
 ## Instalación
 
@@ -32,9 +32,28 @@ checkpoint-client watch                     # vigila los juegos y sube su guarda
 checkpoint-client install                   # el vigilante arranca solo al iniciar sesión (systemd --user)
 checkpoint-client uninstall                 # quita el arranque automático
 checkpoint-client status                    # vinculación, conexión, vigilante y versión
+checkpoint-client version                   # versión instalada
+checkpoint-client check-update              # avisa si hay una versión nueva (no instala nada)
 ```
 
 `<juego>` es el id que muestra `games`. Códigos de salida: 0 correcto, 1 error, 2 uso, 3 conflicto (no se toca nada).
+
+### Versión nueva (`version`, `check-update`)
+
+`version` imprime la versión instalada (semver propio del cliente; no depende de la del hub). `check-update` consulta la última Release estable del repositorio en GitHub (API pública, sin token y sin enviar la clave de este equipo), busca en ella el wheel `checkpoint_client-X.Y.Z-*.whl` y, si su versión es mayor que la instalada, lo dice y da el comando para actualizar:
+
+```text
+Hay una versión nueva: 1.2.0 (instalada: 1.0.0).
+pipx install --force https://github.com/.../checkpoint_client-1.2.0-py3-none-any.whl
+```
+
+Solo avisa: no descarga ni instala nada, y no hace falta estar vinculado. Reglas:
+
+- **Release sin wheel** (por ejemplo una Release solo del hub): cuenta como «sin versión nueva» y dice «El cliente está al día». Una pre-release no cuenta (solo canal estable).
+- **Caché:** la última respuesta correcta se guarda hasta 6 horas en `~/.config/checkpoint-client/update_cache.json`, así que una Release recién publicada puede tardar hasta 6 h en avisarse (para forzarlo, borra ese fichero). Un fallo no se guarda.
+- **Fallos:** sin red, tiempo agotado (5 s), límite de consultas de GitHub o respuesta no válida dan «No se pudo comprobar la versión nueva: {motivo}.» y salida 1.
+- Ningún otro comando consulta GitHub (ni `status`, ni `sync`, ni `watch`).
+- Para probar sin red real, la variable `CHECKPOINT_CLIENT_RELEASES_URL` sustituye la URL de la API de Releases.
 
 ### Vigilante (`watch`)
 
