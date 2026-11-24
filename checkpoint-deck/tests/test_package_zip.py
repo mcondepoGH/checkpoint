@@ -84,7 +84,7 @@ def test_zip_declara_version_semver_y_protocolo(copia):
     """El package.json del zip lleva `version` semver y `checkpointProtocol` entero: lo que `/info` anuncia al plugin."""
     import json
 
-    from checkpoint_version import parse_semver
+    from checkpoint_core.version import parse_semver
 
     con_dist(copia)
     assert empaquetar(copia).returncode == 0

@@ -4,14 +4,14 @@ El plugin avisa de que hay una versión nueva pero NO la descarga ni la instala:
 «Ajustes de Decky > Desarrollador > Instalar plugin desde URL» con `<hub>/api/deck/plugin`.
 
 - `fetch_info`: consulta pública (sin clave `ckd_`) a `/api/deck/plugin/info`.
-- `evaluate`: ¿hay versión ESTRICTAMENTE mayor? (semver propio, `checkpoint_version.py`) y si el hub es viejo.
+- `evaluate`: ¿hay versión ESTRICTAMENTE mayor? (semver compartido, `checkpoint_core.version`) y si el hub es viejo.
 Comprobado en una Deck real: «Instalar plugin desde URL» acepta la dirección http del hub. Que Decky recargue el
 plugin sin reiniciar puede variar según la versión de Decky."""
 
 from typing import Any, Dict, Optional
 
+from checkpoint_core.version import is_newer, parse_semver
 from checkpoint_hub import request_json
-from checkpoint_version import is_newer, parse_semver
 
 
 # ---------------------------------------------------------------- consulta (solo lectura)

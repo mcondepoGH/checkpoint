@@ -7,6 +7,7 @@ Sin cambios de comportamiento ni de protocolo.
 ### Cambios
 
 - **Código común:** el manifiesto local, la URL del hub, el nombre del dispositivo, la redacción de claves y `compat` pasan a `checkpoint_core` (carpeta `checkpoint-core/`, compartida con el cliente de Linux, sin copias). `scripts/package.sh` lo copia al zip como `py_modules/checkpoint_core/` (el zip sigue siendo autocontenido y solo stdlib) y falla si falta `../checkpoint-core`; la etapa `deck` del Dockerfile lo copia al build. Por probar: el zip construido por Docker en una Deck real.
+- **Semver al core:** `parse_semver`, `compare` e `is_newer` pasan a `checkpoint_core.version` (con sus pruebas en `checkpoint-core/`); `checkpoint_version.py` conserva `plugin_dir` y `read_version`. Sin cambios de comportamiento.
 
 ## 1.4.0 - 2026-11-24
 

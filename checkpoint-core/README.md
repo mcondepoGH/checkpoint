@@ -9,6 +9,7 @@ Paquete `checkpoint_core`: el código **puro** que comparten el [plugin de la St
 | `names` | `normalize_device_name`, `DeviceNameError`, `NAME_MAX` |
 | `redaction` | `redact`, `describe_error` (claves `ckd_` y secretos fuera de logs y mensajes) |
 | `protocol` | `KEY_PREFIX`, `parse_protocol`, `compat` |
+| `version` | `parse_semver`, `compare`, `is_newer` (semver con precedencia de semver.org) |
 
 No se publica por separado: el wheel del cliente lo trae dentro (`package-dir` en `checkpoint-client/pyproject.toml`) y `checkpoint-deck/scripts/package.sh` lo copia al zip del plugin. Mapa y reglas en [`docs/structure.md`](../docs/structure.md).
 
