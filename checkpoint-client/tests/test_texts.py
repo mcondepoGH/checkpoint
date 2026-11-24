@@ -8,7 +8,7 @@ from checkpoint_client import texts
 def test_approved_texts_are_verbatim():
     assert (
         texts.HELP_ROOT
-        == "checkpoint-client: sincroniza los guardados de tus juegos con el hub de Checkpoint, sin SSH."
+        == "checkpoint-client: sincroniza los guardados de tus juegos con el hub de Checkpoint, sin SSH"
     )
     assert texts.LINK_WAITING == "Esperando aceptación en el hub… (Ctrl+C para cancelar)"
     assert texts.LINK_CODE.format(code="123 456") == (
@@ -68,3 +68,18 @@ def test_every_format_field_is_filled_by_known_names():
         if isinstance(value, str):
             fields = {f for _, f, _, _ in string.Formatter().parse(value) if f}
             assert fields <= allowed, (name, fields - allowed)
+
+
+def test_help_texts_have_no_final_period_approved_by_the_user():
+    helps = {k: v for k, v in vars(texts).items() if k.startswith("HELP_") and isinstance(v, str)}
+    assert helps and not [k for k, v in helps.items() if v.endswith(".")]
+
+
+def test_update_failure_reasons_approved_by_the_user():
+    assert texts.UPDATE_REASONS == {
+        "network": "no se pudo conectar con GitHub",
+        "timeout": "GitHub no respondió a tiempo",
+        "rate_limited": "GitHub limitó las consultas, inténtalo más tarde",
+        "http": "GitHub respondió con un error",
+        "invalid": "la respuesta de GitHub no es válida",
+    }

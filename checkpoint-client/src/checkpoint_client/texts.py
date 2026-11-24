@@ -2,11 +2,11 @@
 
 Son los «Textos aprobados» de la tarjeta, tal cual, más los que el usuario aprobó después (sección «Aprobados fuera de
 la tarjeta»). Un texto que el comando necesita y aún no está aprobado va en una sección «Pendientes de aprobar» al final,
-marcado como tal. Los errores se escriben en stderr.
+marcado como tal (ahora mismo no hay ninguno). Los errores se escriben en stderr.
 """
 
 # ---------------------------------------------------------------- ayuda de la CLI
-HELP_ROOT = "checkpoint-client: sincroniza los guardados de tus juegos con el hub de Checkpoint, sin SSH."
+HELP_ROOT = "checkpoint-client: sincroniza los guardados de tus juegos con el hub de Checkpoint, sin SSH"
 HELP_LINK = "vincula este equipo con el hub (código de 6 dígitos que se acepta en la web)"
 HELP_LINK_HUB = "dirección del hub, p. ej. http://192.168.1.10:8088"
 HELP_LINK_NAME = "nombre de este equipo en el hub (por defecto el del equipo; máximo 64 caracteres)"
@@ -179,9 +179,8 @@ KEYRING_LOCKED = (
 LOCATION_KEYRING = "llavero"
 LOCATION_FILE = "fichero"
 
-# ---------------------------------------------------------------- PENDIENTES DE APROBAR (no los cubre la tarjeta)
-# El «{motivo}» de «No se pudo comprobar la versión nueva: {motivo}.». La tarjeta no dice qué motivos hay: estas frases
-# son una PROPUESTA y están pendientes de que el usuario las apruebe o las cambie. Claves = `UpdateError.reason`.
+# ---------------------------------------------------------------- aprobados fuera de la tarjeta
+# El «{motivo}» de «No se pudo comprobar la versión nueva: {motivo}.» (aprobados por el usuario). Claves = `UpdateError.reason`.
 UPDATE_REASONS = {
     "network": "no se pudo conectar con GitHub",
     "timeout": "GitHub no respondió a tiempo",
