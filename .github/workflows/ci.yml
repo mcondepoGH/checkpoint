@@ -95,11 +95,17 @@ jobs:
   core:
     # Código común al plugin de la Deck y al cliente (checkpoint-core/). El plugin corre en el Python de Decky:
     # el core debe seguir siendo compatible con 3.8 (por eso 3.8 va en la matriz) y con el Python del cliente (3.12).
-    runs-on: ubuntu-latest
+    # 3.8 va en ubuntu-22.04 porque setup-python ya no ofrece 3.8 en ubuntu-24.04 ni 26.04 (ubuntu-latest).
+    # Cuando GitHub retire la imagen ubuntu-22.04 habrá que subir el mínimo del core o buscar otra vía.
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.12"]
+        include:
+          - python-version: "3.8"
+            os: ubuntu-22.04
+          - python-version: "3.12"
+            os: ubuntu-latest
     defaults:
       run:
         working-directory: checkpoint-core

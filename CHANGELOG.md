@@ -9,6 +9,7 @@
 ### Cambios
 
 - Cada Release lleva adjunto el wheel del cliente de Linux (job `client` de `release.yml`, versión propia del cliente). CI: jobs nuevos `client` (Python 3.12) y `core` (Python 3.8 y 3.12); `audit.yml` audita las dependencias del cliente y Dependabot vigila `checkpoint-client` y `checkpoint-core`.
+- CI: el job `core` con Python 3.8 corre en `ubuntu-22.04` (en `ubuntu-latest` ya no existe 3.8 en setup-python y el job fallaba); Python 3.12 sigue en `ubuntu-latest`.
 
 ## 2.4.1 (2026-11-24)
 
