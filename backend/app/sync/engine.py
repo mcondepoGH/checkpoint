@@ -177,12 +177,12 @@ def run_sync(
     keep_conflict = False
     if dry_run and status["result"] != "conflict":  # un dry-run no borra la marca de conflicto pendiente
         try:
-            keep_conflict = json.loads((sd / f"{gs}.json").read_text()).get("result") == "conflict"
+            keep_conflict = json.loads((sd / f"{gs}.json").read_text(encoding="utf-8")).get("result") == "conflict"
         except (OSError, ValueError, AttributeError):
             pass
     if not keep_conflict:
         tmp = sd / f".{gs}.tmp"
-        tmp.write_text(json.dumps(status))
+        tmp.write_text(json.dumps(status), encoding="utf-8")
         os.replace(tmp, sd / f"{gs}.json")
     return status
 

@@ -14,7 +14,7 @@ def _state_path(data_dir: Path, game: str) -> Path:
 def load_baseline(data_dir: Path, game: str) -> Dict[str, Optional[str]]:
     """{origen: hash|None}. None = estaba vacío. Sin fichero o ilegible = sin baseline (comportamiento seguro)."""
     try:
-        raw = json.loads(_state_path(data_dir, game).read_text())
+        raw = json.loads(_state_path(data_dir, game).read_text(encoding="utf-8"))
         base = raw["base"]
         if isinstance(base, dict) and all(v is None or isinstance(v, str) for v in base.values()):
             return dict(base)
@@ -30,7 +30,9 @@ def save_baseline(data_dir: Path, game: str, updates: Dict[str, Optional[str]]) 
     base = load_baseline(data_dir, game)
     base.update(updates)
     tmp = p.with_name(f".{p.name}.tmp")
-    tmp.write_text(json.dumps({"base": base, "updated": datetime.now().isoformat(timespec="seconds")}))
+    tmp.write_text(
+        json.dumps({"base": base, "updated": datetime.now().isoformat(timespec="seconds")}), encoding="utf-8"
+    )
     os.replace(tmp, p)
 
 
@@ -39,7 +41,7 @@ def drop_baseline(data_dir: Path, game: str, origins) -> bool:
     reescribe (nunca se pierde un baseline que no se ha podido leer). Escritura atómica."""
     p = _state_path(data_dir, game)
     try:
-        raw = json.loads(p.read_text())
+        raw = json.loads(p.read_text(encoding="utf-8"))
         base = raw["base"]
         if not isinstance(base, dict):
             return False
@@ -51,6 +53,8 @@ def drop_baseline(data_dir: Path, game: str, origins) -> bool:
     for o in gone:
         del base[o]
     tmp = p.with_name(f".{p.name}.tmp")
-    tmp.write_text(json.dumps({"base": base, "updated": datetime.now().isoformat(timespec="seconds")}))
+    tmp.write_text(
+        json.dumps({"base": base, "updated": datetime.now().isoformat(timespec="seconds")}), encoding="utf-8"
+    )
     os.replace(tmp, p)
     return True

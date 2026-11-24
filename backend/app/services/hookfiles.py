@@ -190,10 +190,10 @@ def _prepare_part(stage: Path, rel: str, size: int, sha: str, offset: int) -> Tu
     want = {"path": rel, "sha256": sha, "size": size}
     if offset == 0:
         part.write_bytes(b"")
-        meta.write_text(json.dumps(want))
+        meta.write_text(json.dumps(want), encoding="utf-8")
         return part, meta
     try:
-        same = json.loads(meta.read_text()) == want
+        same = json.loads(meta.read_text(encoding="utf-8")) == want
         have = part.stat().st_size if same else 0
     except (OSError, ValueError):
         have = 0

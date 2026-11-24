@@ -15,7 +15,7 @@ def read_statuses(games: dict) -> dict:
     if sd.is_dir():
         for f in sd.glob("*.json"):
             try:
-                st = json.loads(f.read_text())
+                st = json.loads(f.read_text(encoding="utf-8"))
                 # El fichero se llama como el id del juego: esa es la clave y el valor de "game".
                 st["game"] = f.stem
                 # La UI pinta `name`: siempre el nombre actual de la config (nunca el id).

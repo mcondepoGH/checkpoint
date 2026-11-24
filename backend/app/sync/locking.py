@@ -90,12 +90,12 @@ def _acquire_excl(path: Path) -> _Handle:
         # El PID se escribe en un temporal y se publica con os.link (atómico, falla si ya existe): nadie
         # puede ver nunca un fichero de lock a medias.
         tmp = lock.with_name(f"{lock.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
-        tmp.write_text(str(os.getpid()))
+        tmp.write_text(str(os.getpid()), encoding="utf-8")
         try:
             os.link(tmp, lock)
         except FileExistsError:
             try:
-                pid = int(lock.read_text().strip() or 0)
+                pid = int(lock.read_text(encoding="utf-8").strip() or 0)
             except (OSError, ValueError):
                 pid = 0
             tmp.unlink(missing_ok=True)

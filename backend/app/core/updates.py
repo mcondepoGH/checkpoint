@@ -164,7 +164,7 @@ class UpdateChecker:
     # ---- persistencia (todo tolerante a fallos de disco) ----
     def _read(self, name) -> dict:
         try:
-            d = json.loads((settings.DATA_DIR / name).read_text())
+            d = json.loads((settings.DATA_DIR / name).read_text(encoding="utf-8"))
             return d if isinstance(d, dict) else {}
         except (OSError, ValueError):
             return {}
@@ -174,7 +174,7 @@ class UpdateChecker:
             settings.DATA_DIR.mkdir(parents=True, exist_ok=True)
             p = settings.DATA_DIR / name
             tmp = p.with_name(p.name + ".tmp")
-            tmp.write_text(json.dumps(data))
+            tmp.write_text(json.dumps(data), encoding="utf-8")
             os.replace(tmp, p)
         except OSError:
             pass

@@ -144,7 +144,7 @@ class Scheduler:
     def _load(self) -> dict:
         base = default_settings()
         try:
-            saved = json.loads(self._path().read_text())
+            saved = json.loads(self._path().read_text(encoding="utf-8"))
             merged = validate_settings(saved, base)
             merged["last_run"], merged["last_status"] = saved.get("last_run"), saved.get("last_status")
             return merged
@@ -155,7 +155,9 @@ class Scheduler:
         p = self._path()
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_name(f".{p.name}.tmp")
-        tmp.write_text(json.dumps({**self.cfg, "last_run": iso(self.last_run), "last_status": self.last_status}))
+        tmp.write_text(
+            json.dumps({**self.cfg, "last_run": iso(self.last_run), "last_status": self.last_status}), encoding="utf-8"
+        )
         os.replace(tmp, p)
 
     # ---- API ----

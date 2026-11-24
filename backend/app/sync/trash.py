@@ -102,13 +102,13 @@ def move_in(data_dir: Path, entry: Path, rel_from: str, rel_to: str) -> dict:
 
 def write_manifest(entry: Path, created: datetime, items: List[dict]) -> None:
     tmp = entry / f".{MANIFEST}.tmp"
-    tmp.write_text(json.dumps({"created": iso(created), "items": items}))
+    tmp.write_text(json.dumps({"created": iso(created), "items": items}), encoding="utf-8")
     os.replace(tmp, entry / MANIFEST)
 
 
 def read_manifest(entry: Path) -> Optional[dict]:
     try:
-        m = json.loads((entry / MANIFEST).read_text())
+        m = json.loads((entry / MANIFEST).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return m if isinstance(m, dict) and isinstance(m.get("items"), list) else None
