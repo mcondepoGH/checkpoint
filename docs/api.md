@@ -53,7 +53,7 @@ La key **identifica al dispositivo**: `?device=` pasa a ser opcional en sus endp
 | `GET /api/hook/ping` | sí | sí (añade `"device": "<id>"`) |
 | `GET /api/hook/watches` | sí | no (`401`) |
 | `POST /api/hook/{juego}/opened` | sí: sync previa y vigilancia de cierre (dispositivos SSH o «Este equipo»; con un dispositivo `http`, `400` `err.hook.device_push_only`) | sí: solo marca «jugando» en ese dispositivo (no sincroniza ni vigila; ver «`POST /api/hook/{juego}/opened`») |
-| `GET /api/games` | sí: todos los juegos | sí: solo los juegos que tienen ese dispositivo, cada uno con `path` (la ruta del guardado en ese dispositivo, o `null`) |
+| `GET /api/games` | sí: todos los juegos | sí: solo los juegos que tienen ese dispositivo, cada uno con `path` (la ruta del guardado en ese dispositivo, o `null`) y `process` (el proceso del juego, o `null`) |
 | `POST /api/steam/library` | no (`401`) | sí: solo toca los juegos que tienen ese dispositivo (ver «Asociar juegos de Steam desde la Deck») |
 | `POST /api/steam/games`, `PUT /api/steam/games/{juego}/enabled`, `PUT /api/steam/games/{juego}/path` | no (`401`) | sí: crear un juego de ese dispositivo, activar o desactivar uno de sus juegos y cambiar su carpeta de guardado (ver «Asociar juegos de Steam desde la Deck») |
 | `POST /api/hook/{juego}/fingerprint`, `GET /manifest`, `GET`/`PUT /files`, `POST /commit`, `PUT /resolution` | no (`401`) | sí, solo en juegos que incluyen el dispositivo |
@@ -152,7 +152,7 @@ En la misma tarjeta, el bloque **Clave del dispositivo** indica si **tiene clave
 
 ## Hooks
 
-Rutas `/api/hook/*` para que un lanzador avise al hub con la API key de usuario (ver «API key de usuario») o, en las de los dispositivos `http` (y en `opened`, que con ella solo marca «jugando»), con la del dispositivo (ver «API key de dispositivo `http`»). Hoy: el aviso de apertura (que además arma el **cierre automático**), la comparación de saves de un dispositivo `http` (`fingerprint`) y su subida y bajada fichero a fichero (`manifest`, `files`, `commit`), la consulta de vigilancias y, con la misma key, la lista de juegos (`GET /api/games`). Con la key de dispositivo, cada juego incluye `path`: la «Ruta del save en <dispositivo>» configurada en el hub para ese dispositivo (cadena tal cual, o `null` si no tiene; nunca las rutas de otros dispositivos); con la de usuario no hay `path`.
+Rutas `/api/hook/*` para que un lanzador avise al hub con la API key de usuario (ver «API key de usuario») o, en las de los dispositivos `http` (y en `opened`, que con ella solo marca «jugando»), con la del dispositivo (ver «API key de dispositivo `http`»). Hoy: el aviso de apertura (que además arma el **cierre automático**), la comparación de saves de un dispositivo `http` (`fingerprint`) y su subida y bajada fichero a fichero (`manifest`, `files`, `commit`), la consulta de vigilancias y, con la misma key, la lista de juegos (`GET /api/games`). Con la key de dispositivo, cada juego incluye `path`: la «Ruta del save en <dispositivo>» configurada en el hub para ese dispositivo (cadena tal cual, o `null` si no tiene; nunca las rutas de otros dispositivos) y `process`: el proceso del juego configurado en el hub (cadena, o `null` si no tiene; sirve a un cliente sin SSH para saber qué vigilar); con la de usuario no hay `path` ni `process`.
 
 ### `POST /api/hook/{juego}/opened?device=<dispositivo>`
 
@@ -301,7 +301,7 @@ Con **API key** (Bearer; mismo 401 único y 429 por IP que `/api/hook/*`; la coo
 ]
 ```
 
-Con la key de usuario, un juego con appid por dispositivo añade el mapa: `{"id": "dq7", ..., "steam_appid": 2389644016, "steam_appids": {"omarchy-1a2b3c4d": 3928137182}, ...}`; con la key de ese dispositivo, `steam_appid` vale `3928137182` y no hay `steam_appids`.
+Con la key de usuario, un juego con appid por dispositivo añade el mapa: `{"id": "dq7", ..., "steam_appid": 2389644016, "steam_appids": {"omarchy-1a2b3c4d": 3928137182}, ...}`; con la key de ese dispositivo, `steam_appid` vale `3928137182` y no hay `steam_appids`. Con la key de dispositivo, cada juego añade además `path` (ruta del guardado en ese dispositivo o `null`) y `process` (cadena o `null`: p. ej. `"MiJuego.exe"`); con la de usuario, ninguno de los dos.
 
 ```bash
 curl -fsS -H "Authorization: Bearer ck_..." "http://HOST:8088/api/games"

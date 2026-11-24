@@ -195,13 +195,13 @@ USER_KEYS = {"id", "name", "enabled", "steam_appid", "status"}
 
 def test_games_user_key_has_no_path(cl):
     j = call(cl, cl.user, "get", "/api/games").json()
-    assert all(set(g) == USER_KEYS for g in j)  # ck_: sin `path` ni `paths`
+    assert all(set(g) == USER_KEYS for g in j)  # ck_: sin `path`, `paths` ni `process`
     assert "/d" not in str(j) and "/p" not in str(j)
 
 
 def test_games_device_key_gets_its_own_path_only(cl):
     j = call(cl, cl.deck, "get", "/api/games").json()
-    assert [set(g) for g in j] == [USER_KEYS | {"path"}]
+    assert [set(g) for g in j] == [USER_KEYS | {"path", "process"}]
     assert j[0]["path"] == "/d"  # g1 tiene deck y pc: solo la del deck
     assert "/p" not in str(j) and "paths" not in j[0]
     assert call(cl, cl.lap, "get", "/api/games").json()[0]["path"] == "/l2"

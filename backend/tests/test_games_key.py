@@ -2,8 +2,12 @@
 
 import json
 
+import yaml
+from fastapi.testclient import TestClient
+
 from app.core import settings
 from test_hook_close import cl, hopen, mk  # noqa: F401 (fixtures)
+from test_hook_fingerprint import PW
 
 KEYS = {"id", "name", "enabled", "steam_appid", "status"}
 STATUS_KEYS = {"result", "code", "started", "finished"}
@@ -83,3 +87,39 @@ def test_rate_limit_429(cl):
 
 def test_hook_status_route_still_session_only(cl):
     assert cl.get("/api/games/g1/hook-status", headers=cl.hdr).status_code == 401
+
+
+def device_key(c, game_process="game.exe"):
+    """Key `ckd_` de un dispositivo `http` nuevo (`deck`) que lleva g1 (con proceso) y g2 (sin proceso)."""
+    cfg = yaml.safe_load(settings.CONFIG_PATH.read_text(encoding="utf-8"))
+    cfg["devices"]["deck"] = {"name": "Steam Deck", "http": True, "os": "linux"}
+    for gid in ("g1", "g2"):
+        cfg["games"][gid]["devices"] = [*cfg["games"][gid]["devices"][:1], "deck"]
+        cfg["games"][gid]["paths"] = {"dev-1": "/x", "deck": f"/home/deck/{gid}"}
+    cfg["games"]["g1"]["process"] = game_process
+    settings.CONFIG_PATH.write_text(yaml.safe_dump(cfg, allow_unicode=True), encoding="utf-8")
+    s = TestClient(c.app)
+    assert s.post("/api/login", json={"user": "admin", "password": PW}).status_code == 200
+    key = s.post("/api/devices/deck/apikey").json()["key"]
+    assert key.startswith("ckd_")
+    return {"Authorization": f"Bearer {key}"}
+
+
+def test_device_key_gets_process(cl):
+    r = games(TestClient(cl.app), device_key(cl))
+    assert r.status_code == 200
+    j = {g["id"]: g for g in r.json()}
+    assert j["g1"]["process"] == "game.exe"
+    assert set(j["g1"]) == KEYS | {"path", "process"}
+
+
+def test_device_key_process_null_without_process(cl):
+    j = {g["id"]: g for g in games(TestClient(cl.app), device_key(cl)).json()}
+    assert "process" in j["g2"] and j["g2"]["process"] is None
+
+
+def test_user_key_has_no_process(cl):
+    device_key(cl)  # g1 tiene proceso configurado, pero la key de usuario no lo expone
+    r = games(cl)
+    assert all("process" not in g for g in r.json())
+    assert "game.exe" not in r.text

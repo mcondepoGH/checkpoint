@@ -920,7 +920,7 @@ GAMES = dict(
             ),
             (
                 "device",
-                "Con key de dispositivo (`ckd_`): cada juego lleva `path`, con ruta y sin ella",
+                "Con key de dispositivo (`ckd_`): cada juego lleva `path` y `process`, con valor y sin él",
                 [
                     {
                         "id": "g1",
@@ -929,6 +929,7 @@ GAMES = dict(
                         "steam_appid": 1245620,
                         "status": None,
                         "path": "/home/deck/.local/share/Mi Juego/saves",
+                        "process": "MiJuego.exe",
                     },
                     {
                         "id": "g2",
@@ -937,6 +938,7 @@ GAMES = dict(
                         "steam_appid": None,
                         "status": None,
                         "path": None,
+                        "process": None,
                     },
                 ],
             ),

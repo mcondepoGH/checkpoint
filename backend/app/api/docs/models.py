@@ -111,6 +111,13 @@ class GameItem(BaseModel):
         "key de usuario (`ck_`) el campo no aparece.",
         examples=["/home/deck/.local/share/Mi Juego/saves"],
     )
+    process: Optional[str] = Field(
+        None,
+        description="SOLO con key de dispositivo (`ckd_`): nombre del proceso del juego tal cual está en la "
+        "configuración (para que un cliente sin SSH sepa qué vigilar), o `null` si el juego no tiene proceso. Con "
+        "key de usuario (`ck_`) el campo no aparece.",
+        examples=["MiJuego.exe"],
+    )
 
 
 class FingerprintSide(BaseModel):

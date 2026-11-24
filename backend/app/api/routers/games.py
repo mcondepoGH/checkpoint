@@ -33,7 +33,8 @@ def list_games(p: Principal = Depends(hook_any), ctx: AppContext = Depends(get_c
     de la config, con `steam_appid` general y, si lo hay, `steam_appids` (appid por dispositivo); con key de
     dispositivo, solo los que tienen ese dispositivo en su lista, `steam_appid` es el EFECTIVO en ESE dispositivo (el
     suyo de `steam_appids` y, si no, el general; sin exponer los de otros dispositivos) y cada uno añade `path`: la
-    ruta del save en ESE dispositivo (cadena) o null. Con key de usuario no hay campo `path`."""
+    ruta del save en ESE dispositivo (cadena) o null, y `process`: el proceso del juego (cadena) o null si no
+    tiene. Con key de usuario no hay campo `path` ni `process`."""
     cfg = ctx.cfg()
     statuses = read_statuses(cfg.games)
     out = []
@@ -49,6 +50,7 @@ def list_games(p: Principal = Depends(hook_any), ctx: AppContext = Depends(get_c
         }
         if p.device is not None:
             item["path"] = device_path(g, p.device)
+            item["process"] = g.process or None  # nombre del proceso del juego (el vigilante de un cliente sin SSH)
         elif g.steam_appids:  # solo con key de usuario, y solo si hay algo
             item["steam_appids"] = dict(g.steam_appids)
         out.append(item)
