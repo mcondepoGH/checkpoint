@@ -17,6 +17,8 @@ class State:
     def __init__(self):
         self.games = [{"id": "hl2", "name": "Half-Life 2", "enabled": True, "steam_appid": 220, "path": "/x/hl2"}]
         self.fail_create = None
+        self.fail_path = None
+        self.path_calls = []
         self.join = None  # respuesta del hub al unirse a un juego existente (cuerpo 200)
 
     def handle(self, req):
@@ -34,6 +36,16 @@ class State:
             g = {"id": b["name"].lower().replace(" ", "-"), "name": b["name"], "enabled": True, "steam_appid": b["appid"], "path": b["path"]}
             self.games.append(g)
             return 200, {"id": g["id"], "name": g["name"], "appid": b["appid"], "path": b["path"]}, {}
+        if req.path.startswith("/api/steam/games/") and req.path.endswith("/path") and req.method == "PUT":
+            self.path_calls.append(req.path)
+            if self.fail_path:
+                return self.fail_path
+            gid = req.path.split("/")[4]
+            for g in self.games:
+                if g["id"] == gid:
+                    g["path"] = json.loads(req.body)["path"]
+                    return 200, {"game": gid, "path": g["path"]}, {}
+            return 404, {"detail": {"code": "err.steam.game_unknown", "params": {}}}, {}
         if req.path.startswith("/api/steam/games/") and req.path.endswith("/enabled"):
             gid = req.path.split("/")[4]
             for g in self.games:
@@ -491,3 +503,137 @@ def test_configure_game_accepts_a_typed_or_browsed_folder_that_exists(fake_decky
 
     assert asyncio.run(go())["ok"] is True
     assert json.loads(_post_games(hub)[0].body)["path"] == str(elegida)
+
+
+# ---- cambiar la carpeta de un juego ya configurado (y «Deshacer»: la misma llamada con `previous`)
+async def loaded(p):
+    await p._main()
+    await p.refresh_library()
+    await settled(p)
+
+
+def test_change_game_path_updates_hub_row_and_clears_the_ignored_of_that_game(fake_decky, scripthub, tmp_path, monkeypatch):
+    st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    new = Path.home() / "Saves/Nueva"
+    new.mkdir(parents=True)
+
+    async def go():
+        await loaded(p)
+        p.ignored.add("hl2", "/x/sugerida")
+        p.ignored.add("otro", "/y/sugerida")
+        out = await p.change_game_path("hl2", str(new))
+        s = await p.get_sync_state()
+        paths = await p.get_game_paths()
+        await p._unload()
+        return out, s, paths
+
+    out, s, paths = asyncio.run(go())
+    assert out == {"ok": True, "path": str(new), "previous": "/x/hl2"}
+    assert st.games[0]["path"] == str(new) and paths["paths"]["hl2"] == str(new)
+    assert s["games"][0]["state"] == "unknown" and not s["running"]
+    assert p.ignored.as_dict() == {"otro": "/y/sugerida"}  # solo las de ese juego
+    assert not any("/api/hook/" in q.path or "/sync" in q.path for q in hub.requests)  # no sincroniza solo
+
+
+def test_change_game_path_undo_is_the_same_call_with_previous(fake_decky, scripthub, tmp_path, monkeypatch):
+    st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    old = Path.home() / "Saves/Vieja"
+    new = Path.home() / "Saves/Nueva"
+    old.mkdir(parents=True)
+    new.mkdir(parents=True)
+    st.games[0]["path"] = str(old)
+
+    async def go():
+        await loaded(p)
+        a = await p.change_game_path("hl2", str(new))
+        b = await p.change_game_path("hl2", a["previous"])
+        await p._unload()
+        return a, b
+
+    a, b = asyncio.run(go())
+    assert a["previous"] == str(old) and b == {"ok": True, "path": str(old), "previous": str(new)}
+    assert st.games[0]["path"] == str(old) and p.jobs.paths()["hl2"] == str(old)
+
+
+def test_change_game_path_same_path_is_ok_without_effects(fake_decky, scripthub, tmp_path, monkeypatch):
+    st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    cur = Path.home() / "Saves/Actual"
+    cur.mkdir(parents=True)
+    st.games[0]["path"] = str(cur)
+
+    async def go():
+        await loaded(p)
+        p.ignored.add("hl2", "/x/sugerida")
+        out = await p.change_game_path("hl2", str(cur))
+        await p._unload()
+        return out
+
+    out = asyncio.run(go())
+    assert out == {"ok": True, "path": str(cur), "previous": str(cur)}
+    assert st.path_calls == [] and p.ignored.as_dict() == {"hl2": "/x/sugerida"}
+
+
+def test_change_game_path_refuses_while_the_game_is_open(fake_decky, scripthub, tmp_path, monkeypatch):
+    st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    new = Path.home() / "Saves/Nueva"
+    new.mkdir(parents=True)
+
+    async def go():
+        await loaded(p)
+        p.ignored.add("hl2", "/x/sugerida")
+        monkeypatch.setattr(p.auto, "is_running", lambda appid: appid == 220)
+        out = await p.change_game_path("hl2", str(new))
+        await p._unload()
+        return out
+
+    out = asyncio.run(go())
+    assert out == {"ok": False, "error": "game_running", "error_params": {}, "error_detail": None}
+    assert st.path_calls == [] and st.games[0]["path"] == "/x/hl2" and p.ignored.has("hl2", "/x/sugerida")
+
+
+def test_change_game_path_failures_change_nothing(fake_decky, scripthub, tmp_path, monkeypatch):
+    st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    new = Path.home() / "Saves/Nueva"
+    new.mkdir(parents=True)
+
+    async def go():
+        await loaded(p)
+        p.ignored.add("hl2", "/x/sugerida")
+        res = {
+            "unknown": await p.change_game_path("nope", str(new)),
+            "missing": await p.change_game_path("hl2", str(Path.home() / "no/existe")),
+            "forbidden": await p.change_game_path("hl2", "/etc"),
+        }
+        st.fail_path = (409, {"detail": {"code": "err.main.run_in_progress", "params": {}}}, {})
+        res["busy"] = await p.change_game_path("hl2", str(new))
+        st.fail_path = (404, {"detail": "Not Found"}, {})
+        res["old_hub"] = await p.change_game_path("hl2", str(new))
+        await p._unload()
+        return res
+
+    res = asyncio.run(go())
+    assert {k: v["error"] for k, v in res.items()} == {
+        "unknown": "unknown_game",
+        "missing": "path_missing",
+        "forbidden": "path_forbidden",
+        "busy": "run_in_progress",
+        "old_hub": "hub_outdated",
+    }
+    assert all(v["ok"] is False for v in res.values())
+    assert p.jobs.paths()["hl2"] == "/x/hl2" and p.ignored.has("hl2", "/x/sugerida")
+
+
+def test_change_game_path_needs_a_link_and_a_current_plugin(fake_decky, tmp_path, monkeypatch):
+    p = make_plugin(fake_decky, "http://127.0.0.1:1", tmp_path, monkeypatch, with_key=False)
+
+    async def go():
+        await p._main()
+        a = await p.change_game_path("g", "/p")
+        p._compat = "plugin_outdated"
+        b = await p.change_game_path("g", "/p")
+        await p._unload()
+        return a, b
+
+    a, b = asyncio.run(go())
+    assert a["error"] == "not_linked"
+    assert b["error"] == "plugin_outdated"

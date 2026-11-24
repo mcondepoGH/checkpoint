@@ -458,6 +458,35 @@ class Plugin:
             self.jobs.set_enabled_row(out["game"], out["enabled"])
         return out
 
+    async def change_game_path(self, game: str, path: str) -> Dict[str, Any]:
+        """Cambia la carpeta de guardado de ESTA Deck para un juego ya configurado (no mueve ni borra ficheros; el hub
+        olvida el estado recordado de este dispositivo y juego). `{ok, path, previous}`: «Deshacer» es esta misma llamada con
+        `previous` (la ruta de antes; None si no había). Misma ruta que la actual: ok sin efectos. Con el juego abierto se
+        rechaza (`game_running`). Limpia las carpetas sugeridas ignoradas de ese juego y deja su estado en «unknown» sin
+        sincronizar. Errores: `plugin_outdated`, `not_linked`, `unknown_game`, `game_running`, `path_missing`, `path_forbidden`,
+        `run_in_progress` (el hub sincroniza ese juego), `hub_outdated` (el hub no tiene esta ruta), `game_invalid` (el hub no
+        acepta la carpeta), `unauthorized`, `rate_limited`, `config_changed`, `connection` y `hub_error`."""
+        if self._outdated():
+            return self._failure("plugin_outdated")
+        tools = self._tools()
+        if tools is None:
+            return self._failure("not_linked")
+        row = next((g for g in self.jobs.snapshot()["games"] if g["id"] == game), None)
+        if row is None:
+            return self._failure("unknown_game")
+        previous = self.jobs.paths().get(game)
+        if isinstance(path, str) and path == previous:
+            return {"ok": True, "path": previous, "previous": previous}
+        appid = row.get("appid")
+        if isinstance(appid, int) and self.auto.is_running(appid):
+            return self._failure("game_running")
+        out = await asyncio.to_thread(tools.change_path, str(game), str(path))
+        if not out["ok"]:
+            return out
+        self.jobs.set_path_row(out["game"], out["path"])
+        self.ignored.remove(out["game"])
+        return {"ok": True, "path": out["path"], "previous": previous}
+
     async def check_game(self, game: str) -> Dict[str, Any]:
         if self._outdated():
             return self._blocked_state()

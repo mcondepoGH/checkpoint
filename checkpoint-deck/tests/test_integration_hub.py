@@ -144,3 +144,51 @@ def test_update_check_against_real_hub(real_hub, tmp_path, monkeypatch):
     ev = upd.evaluate(info, "0.1.0", 1, 1)
     assert ev["state"] == "available" and ev["reason"] is None and "can_install" not in ev
     assert upd.evaluate(info, "0.2.0", 1, 1)["state"] == "up_to_date"
+
+
+def test_change_game_path_against_real_hub(real_hub, tmp_path, monkeypatch):
+    """Vincula una Deck, crea un juego y le cambia la carpeta con `GameTools.change_path` contra el hub REAL: el hub guarda la
+    ruta nueva, la misma ruta es ok, «Deshacer» (la ruta anterior) la restaura y un juego inexistente da `unknown_game`."""
+    import checkpoint_games as cg
+    import checkpoint_hub
+
+    monkeypatch.setattr(checkpoint_hub, "POLL_S", 0.05)
+    admin = httpx.Client(base_url=real_hub)
+    assert admin.post("/api/login", json={"user": "admin", "password": PW}).status_code == 200
+
+    async def pair():
+        p = Pairing(str(tmp_path / "deck-settings"))
+        p.set_hub_url(real_hub + "/")
+        p.start()
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            if p.state().get("code"):
+                break
+        pend = admin.get("/api/pairing/pending").json()
+        r = admin.post(f"/api/pairing/pending/{pend[0]['id']}/accept", json={"code": p.state()["code"]}, headers={"Origin": real_hub})
+        assert r.status_code == 200, r.text
+        await asyncio.wait_for(p._task, 10)  # noqa: SLF001
+        return p
+
+    key = asyncio.run(pair()).key()
+    home = tmp_path / "deckhome"
+    old, new = home / "Saves/Vieja", home / "Saves/Nueva"
+    old.mkdir(parents=True)
+    new.mkdir(parents=True)
+    tools = cg.GameTools(real_hub, key, home=home, protected=[])
+    created = tools.create(504230, "Celeste", str(old))
+    assert created["ok"] is True, created
+    gid = created["game"]["id"]
+
+    def hub_path():
+        import yaml
+
+        return yaml.safe_load((tmp_path / "config" / "config.yaml").read_text())["games"][gid]["paths"]
+    dev = next(iter(hub_path()))
+    assert hub_path()[dev] == str(old)
+    assert tools.change_path(gid, str(new)) == {"ok": True, "game": gid, "path": str(new)}
+    assert hub_path()[dev] == str(new)
+    assert tools.change_path(gid, str(new))["ok"] is True  # misma ruta: 200 sin efectos
+    assert tools.change_path(gid, str(old))["path"] == str(old)  # «Deshacer»
+    assert hub_path()[dev] == str(old)
+    assert tools.change_path("no-existe", str(new))["error"] == "unknown_game"

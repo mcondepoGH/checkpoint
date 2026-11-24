@@ -89,6 +89,19 @@ class Ignored:
             return False
         return True
 
+    def remove(self, game: Any) -> bool:
+        """Olvida lo ignorado de ese juego (cambió su carpeta). Verdadero si no queda nada suyo; falso si no se pudo guardar."""
+        if game not in self._data:
+            return True
+        old = self._data.pop(game)
+        try:
+            save_settings(self._dir, dict(self._data), IGNORED_FILE)
+        except OSError:
+            self._data[game] = old
+            self._log("ignored: no se pudo guardar")
+            return False
+        return True
+
     def has(self, game: str, path: str) -> bool:
         return self._data.get(game) == path
 

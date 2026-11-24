@@ -4,6 +4,7 @@ import asyncio
 import json
 from pathlib import Path
 
+import checkpoint_uistate
 from test_main_library import make_plugin
 
 
@@ -103,3 +104,11 @@ def test_get_game_paths_returns_the_configured_folders_apart_from_the_sync_state
     put_games(p, {"id": "g1", "name": "Uno", "appid": 10, "path": "/h/v"}, {"id": "g2", "name": "Dos", "appid": None, "path": None})
     assert asyncio.run(p.get_game_paths()) == {"ok": True, "paths": {"g1": "/h/v", "g2": None}}
     assert all("path" not in g for g in asyncio.run(p.get_sync_state())["games"])
+
+
+def test_ignored_remove_forgets_one_game_and_persists(tmp_path):
+    ig = checkpoint_uistate.Ignored(str(tmp_path))
+    ig.add("a", "/x")
+    ig.add("b", "/y")
+    assert ig.remove("a") is True and ig.remove("nada") is True
+    assert checkpoint_uistate.Ignored(str(tmp_path)).as_dict() == {"b": "/y"}
