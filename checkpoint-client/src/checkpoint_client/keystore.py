@@ -115,6 +115,12 @@ def get_key(cfg: str, s: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def keyring_unreadable(s: Dict[str, Any]) -> bool:
+    """Hay una vinculación guardada en el llavero (`key_store=keyring`, con hub) pero la clave no se pudo leer
+    (llavero bloqueado o clave borrada). Sin ajustes de vinculación no hay nada que leer: es «no vinculado»."""
+    return s.get(STORE_FIELD) == KEYRING and bool(s.get("hub_url"))
+
+
 def _warn_migration_failed(cfg: str) -> None:
     """Avisa por stderr (una vez por ejecución) si había llavero y no guardó la clave. Sin llavero no hay aviso."""
     global _migration_warned

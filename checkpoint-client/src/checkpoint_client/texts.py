@@ -163,5 +163,10 @@ KEYRING_SAVED = "Clave guardada en el llavero del sistema."
 # Migración de una clave antigua de settings.json al llavero que falla (aprobado por el usuario; stderr, una vez por ejecución).
 KEYRING_MIGRATION_FAILED = "No se pudo mover la clave al llavero; se mantiene en {path}."
 KEYRING_UNAVAILABLE = "No hay llavero disponible: la clave se guarda en {path} (solo legible por tu usuario)."
+# Hay vinculación con `key_store=keyring` pero el llavero no devuelve la clave (aprobado por el usuario; stderr, salida 1).
+KEYRING_LOCKED = (
+    "No se pudo leer la clave del llavero (bloqueado o borrada). "
+    "Desbloquéalo o ejecuta «checkpoint-client link --force»."
+)
 LOCATION_KEYRING = "llavero"
 LOCATION_FILE = "fichero"

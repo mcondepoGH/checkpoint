@@ -115,8 +115,11 @@ def _find_link(cfg: str, s: Dict[str, Any]) -> Optional[Tuple[str, str, Optional
 
 def _linked() -> Tuple[str, str, Optional[str]]:
     cfg = settings.config_dir()
-    found = _find_link(cfg, settings.load_settings(cfg))
+    s = settings.load_settings(cfg)
+    found = _find_link(cfg, s)
     if found is None:
+        if keystore.keyring_unreadable(s):
+            raise _fail(texts.KEYRING_LOCKED)
         raise _fail(texts.ERR_NOT_LINKED)
     return found
 

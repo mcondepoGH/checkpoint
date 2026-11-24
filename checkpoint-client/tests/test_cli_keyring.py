@@ -113,12 +113,33 @@ def test_relink_with_force_replaces_the_old_key_in_the_keyring(fakehub, home, ru
     assert list(memory_keyring.items.values()) == [OTHER_KEY]
 
 
-def test_key_missing_from_the_keyring_means_not_linked(fakehub, home, run, memory_keyring):
+def test_key_missing_from_the_keyring_says_keyring_locked(fakehub, home, run, memory_keyring):
     fakehub.script = [ACCEPTED]
     run("link", fakehub.url)
-    memory_keyring.items.clear()  # el llavero ya no la tiene: no está vinculado de verdad
+    memory_keyring.items.clear()  # el llavero ya no la tiene: hay vinculación, pero la clave no se puede leer
     code, _, err = run("status")
-    assert code == 1 and texts.ERR_NOT_LINKED in err
+    assert code == 1 and texts.KEYRING_LOCKED in err and texts.ERR_NOT_LINKED not in err
+
+
+def test_without_any_settings_it_still_says_not_linked_with_a_keyring(home, run, memory_keyring):
+    code, _, err = run("games")
+    assert code == 1 and err.strip() == texts.ERR_NOT_LINKED
+
+
+def test_after_unlink_it_says_not_linked_not_keyring_locked(fakehub, home, run, memory_keyring):
+    fakehub.script = [ACCEPTED]
+    run("link", fakehub.url)
+    assert run("unlink")[0] == 0
+    code, _, err = run("games")
+    assert code == 1 and err.strip() == texts.ERR_NOT_LINKED
+
+
+def test_relink_force_works_when_the_keyring_is_locked(fakehub, home, run, memory_keyring):
+    fakehub.script = [ACCEPTED]
+    run("link", fakehub.url)
+    memory_keyring.items.clear()  # llavero sin la clave: `link --force` (lo que dice el texto) debe poder arreglarlo
+    assert run("link", fakehub.url, "--force")[0] == 0
+    assert run("games")[0] == 0
 
 
 def test_unexpected_failure_log_has_no_key_with_keyring(fakehub, home, run, memory_keyring, monkeypatch):
@@ -139,7 +160,7 @@ def test_keyring_error_on_read_does_not_crash(fakehub, home, run, memory_keyring
     run("link", fakehub.url)
     memory_keyring.fail_get = True
     code, out, err = run("games")
-    assert code == 1 and err.strip() == texts.ERR_NOT_LINKED
+    assert code == 1 and out == "" and err.strip() == texts.KEYRING_LOCKED
 
 
 def test_keystore_module_not_importing_keyring_at_top_level():

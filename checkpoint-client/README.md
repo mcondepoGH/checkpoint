@@ -64,7 +64,7 @@ La clave `ckd_` de este equipo no queda en claro si hay llavero:
 - **Sin llavero** (Linux sin Secret Service, sesión sin escritorio, error al usarlo): la clave se guarda en `settings.json` (0600, carpeta 0700) con `"key_store": "file"`, y `link` lo avisa con la ruta.
 - **Migración:** una clave que esté en `settings.json` (versiones anteriores o alternativa a fichero) se mueve sola al llavero en cuanto hay uno: se guarda, se lee de vuelta y solo entonces se borra del fichero. Si el llavero falla, la clave se queda donde estaba.
 - `unlink` borra la clave del llavero y del fichero. La revocación real se hace en el hub, en Dispositivos.
-- Si el llavero está bloqueado o ya no tiene la clave, el equipo cuenta como no vinculado: vuelve a ejecutar `link --force`.
+- Si el llavero está bloqueado o ya no tiene la clave, el cliente dice «No se pudo leer la clave del llavero (bloqueado o borrada). Desbloquéalo o ejecuta «checkpoint-client link --force».» (salida 1) en vez de «no vinculado»: desbloquéalo o vuelve a ejecutar `link --force`.
 
 Comprobarlo a mano: `secret-tool lookup service checkpoint-client username <dispositivo>@<hub>` (o Seahorse/KDE Wallet) debe mostrar la clave y `grep ckd_ ~/.config/checkpoint-client/settings.json` no debe encontrar nada.
 
