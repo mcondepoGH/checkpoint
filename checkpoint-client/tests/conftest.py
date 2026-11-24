@@ -295,3 +295,11 @@ def memory_keyring(no_real_keyring):
     kr = _memory_keyring_class()()
     keyring.set_keyring(kr)
     return kr
+
+
+@pytest.fixture(autouse=True)
+def migration_not_warned(monkeypatch):
+    """El aviso de migración fallida es de una vez por ejecución: cada test parte de «aún no avisado»."""
+    from checkpoint_client import keystore
+
+    monkeypatch.setattr(keystore, "_migration_warned", False)

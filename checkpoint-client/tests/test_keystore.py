@@ -189,3 +189,26 @@ def test_settings_file_is_valid_json_and_utf8(settings_dir, memory_keyring):
 @pytest.mark.parametrize("where", ["keyring", "file"])
 def test_location_label(where):
     assert keystore.location_label(where) in ("llavero", "fichero")
+
+
+# ---------------------------------------------------------------- aviso de migración fallida
+@pytest.mark.parametrize("mode", ["fail_set", "lose_on_set"])
+def test_failed_migration_warns_once_on_stderr_and_keeps_the_key(settings_dir, memory_keyring, capsys, mode):
+    from checkpoint_client import texts
+
+    setattr(memory_keyring, mode, True)
+    settings.save_settings(settings_dir, meta(key=KEY))
+    s = settings.load_settings(settings_dir)
+    assert keystore.get_key(settings_dir, s) == KEY
+    assert keystore.get_key(settings_dir, s) == KEY  # segundo uso en la misma ejecución: sin segundo aviso
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert err == texts.KEYRING_MIGRATION_FAILED.format(path=keystore.settings_path(settings_dir)) + "\n"
+    assert KEY not in err
+    assert settings.load_settings(settings_dir)["key"] == KEY
+
+
+def test_no_keyring_at_all_does_not_warn(settings_dir, capsys):
+    settings.save_settings(settings_dir, meta(key=KEY))
+    assert keystore.get_key(settings_dir, settings.load_settings(settings_dir)) == KEY
+    assert capsys.readouterr().err == ""

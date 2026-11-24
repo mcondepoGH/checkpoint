@@ -160,6 +160,8 @@ UNINSTALL_FAILED = "No se pudo quitar la unidad systemd --user: {reason}."
 # Dónde se guarda la clave (textos de «Instalación» de la tarjeta; «llavero» y «fichero» son los valores de
 # «Clave guardada en {llavero|fichero}» de la vinculación).
 KEYRING_SAVED = "Clave guardada en el llavero del sistema."
+# Migración de una clave antigua de settings.json al llavero que falla (aprobado por el usuario; stderr, una vez por ejecución).
+KEYRING_MIGRATION_FAILED = "No se pudo mover la clave al llavero; se mantiene en {path}."
 KEYRING_UNAVAILABLE = "No hay llavero disponible: la clave se guarda en {path} (solo legible por tu usuario)."
 LOCATION_KEYRING = "llavero"
 LOCATION_FILE = "fichero"

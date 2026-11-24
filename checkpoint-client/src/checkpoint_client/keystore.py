@@ -25,6 +25,8 @@ KEYRING = "keyring"
 FILE = "file"
 STORE_FIELD = "key_store"
 
+_migration_warned = False  # el aviso de migración fallida sale una vez por ejecución, no en cada comando
+
 
 def _backend():
     """El backend de llavero en uso, o None si no hay biblioteca o solo hay un backend que no guarda nada."""
@@ -113,8 +115,18 @@ def get_key(cfg: str, s: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _warn_migration_failed(cfg: str) -> None:
+    """Avisa por stderr (una vez por ejecución) si había llavero y no guardó la clave. Sin llavero no hay aviso."""
+    global _migration_warned
+    if _migration_warned or _backend() is None:
+        return
+    _migration_warned = True
+    print(texts.KEYRING_MIGRATION_FAILED.format(path=settings_path(cfg)), file=sys.stderr)
+
+
 def _migrate(cfg: str, s: Dict[str, Any], key: str) -> None:
     if not _keyring_put(s, key):
+        _warn_migration_failed(cfg)
         return
     clean = {k: v for k, v in s.items() if k != "key"}
     clean[STORE_FIELD] = KEYRING

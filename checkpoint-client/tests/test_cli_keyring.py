@@ -77,11 +77,14 @@ def test_legacy_key_in_settings_is_migrated_on_first_use(fakehub, home, run, mem
     assert code == 0 and err == ""  # el aviso sale una sola vez
 
 
-def test_migration_failure_is_silent_and_keeps_working(fakehub, home, run, memory_keyring):
+def test_migration_failure_warns_and_keeps_working(fakehub, home, run, memory_keyring):
     memory_keyring.fail_set = True
-    settings.save_settings(settings.config_dir(), {"hub_url": fakehub.url, "key": KEY, "device": "pc-ab12"})
+    cfg = settings.config_dir()
+    settings.save_settings(cfg, {"hub_url": fakehub.url, "key": KEY, "device": "pc-ab12"})
     code, out, err = run("status")
-    assert code == 0 and err == "" and KEY in settings_text()
+    assert code == 0 and "conexión: ok" in out and KEY in settings_text()
+    assert err.strip() == texts.KEYRING_MIGRATION_FAILED.format(path=keystore.settings_path(cfg))
+    assert KEY not in err
 
 
 def test_unlink_removes_the_key_from_the_keyring(fakehub, home, run, memory_keyring):
