@@ -46,7 +46,7 @@ jobs:
           cache-dependency-path: backend/requirements*.txt
       - run: pip install -r requirements.txt -r requirements-dev.txt
       - run: >-
-          pytest -n 0
+          pytest -n 0 -rfE --tb=short
           tests/test_locking.py tests/test_local_transport.py tests/test_local_e2e.py
           tests/test_local_api.py tests/test_local_config.py
           tests/test_sync.py tests/test_sync_codes.py tests/test_sync_one_device.py
