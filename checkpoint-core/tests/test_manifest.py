@@ -1,6 +1,6 @@
 """Manifiesto local: describe la carpeta del juego con las mismas reglas que el hub (`sync/fingerprint.py`).
 
-La equivalencia con el `fingerprint` del hub real se comprueba en `test_integration_hub.py`."""
+La equivalencia con el `fingerprint` del hub real se comprueba en los tests de integración del plugin y del cliente."""
 
 import hashlib
 import os
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from checkpoint_client import manifest as lm
+from checkpoint_core import manifest as lm
 
 
 def put(root: Path, rel: str, data: bytes = b"x", mtime: int = 1_700_000_000):

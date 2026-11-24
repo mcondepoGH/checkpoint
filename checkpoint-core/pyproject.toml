@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "checkpoint-core"
+version = "0.1.0"
+description = "Código puro común al plugin de Decky y al cliente de Linux de Checkpoint (manifiesto local, URL del hub, nombre del dispositivo, redacción y protocolo)."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"  # el plugin de la Deck corre en el Python de Decky
+dependencies = []  # solo biblioteca estándar
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+target-version = "py38"  # el código del core no puede usar sintaxis más nueva que la del plugin
+line-length = 120
+extend-exclude = ["**/__pycache__"]
+
+[tool.ruff.lint]
+# Mismas reglas que backend/ruff.toml: solo errores, sin estilo.
+select = ["E4", "E7", "E9", "F", "B"]
+ignore = ["B905"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["F811", "B017"]
