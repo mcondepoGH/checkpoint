@@ -1,8 +1,8 @@
 """Todos los textos visibles del cliente (CLI en español, sin i18n, como la CLI del hub y el plugin).
 
-Son los «Textos aprobados» de la tarjeta, tal cual. Los que NO están en la tarjeta van en la sección «Pendientes de
-aprobar» del final y se usan solo porque el comando necesita decir algo: están a la espera de que el usuario los
-apruebe o los cambie. Los errores se escriben en stderr.
+Son los «Textos aprobados» de la tarjeta, tal cual, más los que el usuario aprobó después (sección «Aprobados fuera de
+la tarjeta»). Un texto que el comando necesita y aún no está aprobado va en una sección «Pendientes de aprobar» al final,
+marcado como tal. Los errores se escriben en stderr.
 """
 
 # ---------------------------------------------------------------- ayuda de la CLI
@@ -101,7 +101,7 @@ SYNC_ERRORS = {
     "side_empty": "El lado elegido no tiene datos: no se puede usar para resolver.",
 }
 
-# ---------------------------------------------------------------- pendientes de aprobar (no están en la tarjeta)
+# ---------------------------------------------------------------- aprobados fuera de la tarjeta (los aprobó el usuario)
 # Salida de `games` y `status`: valores técnicos sin prosa (TSV y `clave: valor`).
 STATUS_LINE = "{key}: {value}"
 STATUS_KEYS = {
