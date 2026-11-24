@@ -1,5 +1,14 @@
 # Cambios
 
+## Sin publicar
+
+### Cambios
+
+- CI: job `backend-windows` (`windows-latest`, Python 3.12) que ejecuta los 11 ficheros de tests del motor de sincronización; el README pasa a decir que el motor está verificado en Windows y que el resto sigue sin verificar.
+- `.gitleaks.toml` con allowlist de los fixtures de test.
+- Corrección: las lecturas de texto sin `encoding` explícito usaban la codificación local y fallaban en Windows con textos en español (error real); ahora leen en UTF-8.
+- Corrección: la detección de procesos con `tasklist` daba un falso negativo con nombres de proceso largos (error real en Windows).
+
 ## 2.4.0 (2026-11-24)
 
 ### Novedades

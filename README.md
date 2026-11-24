@@ -118,7 +118,8 @@ En Docker la casilla no aparece y un `config.yaml` con `local: true` se rechaza 
 ### Plataformas probadas
 
 - **Linux**: probado (suite automática, incluido el motor con «Este equipo» sobre el sistema de ficheros real, y un arranque real con `serve`).
-- **macOS y Windows nativo**: experimental, no verificado; el código lo contempla pero solo se probó con simulaciones. En Windows como anfitrión no hay `rsync` de serie, así que los dispositivos remotos no están soportados; «Este equipo» sí está pensado para funcionar.
+- **Windows nativo**: el motor de sincronización (bloqueos, transporte «Este equipo», detección de procesos, huellas y conflictos) está verificado en CI en un runner de Windows (`windows-latest`, Python 3.12). El resto (API y hub completos, instalación y uso real) sigue sin verificar y es experimental. En Windows como anfitrión no hay `rsync` de serie, así que los dispositivos remotos no están soportados; «Este equipo» sí está pensado para funcionar.
+- **macOS**: experimental, no verificado; el código lo contempla pero solo se probó con simulaciones.
 - El acceso SSH a dispositivos remotos no se prueba contra un servidor SSH real (las pruebas lo simulan).
 
 ## Primeros pasos
