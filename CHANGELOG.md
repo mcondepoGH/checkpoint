@@ -1,13 +1,17 @@
 # Cambios
 
-## Sin publicar
+## 2.4.1 (2026-11-24)
+
+### Correcciones
+
+- Las lecturas y escrituras de texto sin `encoding` explícito en `backend/app` usaban la codificación local del sistema y fallaban en Windows con textos en español (error real); ahora usan UTF-8.
+- La detección de procesos con `tasklist` daba un falso negativo con nombres de proceso largos, porque `tasklist` los trunca (error real en Windows).
 
 ### Cambios
 
-- CI: job `backend-windows` (`windows-latest`, Python 3.12) que ejecuta los 11 ficheros de tests del motor de sincronización; el README pasa a decir que el motor está verificado en Windows y que el resto sigue sin verificar.
+- CI: job `backend-windows` (`windows-latest`, Python 3.12) que ejecuta los 11 ficheros de tests del motor de sincronización.
 - `.gitleaks.toml` con allowlist de los fixtures de test.
-- Corrección: las lecturas de texto sin `encoding` explícito usaban la codificación local y fallaban en Windows con textos en español (error real); ahora leen en UTF-8.
-- Corrección: la detección de procesos con `tasklist` daba un falso negativo con nombres de proceso largos (error real en Windows).
+- Documentación de plataformas: el README indica que el motor de sincronización está verificado en Windows y que el resto sigue sin verificar.
 
 ## 2.4.0 (2026-11-24)
 
