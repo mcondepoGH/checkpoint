@@ -26,12 +26,15 @@ import time
 import unicodedata
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
-from typing import Callable, Dict, List, Tuple
+from pathlib import Path
+from typing import Callable, Dict, List, Optional, Tuple
 
 from ..config.models import atomic_write, valid_appid, validate_config
 from ..config.store import Conflict, ConfigStore, InvalidConfig
 from ..core import settings
 from ..core.errors import ApiError
+from ..sync import locking, resolution
+from ..sync.baseline import drop_baseline
 
 api_log = logging.getLogger("checkpoint.api")  # DEBUG: solo recuentos, nunca nombres ni claves
 
@@ -117,6 +120,15 @@ def parse_enabled(body: dict) -> bool:
     if set(body) != {"enabled"} or not isinstance(body["enabled"], bool):
         raise ApiError(422, "err.steam.game_body_invalid")
     return body["enabled"]
+
+
+def parse_path(body: dict) -> str:
+    """Valida `{"path": str}` (exactamente esa clave; texto no vacío de hasta `MAX_PATH`) y devuelve la ruta. 422
+    `game_body_invalid` si no cumple la forma; que sea una ruta válida para el dispositivo lo decide la config."""
+    path = body.get("path")
+    if set(body) != {"path"} or not isinstance(path, str) or not path.strip() or len(path) > MAX_PATH:
+        raise ApiError(422, "err.steam.game_body_invalid")
+    return path.strip()
 
 
 def slug(name: str) -> str:
@@ -223,8 +235,11 @@ class _Sug:
 
 
 class SteamService:
-    def __init__(self, store: ConfigStore, clock: Callable[[], float] = time.time):
+    def __init__(
+        self, store: ConfigStore, clock: Callable[[], float] = time.time, busy: Optional[Callable[[str], bool]] = None
+    ):
         self._store, self._clock = store, clock
+        self._busy = busy or (lambda game: False)  # ¿ejecución en curso del juego? (la pone el contexto)
         self._lock = threading.Lock()  # sugerencias en memoria
         self._dlock = threading.Lock()  # fichero de descartes
         self._sugg: Dict[str, _Sug] = {}
@@ -352,6 +367,49 @@ class SteamService:
                 continue
             api_log.debug("steam: juego=%s enabled=%s dispositivo=%s", game, enabled, device)
             return {"game": game, "enabled": enabled}
+        raise ApiError(409, "err.main.config_changed")
+
+    def change_path(self, device: str, game: str, path: str) -> dict:
+        """Cambia la carpeta de guardado de ESTE dispositivo en uno de SUS juegos (solo `paths[device]`; nada más de la
+        config, ni otros dispositivos, ni ficheros, ni la huella del hub). Inexistente o de otro dispositivo: 404. Ruta
+        no válida para la config: 422 `game_invalid` (campo `path`). Misma ruta que la actual: no escribe ni suelta
+        nada. Con una ejecución en curso o el lock del juego tomado: 409 `err.main.run_in_progress`. Se permite con el
+        juego desactivado. Bajo el lock del juego, tras guardar, olvida el baseline y el conflicto y la resolución de
+        ESE dispositivo: con otra carpeta y otra partida, la siguiente sync da conflicto en vez de pisar sin aviso."""
+        for _ in range(SAVE_TRIES):
+            snap = self._snap()
+            g = snap.cfg.games.get(game)
+            if g is None or device not in g.devices:
+                raise ApiError(404, "err.steam.game_unknown")
+            data = snap.cfg.model_dump(exclude_none=True)
+            data["games"][game]["paths"][device] = path
+            cfg, errors = validate_config(data)
+            mine = {k: v for k, v in errors.items() if k.startswith(f"games.{game}.")}
+            if mine:
+                raise ApiError(422, "err.steam.game_invalid", **game_error(mine, game))
+            if errors:
+                raise ApiError(409, "err.steam.config_invalid")
+            normalized = cfg.games[game].paths[device]
+            if normalized == g.paths[device]:
+                return {"game": game, "path": normalized}
+            if self._busy(game):
+                raise ApiError(409, "err.main.run_in_progress")
+            data_dir = Path(settings.DATA_DIR)
+            try:
+                handle = locking.acquire(data_dir / "locks" / f"{game}.lock")
+            except locking.LockBusy:
+                raise ApiError(409, "err.main.run_in_progress") from None
+            try:
+                try:
+                    self._store.save(snap.version, cfg)
+                except Conflict:
+                    continue
+                drop_baseline(data_dir, game, [device])
+                resolution.clear(data_dir, game, device)
+            finally:
+                handle.release()
+            api_log.debug("steam: juego=%s ruta cambiada dispositivo=%s", game, device)
+            return {"game": game, "path": normalized}
         raise ApiError(409, "err.main.config_changed")
 
     # ---- descartes (disco) ----

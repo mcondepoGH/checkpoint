@@ -12,7 +12,7 @@ from .games import resolve_game_id
 from . import orphans
 from .hooks import HookService
 from .pairing import PairingService
-from .runs import RunRegistry
+from .runs import RunRegistry, game_busy
 from .steam import SteamService
 
 
@@ -29,7 +29,9 @@ class AppContext:
             self.store, self.cfg, auth.user, auth.clock
         )  # solicitudes de vinculación (memoria)
         self.scheduler.maintenance.append(self.pairing.purge)  # caducadas
-        self.steam = SteamService(self.store, auth.clock)  # sugerencias de appid de Steam (memoria) y descartes (disco)
+        self.steam = SteamService(
+            self.store, auth.clock, lambda g: game_busy(self.scheduler, self.runs, g)
+        )  # sugerencias de appid de Steam (memoria) y descartes (disco)
         self.scheduler.maintenance.append(self.steam.purge)  # sugerencias caducadas y descartes huérfanos
         self.scheduler.maintenance.append(self.purge_trash)  # papelera de datos sin dispositivo ni juego: lo caducado
 

@@ -42,6 +42,7 @@ KEY_KINDS = {
     "/api/steam/library": "device",
     "/api/steam/games": "device",
     "/api/steam/games/{game}/enabled": "device",
+    "/api/steam/games/{game}/path": "device",
     "/api/steam/suggestions": "session",
     "/api/steam/suggestions/{suggestion_id}/accept": "session",
     "/api/steam/suggestions/{suggestion_id}/dismiss": "session",
@@ -110,7 +111,8 @@ DESCRIPTION = (
     "dispositivo que lo tienen vacío y coinciden con certeza por nombre; lo dudoso queda como sugerencia que la "
     "persona acepta o descarta en la web (`/api/steam/suggestions*`, con sesión). Nunca se pisa un appid existente. "
     "Con la misma key la Deck puede crear un juego suyo (`POST /api/steam/games`) y activar o desactivar uno de sus "
-    "juegos (`PUT /api/steam/games/{game}/enabled`).\n\n"
+    "juegos (`PUT /api/steam/games/{game}/enabled`) o cambiar la carpeta de guardado de uno de ellos "
+    "(`PUT /api/steam/games/{game}/path`).\n\n"
     "**Solo se documenta la API de la API key, la vinculación y la asociación de Steam.** El resto de rutas `/api/*` son internas de la web "
     "y pueden cambiar sin aviso."
 )

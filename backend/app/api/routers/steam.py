@@ -78,6 +78,20 @@ async def set_game_enabled(
     return await run_in_threadpool(ctx.steam.set_enabled, p.device, game, enabled)
 
 
+@device.put("/games/{game}/path", **docs.STEAM_GAME_PATH)
+async def set_game_path(
+    request: Request,
+    game: str = Path(max_length=64),
+    p: Principal = Depends(hook_device),
+    ctx: AppContext = Depends(get_ctx),
+):
+    length = request.headers.get("content-length", "")
+    if (length.isdigit() and int(length) > svc.MAX_GAME_BODY) or len(await request.body()) > svc.MAX_GAME_BODY:
+        raise ApiError(413, "err.steam.body_too_large", max=svc.MAX_GAME_BODY)
+    path = svc.parse_path(await body_json(request))
+    return await run_in_threadpool(ctx.steam.change_path, p.device, game, path)
+
+
 @session.get("/suggestions", **docs.STEAM_SUGGESTIONS)
 def list_suggestions(ctx: AppContext = Depends(get_ctx)):
     return ctx.steam.suggestions()

@@ -96,6 +96,20 @@ class SteamEnabled(BaseModel):
     enabled: bool = Field(description="Estado actual.")
 
 
+class SteamPathBody(BaseModel):
+    path: str = Field(
+        min_length=1,
+        max_length=1024,
+        description="Carpeta de guardado nueva de ESTE dispositivo (mismas reglas que en la config; se normaliza).",
+        examples=["/home/deck/.local/share/Celeste/Saves"],
+    )
+
+
+class SteamPath(BaseModel):
+    game: str = Field(description="Id del juego.")
+    path: str = Field(description="Carpeta de este dispositivo tras el cambio (normalizada).")
+
+
 class SteamSuggestion(BaseModel):
     id: str = Field(description="Id de la sugerencia (para aceptar o descartar).")
     appid: int = Field(description="Appid de Steam propuesto.")
@@ -153,7 +167,7 @@ R409_LIBRARY = error_response(
     ("invalid", "Configuración resultante inválida", "err.steam.config_invalid", {}),
 )
 R422_GAME = error_response(
-    "Cuerpo con otra forma (`game_body_invalid`: exactamente `{appid, name, path}` / `{enabled}`) o un valor que la config "
+    "Cuerpo con otra forma (`game_body_invalid`: exactamente `{appid, name, path}` / `{enabled}` / `{path}`) o un valor que la config "
     "no acepta (`game_invalid`: `params.field` = `name` | `path` | `appid` | `game` y `params.reason` = el código "
     "`err.config.*` de la causa; nunca datos de otros juegos).",
     ("body", "Cuerpo con otra forma", "err.steam.game_body_invalid", {}),
@@ -310,6 +324,41 @@ STEAM_GAME_ENABLED = dict(
         422: R422_GAME,
     },
     **{"openapi_extra": _body(SteamEnabledBody, "Estado deseado.", {"enabled": False})},
+)
+
+R409_PATH = error_response(
+    "Hay una ejecución del juego en curso o su lock lo tiene otra operación (`err.main.run_in_progress`), `config.yaml` "
+    "cambió sin parar mientras se escribía (`err.main.config_changed`; reintenta) o el resultado no era una "
+    "configuración válida (`config_invalid`, sin detalle).",
+    ("busy", "Ejecución en curso o lock tomado", "err.main.run_in_progress", {}),
+    ("changed", "La configuración cambió", "err.main.config_changed", {}),
+    ("invalid", "Configuración resultante inválida", "err.steam.config_invalid", {}),
+)
+
+STEAM_GAME_PATH = dict(
+    summary="Cambiar la carpeta de guardado de un juego de esta Deck",
+    description=(
+        "Pone la ruta de **este dispositivo** en un juego que ya lo tiene (`paths[dispositivo]`; no toca la de otros "
+        "dispositivos ni mueve o borra ficheros: el hub conserva todas sus versiones). Se valida como en la config "
+        "(`422 err.steam.game_invalid`, `params.field` = `path`) y se guarda normalizada. Si ya es esa ruta, responde "
+        "`200` sin escribir nada. Al cambiarla, el hub olvida el estado recordado de la última sincronización de este "
+        "dispositivo y juego (línea base) y su conflicto y resolución pendientes, para que una carpeta nueva con otra "
+        "partida dé conflicto en la siguiente sincronización en vez de subirse sin aviso; no sincroniza por sí mismo ni "
+        "cambia el estado del juego. Vale también con el juego desactivado. Con una ejecución del juego en curso o su "
+        "lock tomado, `409` `err.main.run_in_progress` y no cambia nada. Solo juegos que tienen este dispositivo; si no, "
+        "`404`." + _NOSTORE
+    ),
+    responses={
+        200: _ok(
+            SteamPath, "Ruta actual.", ("ok", "Cambiada", {"game": "celeste", "path": "/home/deck/Celeste/Saves"})
+        ),
+        400: R400,
+        404: R404_GAME,
+        409: R409_PATH,
+        413: R413_GAME,
+        422: R422_GAME,
+    },
+    **{"openapi_extra": _body(SteamPathBody, "Carpeta nueva.", {"path": "/home/deck/Celeste/Saves"})},
 )
 
 STEAM_SUGGESTIONS = dict(

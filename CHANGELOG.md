@@ -1,5 +1,11 @@
 # Cambios
 
+## Sin publicar
+
+### Novedades
+
+- `PUT /api/steam/games/{juego}/path` (key `ckd_`): cambia la carpeta de guardado de ESTA Deck en un juego ya configurado. Solo escribe la ruta de ese dispositivo (validada como en la config, `422 err.steam.game_invalid`; la misma ruta responde `200` sin efectos) y olvida su línea base, conflicto y resolución para que una carpeta nueva con otra partida dé conflicto en vez de subirse sin aviso. Con ejecución en curso o el lock del juego tomado responde `409 err.main.run_in_progress`. Tests y documentación en la API y en `docs/`.
+
 ## 2.3.0 (2026-11-18)
 
 ### Novedades

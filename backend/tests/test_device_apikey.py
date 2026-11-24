@@ -67,6 +67,20 @@ DEVICE_ONLY = [
 USER_ONLY = [("get", "/api/hook/watches", {})]  # `opened` acepta las dos (con `ckd_` es el aviso de un http)
 
 
+# ---- cambiar la carpeta de un juego (Steam): solo key de dispositivo ----
+def test_steam_game_path_accepts_only_device_key(cl):
+    url, body = "/api/steam/games/g1/path", {"json": {"path": "/d/nueva"}}
+    for bad in (cl.user, "ckd_" + "x" * 43, "ck_" + "x" * 43, "basura", None):
+        cl.app.state.ctx.auth.hook_fails.clear()  # que el límite por IP no tape el 401
+        r = call(cl, bad, "put", url, **body)
+        assert r.status_code == 401 and code(r) == "err.apikey.invalid", bad
+    assert cl.put(url, **body).status_code == 401  # la cookie de sesión tampoco vale
+    assert yaml.safe_load(settings.CONFIG_PATH.read_text())["games"]["g1"]["paths"]["deck"] == "/d"
+    cl.app.state.ctx.auth.hook_fails.clear()
+    r = call(cl, cl.deck, "put", url, **body)
+    assert r.status_code == 200 and r.json() == {"game": "g1", "path": "/d/nueva"}
+
+
 # ---- formato y almacén ----
 def test_format_distinguishes_the_two_kinds(cl):
     assert cl.deck.startswith("ckd_") and len(cl.deck) == 4 + 43

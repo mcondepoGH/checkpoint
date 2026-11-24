@@ -1,8 +1,10 @@
 """Juegos desde la Deck con su key `ckd_`: `POST /api/steam/games` (crear con appid, nombre y ruta) y
-`PUT /api/steam/games/{game}/enabled` (activar o desactivar uno de SUS juegos)."""
+`PUT /api/steam/games/{game}/enabled` (activar o desactivar uno de SUS juegos) y
+`PUT /api/steam/games/{game}/path` (cambiar la carpeta de guardado de ESTE dispositivo)."""
 
 import logging
 
+from app.core import settings
 from test_steam import bearer, cfg_games, code, hub  # noqa: F401  (hub es una fixture)
 
 PATH = "/home/deck/.local/share/Steam/steamapps/compatdata/4000/pfx/drive_c/users/steamuser/AppData/Roaming/Celeste"
@@ -432,3 +434,216 @@ def test_library_per_device_needs_a_name_unique_among_active_games_of_the_device
     assert r.status_code == 200
     g = cfg_games(hub)["dq"]
     assert g["steam_appid"] == 2389644016 and g["steam_appids"] == {"deck": 3928137182}
+
+
+# ---- cambiar la carpeta de guardado (`PUT /api/steam/games/{game}/path`) ----
+NEW = "/home/deck/otra/carpeta"
+
+
+def set_path(hub, game, path=NEW, key=None, body=None):
+    return hub.anon.put(
+        f"/api/steam/games/{game}/path", json={"path": path} if body is None else body, headers=bearer(key or hub.key)
+    )
+
+
+def seed_state(hub, game="hades", dev="deck"):
+    """Deja baseline y conflicto + resolución de `dev` (y de `deck2`, que no debe tocarse) en `game`."""
+    from datetime import datetime, timezone
+
+    from app.sync import resolution
+    from app.sync.baseline import load_baseline, save_baseline
+
+    d = settings.DATA_DIR
+    save_baseline(d, game, {dev: "aaa", "deck2": "bbb", "hub": "ccc"})
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    h1, d1, d2 = "1" * 64, "2" * 64, "3" * 64
+    resolution.record_conflict(d, game, dev, "both-changed", h1, d1, now)
+    resolution.record_conflict(d, game, "deck2", "both-changed", h1, d2, now)
+    resolution.set_resolution(d, game, dev, "hub", {"hub": h1, "device": d1}, "web", now)
+    resolution.set_resolution(d, game, "deck2", "hub", {"hub": h1, "device": d2}, "web", now)
+    cur = resolution.load(d, game)  # el escenario de partida es el que hay que limpiar
+    assert set(cur["conflicts"]) == set(cur["resolutions"]) == {dev, "deck2"}
+    assert load_baseline(d, game)[dev] == "aaa"
+
+
+def test_change_path_writes_only_that_device_path(hub):
+    before = cfg_games(hub)
+    r = set_path(hub, "g1")  # g1 tiene deck y pc
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
+    assert r.json() == {"game": "g1", "path": NEW}
+    after = cfg_games(hub)
+    assert after["g1"]["paths"] == {"deck": NEW, "pc": "/p"}  # la del otro dispositivo, intacta
+    assert {k: v for k, v in after.items() if k != "g1"} == {k: v for k, v in before.items() if k != "g1"}
+    assert {k: v for k, v in after["g1"].items() if k != "paths"} == {
+        k: v for k, v in before["g1"].items() if k != "paths"
+    }
+    row = next(x for x in hub.anon.get("/api/games", headers=bearer(hub.key)).json() if x["id"] == "g1")
+    assert row["path"] == NEW
+
+
+def test_change_path_normalizes_like_the_config(hub):
+    r = set_path(hub, "hades", "/home/deck//x/./y/ ")
+    assert r.status_code == 200 and r.json() == {"game": "hades", "path": "/home/deck/x/y"}
+    assert cfg_games(hub)["hades"]["paths"]["deck"] == "/home/deck/x/y"
+
+
+def test_change_path_only_for_games_of_that_device(hub):
+    before = cfg_games(hub)
+    for game in ("only2", "usedby", "nope"):  # de otra Deck, de otro dispositivo, inexistente: el mismo 404
+        r = set_path(hub, game)
+        assert r.status_code == 404 and code(r) == "err.steam.game_unknown", game
+    assert cfg_games(hub) == before
+
+
+def test_change_path_needs_a_device_key(hub):
+    before = cfg_games(hub)
+    assert hub.session.put("/api/steam/games/hades/path", json={"path": NEW}).status_code == 401
+    for h in ({}, bearer(hub.ukey)):
+        r = hub.anon.put("/api/steam/games/hades/path", json={"path": NEW}, headers=h)
+        assert r.status_code == 401 and code(r) == "err.apikey.invalid"
+    assert cfg_games(hub) == before
+
+
+def test_change_path_body_shape(hub):
+    bad = ({}, {"path": 1}, {"path": None}, {"path": ""}, {"path": "  "}, {"path": NEW, "x": 1}, {"ruta": NEW})
+    for body in bad:
+        r = set_path(hub, "hades", body=body)
+        assert r.status_code == 422 and code(r) == "err.steam.game_body_invalid", body
+    assert cfg_games(hub)["hades"]["paths"] == {"deck": "/h"}
+
+
+def test_change_path_body_too_big_is_413(hub):
+    r = set_path(hub, "hades", "/" + "a" * 9000)
+    assert r.status_code == 413 and code(r) == "err.steam.body_too_large"
+    assert cfg_games(hub)["hades"]["paths"] == {"deck": "/h"}
+
+
+def test_change_path_invalid_path_is_422_and_changes_nothing(hub):
+    from app.sync.baseline import load_baseline
+
+    seed_state(hub)
+    for bad in ("relativa/x", "/a/../b", "/", "/a\\x*?"):
+        r = set_path(hub, "hades", bad)
+        assert r.status_code == 422 and code(r) == "err.steam.game_invalid", bad
+        assert r.json()["detail"]["params"]["field"] == "path", bad
+    assert cfg_games(hub)["hades"]["paths"] == {"deck": "/h"}
+    assert load_baseline(settings.DATA_DIR, "hades")["deck"] == "aaa"  # no se soltó nada
+
+
+def test_change_path_drops_baseline_and_resolution_of_that_device_only(hub):
+    from app.sync import resolution
+    from app.sync.baseline import load_baseline
+
+    seed_state(hub)
+    assert set_path(hub, "hades").status_code == 200
+    d = settings.DATA_DIR
+    assert load_baseline(d, "hades") == {"deck2": "bbb", "hub": "ccc"}  # ni otro dispositivo ni la huella del hub
+    cur = resolution.load(d, "hades")
+    assert list(cur["conflicts"]) == ["deck2"] and list(cur["resolutions"]) == ["deck2"]
+
+
+def test_change_path_same_path_is_200_without_effects(hub, monkeypatch):
+    from app.config.store import ConfigStore
+    from app.sync import resolution
+    from app.sync.baseline import load_baseline
+
+    seed_state(hub)
+    saves = []
+    monkeypatch.setattr(ConfigStore, "save", lambda *a, **k: saves.append(1))
+    for same in ("/h", "/h/", "//h/./"):  # la actual, también sin normalizar
+        r = set_path(hub, "hades", same)
+        assert r.status_code == 200 and r.json() == {"game": "hades", "path": "/h"}
+    assert saves == []
+    d = settings.DATA_DIR
+    assert load_baseline(d, "hades")["deck"] == "aaa"
+    cur = resolution.load(d, "hades")
+    assert "deck" in cur["conflicts"] and "deck" in cur["resolutions"]
+
+
+def test_change_path_is_allowed_with_the_game_disabled_and_keeps_it_disabled(hub):
+    seed_state(hub, "off")
+    r = set_path(hub, "off")
+    assert r.status_code == 200
+    g = cfg_games(hub)["off"]
+    assert g["paths"] == {"deck": NEW} and g["enabled"] is False
+
+
+def test_change_path_with_a_run_in_progress_is_409_and_changes_nothing(hub):
+    from app.sync.baseline import load_baseline
+
+    seed_state(hub)
+    hub.ctx.runs.create("hades", False, "Hades")  # ejecución sin terminar
+    r = set_path(hub, "hades")
+    assert r.status_code == 409 and code(r) == "err.main.run_in_progress"
+    assert cfg_games(hub)["hades"]["paths"] == {"deck": "/h"}
+    assert load_baseline(settings.DATA_DIR, "hades")["deck"] == "aaa"
+
+
+def test_change_path_with_the_scheduler_busy_is_409(hub):
+    hub.ctx.scheduler.current = "hades"
+    r = set_path(hub, "hades")
+    assert r.status_code == 409 and code(r) == "err.main.run_in_progress"
+    assert cfg_games(hub)["hades"]["paths"] == {"deck": "/h"}
+
+
+def test_change_path_with_the_game_lock_taken_is_409_and_changes_nothing(hub):
+    from app.sync import locking
+    from app.sync.baseline import load_baseline
+
+    seed_state(hub)
+    h = locking.acquire(settings.DATA_DIR / "locks" / "hades.lock")
+    try:
+        r = set_path(hub, "hades")
+    finally:
+        h.release()
+    assert r.status_code == 409 and code(r) == "err.main.run_in_progress"
+    assert cfg_games(hub)["hades"]["paths"] == {"deck": "/h"}
+    assert load_baseline(settings.DATA_DIR, "hades")["deck"] == "aaa"
+
+
+def test_change_path_leaves_the_hub_and_the_game_state_alone(hub):
+    hub_dir = settings.DATA_DIR / "hub" / "hades"
+    hub_dir.mkdir(parents=True)
+    (hub_dir / "a.sav").write_bytes(b"x")
+    set_path(hub, "hades")
+    assert (hub_dir / "a.sav").read_bytes() == b"x"
+    row = next(x for x in hub.anon.get("/api/games", headers=bearer(hub.key)).json() if x["id"] == "hades")
+    assert row["path"] == NEW and row["enabled"] is True
+
+
+def test_change_path_retries_on_a_config_race(hub, monkeypatch):
+    from app.config.store import Conflict, ConfigStore
+
+    real, calls = ConfigStore.save, []
+
+    def flaky(self, version, cfg):
+        calls.append(1)
+        if len(calls) < 3:
+            raise Conflict("v")
+        return real(self, version, cfg)
+
+    monkeypatch.setattr(ConfigStore, "save", flaky)
+    r = set_path(hub, "hades")
+    assert r.status_code == 200 and len(calls) == 3
+    assert cfg_games(hub)["hades"]["paths"]["deck"] == NEW
+
+
+def test_change_path_gives_up_after_the_retries_and_keeps_the_baseline(hub, monkeypatch):
+    from app.config.store import Conflict, ConfigStore
+    from app.sync.baseline import load_baseline
+
+    seed_state(hub)
+
+    def always(self, version, cfg):
+        raise Conflict("v")
+
+    monkeypatch.setattr(ConfigStore, "save", always)
+    r = set_path(hub, "hades")
+    assert r.status_code == 409 and code(r) == "err.main.config_changed"
+    assert load_baseline(settings.DATA_DIR, "hades")["deck"] == "aaa"  # la ruta no cambió: el baseline sigue valiendo
+
+
+def test_change_path_does_not_log_the_path(hub, caplog):
+    caplog.set_level(logging.DEBUG)
+    set_path(hub, "hades", "/home/deck/ruta-secreta-xyz")
+    assert "ruta-secreta-xyz" not in caplog.text and hub.key not in caplog.text

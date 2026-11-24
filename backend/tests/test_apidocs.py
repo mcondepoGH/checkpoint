@@ -37,7 +37,12 @@ STEAM_SESSION_PATHS = {
     "/api/steam/dismissed",
     "/api/steam/dismissed/{dismissed_id}",
 }
-STEAM_PATHS = {"/api/steam/library", "/api/steam/games", "/api/steam/games/{game}/enabled"} | STEAM_SESSION_PATHS
+STEAM_PATHS = {
+    "/api/steam/library",
+    "/api/steam/games",
+    "/api/steam/games/{game}/enabled",
+    "/api/steam/games/{game}/path",
+} | STEAM_SESSION_PATHS
 ASSET_BODIES = {
     "swagger-ui-bundle.js": b"/* bundle */",
     "swagger-ui.css": b"/* css */",
@@ -111,6 +116,7 @@ def test_openapi_only_has_the_api_key_paths(client):
         ("/api/steam/library", "post"),
         ("/api/steam/games", "post"),
         ("/api/steam/games/{game}/enabled", "put"),
+        ("/api/steam/games/{game}/path", "put"),
         ("/api/steam/suggestions", "get"),
         ("/api/steam/suggestions/{suggestion_id}/accept", "post"),
         ("/api/steam/suggestions/{suggestion_id}/dismiss", "post"),
@@ -137,6 +143,7 @@ def test_openapi_only_has_the_api_key_paths(client):
         "/api/steam/library": [[apidocs.STEAM_TAG]],
         "/api/steam/games": [[apidocs.STEAM_TAG]],
         "/api/steam/games/{game}/enabled": [[apidocs.STEAM_TAG]],
+        "/api/steam/games/{game}/path": [[apidocs.STEAM_TAG]],
         **{p: [[apidocs.STEAM_SESSION_TAG]] for p in STEAM_SESSION_PATHS},
     }
 
@@ -176,6 +183,7 @@ def test_key_matrix_documented_exactly():
         "/api/steam/library": "device",
         "/api/steam/games": "device",
         "/api/steam/games/{game}/enabled": "device",
+        "/api/steam/games/{game}/path": "device",
         **{p: "session" for p in STEAM_SESSION_PATHS},
     }
     assert set(apidocs.KEY_KINDS) == HOOK_PATHS | PAIRING_PATHS | STEAM_PATHS
