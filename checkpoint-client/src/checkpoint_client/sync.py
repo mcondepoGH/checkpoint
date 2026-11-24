@@ -1,0 +1,368 @@
+"""Motor de sincronización manual de saves entre este equipo Linux y el hub de Checkpoint (solo biblioteca estándar).
+
+Copia adaptada de `checkpoint_sync.py` del plugin de la Deck: síncrona, sin Steam ni Decky. La validación de rutas está en
+`paths`.
+
+Protocolo del hub (`/api/hook/*`): `fingerprint` decide (`none` | `upload` | `download` | `conflict`); con `upload` se
+suben TODOS los ficheros y se hace `commit`; con `download` se baja todo `hub_manifest` a un directorio temporal
+hermano, se verifica y se reemplaza la carpeta. Con `conflict` no se toca nada (política skip).
+
+Seguridad (la ruta y el manifiesto que da el hub son DATOS NO CONFIABLES):
+- La ruta pasa por `paths.validate_game_path` y cada ruta del `hub_manifest` por `paths.validate_rel` ANTES de escribir.
+- Descarga a `<carpeta>.checkpoint-new` (hermana), verificación de sha256, tamaño y conjunto, y solo entonces se
+  reemplaza: el original pasa a `<carpeta>.checkpoint-backup` (UNA copia; la anterior se sustituye en cada descarga
+  correcta). Si algo falla (o Ctrl+C), el original queda intacto y se limpia el temporal.
+- Límites: 512 MB por fichero y 50 000 ficheros (los del hub por defecto), comprobados ANTES de subir o bajar.
+
+Un juego abierto se detecta fuera: `is_running(juego)` es un gancho inyectable (por defecto siempre False; lo usará el
+vigilante). Con él en True, sincronizar a mano se rechaza con `game_running`. Comprobar el estado no lo necesita.
+Sin exclusión mutua entre procesos todavía (llegará con el vigilante).
+"""
+
+import hashlib
+import os
+import shutil
+import time
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+
+from . import hubclient as hc
+from . import manifest as lm
+from .hub import HubNetworkError
+from .paths import BadManifest, PathNotAllowed, parse_hub_manifest, under, validate_game_path
+
+NEW_SUFFIX = ".checkpoint-new"
+BACKUP_SUFFIX = ".checkpoint-backup"
+MIN_FREE_MARGIN = 8 * 1024 * 1024
+
+Progress = Callable[[str, int, int], None]
+
+
+class _Fail(Exception):
+    def __init__(self, code: str, **params: Any):
+        super().__init__(code)
+        self.code, self.params = code, params
+
+
+def _remove(path: str) -> None:
+    """Borra un fichero, enlace o carpeta (sin seguir enlaces)."""
+    if os.path.islink(path) or not os.path.isdir(path):
+        os.unlink(path)
+    else:
+        shutil.rmtree(path)
+
+
+def _sha_size(path: str) -> Tuple[str, int]:
+    h, n = hashlib.sha256(), 0
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(lm.BLOCK), b""):
+            h.update(chunk)
+            n += len(chunk)
+    return h.hexdigest(), n
+
+
+class SyncEngine:
+    def __init__(
+        self,
+        hub: str,
+        key: str,
+        *,
+        home: Optional[Path] = None,
+        protected: Sequence[Path] = (),
+        sleep: Callable[[float], None] = time.sleep,
+        max_files: int = lm.MAX_FILES,
+        max_file_bytes: int = lm.MAX_FILE_BYTES,
+        log: Callable[[str], None] = lambda _m: None,
+        is_running: Callable[[str], bool] = lambda _game: False,
+    ):
+        # Gancho para el vigilante: id del juego -> ¿está abierto? Con el juego abierto no se sincroniza a mano.
+        # Por defecto siempre False: este núcleo no detecta procesos.
+        self.is_running = is_running
+        self.client = hc.HubClient(hub, key, sleep=sleep)
+        self.home = Path(home) if home else Path.home()
+        self.protected = list(protected)
+        self.max_files, self.max_file_bytes, self._log = max_files, max_file_bytes, log
+
+    # ---- API pública
+    def notify_closed(self, game: str, result: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Avisa al hub de que el juego se cerró (limpia su «jugando» y deja constancia en su historial)."""
+        return self.client.closed(game, result)
+
+    def notify_opened(self, game: str, result: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Avisa al hub de que el juego se abrió, con el resultado de la sync local (no crítico, un solo intento)."""
+        return self.client.opened(game, result)
+
+    def list_games(self) -> List[Dict[str, Any]]:
+        return self.client.get_games()
+
+    def check_game(self, game: str, games: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+        """Estado sin tocar nada: up_to_date | upload | download | conflict | no_path | missing_dir | disabled | error."""
+        return self._run(game, games, apply=False, progress=None)
+
+    def sync_game(
+        self, game: str, games: Optional[List[Dict[str, Any]]] = None, progress: Optional[Progress] = None
+    ) -> Dict[str, Any]:
+        """Sincroniza un juego. state: up_to_date | uploaded | downloaded | conflict | no_path | missing_dir | disabled |
+        error (con `code`)."""
+        return self._run(game, games, apply=True, progress=progress)
+
+    def resolve_conflict(
+        self, game: str, winner: Any, games: Optional[List[Dict[str, Any]]] = None, progress: Optional[Progress] = None
+    ) -> Dict[str, Any]:
+        """Resuelve el conflicto de datos de un juego a favor de `hub` o `device` (este equipo) y sincroniza al momento.
+        Compara de nuevo (las huellas de AHORA), deja la resolución pendiente en el hub (`PUT .../resolution`, con
+        esas huellas) y llama a `sync_game`: el hub la aplica solo si siguen siendo las mismas. Con `hub`, la descarga
+        deja antes la carpeta actual en `<carpeta>.checkpoint-backup`; con `device`, el hub guarda su versión previa.
+        Si ya no hay conflicto, es una sync normal. Juego abierto: error `game_running` sin registrar nada.
+        Estados extra: error `bad_winner`, `resolution_unsupported` (hub antiguo), `resolution_stale`, `side_empty`."""
+        if winner not in ("hub", "device"):
+            return {"game": game, "state": "error", "code": "bad_winner"}
+        try:
+            res = self._register_resolution(game, winner, games)
+        except (hc.HubApiError, HubNetworkError, lm.LocalManifestError) as e:
+            res = self._resolution_error(e)
+        except OSError as e:
+            self._log(f"resolver {game}: error de disco ({type(e).__name__})")
+            res = {"state": "error", "code": "io_error"}
+        if res is not None:
+            return {"game": game, **res}
+        return self.sync_game(game, games, progress)
+
+    def _register_resolution(self, game: str, winner: str, games) -> Optional[Dict[str, Any]]:
+        """Paso del hub de `resolve_conflict`: None = resolución registrada (o ya no hay
+        conflicto) y toca sincronizar; un dict = resultado final (error)."""
+        target = self._target(game, games, apply=True)
+        if isinstance(target, dict):
+            return target
+        path, exists = target
+        manifest = (
+            lm.build_manifest(path, max_files=self.max_files, max_file_bytes=self.max_file_bytes) if exists else []
+        )
+        fp = self.client.fingerprint(game, manifest)
+        if fp["action"] != "conflict":
+            return None  # el conflicto se deshizo solo: sync normal
+        if winner == "device" and not manifest:
+            return {"state": "error", "code": "empty_dir"}  # un lado vacío nunca gana
+        hub, dev = fp.get("hub"), fp.get("device_state")
+        expect = {
+            "hub": hub.get("hash") if isinstance(hub, dict) else None,
+            "device": dev.get("hash") if isinstance(dev, dict) else None,
+        }
+        self.client.set_resolution(game, winner, expect)
+        return None
+
+    def _resolution_error(self, e: Exception) -> Dict[str, Any]:
+        if isinstance(e, lm.LocalManifestError):
+            return {"state": "error", "code": e.code, **({"params": {"path": e.path}} if e.path else {})}
+        if isinstance(e, hc.HubApiError):
+            if e.code is None and e.status in (404, 405) or e.code == "bad_response":
+                return {"state": "error", "code": "resolution_unsupported"}  # el hub no tiene esta función
+            known = {
+                "err.resolution.stale": "resolution_stale",
+                "err.resolution.no_conflict": "resolution_stale",
+                "err.resolution.side_empty": "side_empty",
+                "err.resolution.invalid": "hub_error",
+            }
+            if e.code in known:
+                return {"state": "error", "code": known[e.code]}
+        return self._error(e)
+
+    def sync_all(self, progress: Optional[Progress] = None) -> List[Dict[str, Any]]:
+        """Sincroniza todos los juegos con ruta, uno tras otro. Un conflicto o un error de un juego no frena al resto."""
+        try:
+            games = self.client.get_games()
+        except (hc.HubApiError, HubNetworkError) as e:
+            return [{"game": "*", **self._error(e)}]
+        return [self._run(g["id"], games, apply=True, progress=progress) for g in games]
+
+    # ---- interno
+    @staticmethod
+    def _error(e: Exception) -> Dict[str, Any]:
+        """Resultado de error a partir de una excepción del cliente (sin URL ni clave)."""
+        if isinstance(e, HubNetworkError):
+            return {"state": "error", "code": "connection"}
+        if isinstance(e, hc.FileTooLarge):
+            return {"state": "error", "code": "file_too_large", "params": {"path": str(e)}}
+        assert isinstance(e, hc.HubApiError)
+        known = {
+            "err.hook.hub_changed": "hub_changed",
+            "err.hook.commit_rejected": "commit_rejected",
+            "err.hook.upload_incomplete": "upload_incomplete",
+            "err.hook.set_mismatch": "set_mismatch",
+            "err.hook.sha_mismatch": "file_changed",
+            "err.hook.file_too_large": "file_too_large",
+            "err.hook.staging_full": "staging_full",
+            "err.main.run_in_progress": "hub_busy",
+            "err.hook.upload_busy": "hub_busy",
+        }
+        if e.status == 401:
+            return {"state": "error", "code": "unauthorized"}
+        if e.status == 429:
+            return {"state": "error", "code": "rate_limited", "params": {"wait_s": e.wait_s}}
+        if e.code in known:
+            return {"state": "error", "code": known[e.code]}
+        return {"state": "error", "code": "hub_error", "params": {"code": e.code or str(e.status)}}
+
+    def _run(self, game: str, games, apply: bool, progress: Optional[Progress]) -> Dict[str, Any]:
+        try:
+            res = self._decide(game, games, apply, progress)
+        except _Fail as f:
+            res = {"state": "error", "code": f.code, **({"params": f.params} if f.params else {})}
+        except (hc.HubApiError, HubNetworkError, hc.FileTooLarge) as e:
+            res = self._error(e)
+        except lm.LocalManifestError as e:
+            res = {"state": "error", "code": e.code, **({"params": {"path": e.path}} if e.path else {})}
+        except OSError as e:
+            self._log(f"sincronización de {game}: error de disco ({type(e).__name__})")
+            res = {"state": "error", "code": "io_error"}
+        return {"game": game, **res}
+
+    def _target(self, game: str, games, apply: bool):
+        """Qué carpeta toca la sync de `game`: `(ruta real, existe)` o un resultado ya decidido (dict) si no se
+        puede seguir (juego desconocido o desactivado, sin ruta, abierto, ruta no permitida)."""
+        if games is None:
+            games = self.client.get_games()
+        g = next((x for x in games if x["id"] == game), None)
+        if g is None:
+            return {"state": "error", "code": "unknown_game"}
+        if not g.get("enabled", True):
+            return {"state": "disabled"}
+        if g["path"] is None:
+            return {"state": "no_path"}
+        if apply and self.is_running(game):
+            return {"state": "error", "code": "game_running"}
+        try:
+            path = validate_game_path(g["path"], self.home, self.protected)
+        except PathNotAllowed:
+            return {"state": "error", "code": "path_forbidden"}
+        spath = str(path)
+        exists = os.path.isdir(spath)
+        if os.path.lexists(spath) and not exists:
+            return {"state": "error", "code": "path_forbidden"}  # hay algo que no es una carpeta
+        return path, exists
+
+    def _decide(self, game: str, games, apply: bool, progress: Optional[Progress]) -> Dict[str, Any]:
+        target = self._target(game, games, apply)
+        if isinstance(target, dict):
+            return target
+        path, exists = target
+        if exists:
+            if progress:
+                progress("scan", 0, 0)
+            manifest = lm.build_manifest(path, max_files=self.max_files, max_file_bytes=self.max_file_bytes)
+        else:
+            manifest = []
+        fp = self.client.fingerprint(game, manifest, with_manifest=apply)
+        action = fp["action"]
+        hub_hash = fp.get("hub", {}).get("hash") if isinstance(fp.get("hub"), dict) else None
+        if action == "none":
+            return {"state": "up_to_date" if exists else "missing_dir"}
+        if action == "conflict":
+            # `resolution_stale`: había una resolución pendiente y los datos cambiaron: el hub la descartó
+            return {
+                "state": "conflict",
+                **({"code": "resolution_stale"} if fp.get("reason") == "resolution_stale" else {}),
+            }
+        if action == "upload":
+            if not exists:
+                return {"state": "missing_dir"}
+            if not apply:
+                return {"state": "upload"}
+            if not manifest:
+                return {"state": "error", "code": "empty_dir"}
+            return self._upload(game, path, manifest, hub_hash, progress)
+        if action == "download":
+            if not apply:
+                return {"state": "download"}
+            return self._download(game, path, exists, fp.get("hub_manifest"), progress)
+        return {"state": "error", "code": "bad_response"}
+
+    def _upload(self, game, path: Path, manifest, expect, progress) -> Dict[str, Any]:
+        total = len(manifest)
+        for i, e in enumerate(manifest):
+            if progress:
+                progress("upload", i, total)
+            self.client.upload_file(game, e["path"], path / e["path"], e["size"], e["sha256"])
+        if progress:
+            progress("upload", total, total)
+        out = self.client.commit(game, expect if isinstance(expect, str) else None, manifest)
+        if out.get("outcome") not in ("ok", "unchanged"):
+            return {"state": "error", "code": "hub_error", "params": {"code": str(out.get("outcome"))}}
+        return {"state": "uploaded", "files": total}
+
+    def _download(self, game, path: Path, exists: bool, raw_manifest, progress) -> Dict[str, Any]:
+        try:
+            entries = parse_hub_manifest(raw_manifest, self.max_files, self.max_file_bytes)
+        except BadManifest:
+            if isinstance(raw_manifest, list) and not raw_manifest:
+                return {"state": "error", "code": "hub_empty"}
+            return {"state": "error", "code": "bad_manifest"}
+        spath = str(path)
+        parent = os.path.dirname(spath)
+        home_real = os.path.realpath(self.home)
+        if not os.path.isdir(parent):
+            if not under(spath, home_real):
+                return {"state": "missing_dir"}  # fuera del directorio personal no se crean carpetas padre
+            os.makedirs(parent, exist_ok=True)
+        total_bytes = sum(e["size"] for e in entries)
+        if shutil.disk_usage(parent).free < total_bytes + MIN_FREE_MARGIN:
+            return {"state": "error", "code": "no_space"}
+        new, backup = spath + NEW_SUFFIX, spath + BACKUP_SUFFIX
+        if os.path.lexists(new):
+            _remove(new)  # resto de un intento anterior: nuestro propio temporal
+        os.mkdir(new)
+        try:
+            self._fetch(game, new, entries, progress)
+            if exists:
+                if os.path.lexists(backup):
+                    _remove(backup)  # UNA copia: la anterior se sustituye
+                os.rename(spath, backup)
+                try:
+                    os.rename(new, spath)
+                except OSError:
+                    os.rename(backup, spath)
+                    raise
+            else:
+                os.rename(new, spath)
+        except BaseException:
+            if os.path.lexists(new):
+                _remove(new)
+            raise
+        after = [{k: e[k] for k in ("path", "sha256", "size", "mtime")} for e in entries]
+        fp2 = self.client.fingerprint(game, after, with_manifest=False)  # `none/same`: el hub fija la línea base
+        if fp2.get("action") != "none":
+            return {"state": "error", "code": "inconsistent"}
+        return {"state": "downloaded", "files": len(entries)}
+
+    def _fetch(self, game: str, new: str, entries: List[Dict[str, Any]], progress) -> None:
+        """Descarga y verifica cada fichero dentro del temporal `new` (recién creado, sin enlaces)."""
+        real_new = os.path.realpath(new)
+        total = len(entries)
+        for i, e in enumerate(entries):
+            if progress:
+                progress("download", i, total)
+            dest = os.path.join(new, *e["path"].split("/"))
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            if os.path.commonpath([os.path.realpath(os.path.dirname(dest)), real_new]) != real_new or os.path.islink(
+                dest
+            ):
+                raise _Fail("bad_manifest")
+            self.client.download_file(game, e["path"], Path(dest))
+            sha, size = _sha_size(dest)
+            if sha != e["sha256"] or size != e["size"]:
+                raise _Fail("verify_failed", path=e["path"])
+            os.utime(dest, (e["mtime"], e["mtime"]))
+        if progress:
+            progress("download", total, total)
+        found = {
+            os.path.relpath(os.path.join(d, f), new).replace(os.sep, "/")
+            for d, _dirs, files in os.walk(new, followlinks=False)
+            for f in files
+            if not os.path.islink(os.path.join(d, f))
+        }
+        links = any(os.path.islink(os.path.join(d, n)) for d, dirs, files in os.walk(new) for n in dirs + files)
+        if links or found != {e["path"] for e in entries}:
+            raise _Fail("verify_failed")
+
+
+__all__ = ("SyncEngine",)
