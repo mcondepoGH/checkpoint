@@ -7,50 +7,7 @@ PENDING = (200, {"status": "pending", "expires_in": 500}, {})
 ACCEPTED = (200, {"status": "accepted", "key": KEY, "device": "pc-ab12"}, {})
 
 
-# ---- URL
-@pytest.mark.parametrize(
-    ("raw", "out"),
-    [
-        ("http://192.168.1.10:8088", "http://192.168.1.10:8088"),
-        ("  http://hub.local/ ", "http://hub.local"),
-        ("https://hub.example.com:443", "https://hub.example.com:443"),
-        ("http://[::1]:8088", "http://[::1]:8088"),
-    ],
-)
-def test_normalize_hub_url_ok(raw, out):
-    assert hub.normalize_hub_url(raw) == out
-
-
-@pytest.mark.parametrize(
-    ("raw", "code"),
-    [
-        ("", "empty"),
-        (None, "empty"),
-        ("ftp://h", "scheme"),
-        ("hub:8088", "scheme"),
-        ("http://u:p@h", "credentials"),
-        ("http://h/api", "path"),
-        ("http://h?x=1", "path"),
-        ("http://h:99999", "invalid"),
-        ("http://h a", "invalid"),
-    ],
-)
-def test_normalize_hub_url_rejects(raw, code):
-    with pytest.raises(hub.HubUrlError) as e:
-        hub.normalize_hub_url(raw)
-    assert e.value.code == code
-
-
 # ---- nombre del equipo
-def test_device_name_rules():
-    assert hub.normalize_device_name("  Mi PC ") == "Mi PC"
-    for raw, code in [("", "empty"), ("a  b", "spaces"), ("x" * 65, "too_long"), ("a/b", "slash"), ("..", "dots")]:
-        with pytest.raises(hub.DeviceNameError) as e:
-            hub.normalize_device_name(raw)
-        assert e.value.code == code
-    assert hub.normalize_device_name("x" * 64) == "x" * 64
-
-
 def test_default_device_name_is_valid_and_bounded(monkeypatch):
     monkeypatch.setattr("socket.gethostname", lambda: "mi-portatil")
     assert hub.default_device_name() == "mi-portatil"
@@ -58,18 +15,6 @@ def test_default_device_name_is_valid_and_bounded(monkeypatch):
     assert hub.default_device_name() == "x" * 64
     monkeypatch.setattr("socket.gethostname", lambda: "")
     assert hub.default_device_name() == hub.DEVICE_NAME
-
-
-# ---- redacción
-def test_redact_hides_keys_and_secrets():
-    text = f"fallo con {KEY} y ck_otra-1 y SECRET-xyz"
-    out = hub.redact(text, "SECRET-xyz")
-    assert KEY not in out and "ck_otra-1" not in out and "SECRET-xyz" not in out
-
-
-def test_describe_error_has_no_key():
-    e = ValueError(f"clave {KEY}")
-    assert KEY not in hub.describe_error(e)
 
 
 # ---- HTTP

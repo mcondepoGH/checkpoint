@@ -1,95 +1,31 @@
-"""Vinculación con el hub y HTTP síncrono (copia adaptada de `checkpoint_hub.py` del plugin, sin asyncio ni Decky).
+"""Vinculación con el hub y HTTP síncrono (versión adaptada de `checkpoint_hub.py` del plugin, sin asyncio ni Decky).
 
-Solo biblioteca estándar. Reglas de todo el módulo:
+Las reglas puras (URL del hub, nombre del dispositivo, redacción, compatibilidad por protocolo) viven en `checkpoint_core`.
+Solo biblioteca estándar y `checkpoint_core`. Reglas de todo el módulo:
 - El secreto de la solicitud viaja SOLO en la cabecera `X-Pairing-Secret`; la clave `ckd_` SOLO en `Authorization`.
-- Ni el secreto ni la clave se escriben en logs, mensajes ni excepciones (ver `redact`).
+- Ni el secreto ni la clave se escriben en logs, mensajes ni excepciones (ver `checkpoint_core.redaction.redact`).
 - No se siguen redirecciones ni se usan proxies del entorno (una redirección reenviaría las cabeceras secretas).
 """
 
 import http.client
 import json
-import re
 import socket
 import time
-import unicodedata
 import urllib.error
 import urllib.request
 from typing import Any, Callable, Dict, Optional, Tuple
-from urllib.parse import urlsplit
+
+from checkpoint_core.names import NAME_MAX, DeviceNameError, normalize_device_name
+from checkpoint_core.protocol import KEY_PREFIX, compat, parse_protocol
 
 DEVICE_NAME = "Linux"  # solo si el nombre del equipo no sirve como nombre visible
 POLL_S = 3.0  # cada cuánto se pregunta al hub mientras la solicitud está pendiente
 BACKOFF_MAX_S = 30.0  # espera máxima entre reintentos tras un error de red
 TIMEOUT_S = 10.0
 MAX_BODY = 64 * 1024  # el hub responde JSON pequeño; no se lee más
-KEY_PREFIX = "ckd_"
-NAME_MAX = 64  # igual que `NAME_MAX` del hub (backend/app/config/models.py)
-
-
-# ---------------------------------------------------------------- URL del hub
-class HubUrlError(ValueError):
-    """`code`: empty | scheme | credentials | path | invalid."""
-
-    def __init__(self, code: str):
-        super().__init__(code)
-        self.code = code
-
-
-def normalize_hub_url(raw: Any) -> str:
-    """`http(s)://host[:puerto]` sin barra final. Rechaza credenciales, rutas, parámetros y fragmentos."""
-    if not isinstance(raw, str) or not raw.strip():
-        raise HubUrlError("empty")
-    text = raw.strip()
-    if any(c.isspace() or ord(c) < 32 for c in text):
-        raise HubUrlError("invalid")
-    try:
-        parts = urlsplit(text)
-        host, port = parts.hostname, parts.port  # `port` lanza ValueError si es inválido
-    except ValueError:
-        raise HubUrlError("invalid") from None
-    if parts.scheme not in ("http", "https"):
-        raise HubUrlError("scheme")
-    if "@" in parts.netloc:
-        raise HubUrlError("credentials")
-    if not host:
-        raise HubUrlError("invalid")
-    if parts.path not in ("", "/") or parts.query or parts.fragment or text.endswith(("?", "#")):
-        raise HubUrlError("path")
-    shown = f"[{host}]" if ":" in host else host
-    return f"{parts.scheme}://{shown}" + (f":{port}" if port else "")
 
 
 # ---------------------------------------------------------------- nombre del equipo
-class DeviceNameError(ValueError):
-    """`code`: empty | spaces | too_long | slash | control | dots (las mismas reglas que `name_error` del hub)."""
-
-    def __init__(self, code: str):
-        super().__init__(code)
-        self.code = code
-
-
-def normalize_device_name(raw: Any) -> str:
-    """Recorta los bordes y aplica las reglas del hub para un nombre visible; lanza DeviceNameError."""
-    if not isinstance(raw, str) or not raw.strip():
-        raise DeviceNameError("empty")
-    name = raw.strip()
-    if "  " in name:
-        raise DeviceNameError("spaces")
-    if len(name) > NAME_MAX:
-        raise DeviceNameError("too_long")
-    if "/" in name or "\\" in name:
-        raise DeviceNameError("slash")
-    for ch in name:
-        cat = unicodedata.category(ch)
-        if ch == "‍":  # unión de emojis compuestos
-            continue
-        if cat[0] == "C" or cat in ("Zl", "Zp") or (cat == "Zs" and ch != " "):
-            raise DeviceNameError("control")
-    if not name.strip("."):
-        raise DeviceNameError("dots")
-    return name
-
-
 def default_device_name() -> str:
     """Nombre del equipo (recortado a 64) si es válido; si no, `DEVICE_NAME`."""
     try:
@@ -168,33 +104,6 @@ def ping(hub: str, key: str) -> HubResponse:
     return request_json("GET", f"{hub}/api/hook/ping", headers={"Authorization": f"Bearer {key}"})
 
 
-# Claves de Checkpoint (ck_/ckd_...): nunca salen en un log ni en un mensaje
-_SENSITIVE = re.compile(r"\bckd?_[A-Za-z0-9_-]+")
-
-
-def redact(text: str, *secrets: Optional[str]) -> str:
-    for s in secrets:
-        if s:
-            text = text.replace(s, "***")
-    return _SENSITIVE.sub("***", text)
-
-
-def describe_error(e: BaseException, *secrets: Optional[str], limit: int = 1500) -> str:
-    """`Tipo: mensaje` de una excepción, saneado y recortado. Un HubApiError añade el endpoint (sin servidor) y el estado."""
-    status = getattr(e, "status", None)
-    if status is not None:
-        code = getattr(e, "code", None)
-        detail = f"estado {status}" + (f", código {code}" if code else "")
-    else:
-        detail = str(e)
-    text = type(e).__name__ + (f": {detail}" if detail else "")
-    endpoint = getattr(e, "endpoint", None)
-    if endpoint:
-        text += f" [{endpoint}]"
-    return redact(text, *secrets)[:limit]
-
-
-# ---------------------------------------------------------------- vinculación
 class PairingError(Exception):
     """`code`: rejected | expired | connection | rate_limited | busy | name_invalid | hub_error | bad_response."""
 
@@ -275,18 +184,6 @@ def pair(
 
 
 # ---------------------------------------------------------------- comprobar conexión
-def _proto(v: Any) -> Optional[int]:
-    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
-
-
-def compat(client_protocol: int, hub_protocol: Optional[int], min_client_protocol: Optional[int]) -> str:
-    """`hub_old`: el hub no anuncia protocolo (aviso, no bloquea). `plugin_outdated`: el protocolo del cliente es menor
-    que `min_plugin_protocol` del hub (bloqueado hasta actualizar). `ok` en el resto."""
-    if hub_protocol is None or min_client_protocol is None:
-        return "hub_old"
-    return "plugin_outdated" if client_protocol < min_client_protocol else "ok"
-
-
 def check_connection(hub: str, key: Optional[str], client_protocol: int) -> Tuple[str, Dict[str, Any]]:
     """(resultado, datos). resultado: ok | not_linked | unauthorized | rate_limited | connection | hub_error.
     Con `ok`, los datos llevan `device`, `compat`, `protocol` y `min_plugin_protocol`."""
@@ -297,7 +194,7 @@ def check_connection(hub: str, key: Optional[str], client_protocol: int) -> Tupl
     except HubNetworkError:
         return "connection", {}
     if r.status == 200 and isinstance(r.body, dict) and r.body.get("ok") is True:
-        hp, mp = _proto(r.body.get("protocol")), _proto(r.body.get("min_plugin_protocol"))
+        hp, mp = parse_protocol(r.body.get("protocol")), parse_protocol(r.body.get("min_plugin_protocol"))
         device = r.body.get("device") if isinstance(r.body.get("device"), str) else None
         return "ok", {
             "device": device,

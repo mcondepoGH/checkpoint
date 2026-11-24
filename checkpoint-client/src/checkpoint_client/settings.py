@@ -9,8 +9,9 @@ import os
 import tempfile
 from typing import Any, Dict, Optional, Tuple
 
+from checkpoint_core.protocol import KEY_PREFIX
+
 SETTINGS_FILE = "settings.json"
-KEY_PREFIX = "ckd_"
 
 
 def config_dir() -> str:

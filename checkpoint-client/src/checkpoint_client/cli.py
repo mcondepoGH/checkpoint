@@ -1,7 +1,7 @@
 """CLI de checkpoint-client: link, unlink, games, sync, run, watch y status.
 
 Códigos de salida (como `backend/app/cli.py`): 0 correcto, 1 error, 2 uso, 3 conflicto. Los errores van a stderr y todo
-texto visible sale de `texts`. Nunca se imprime ni se registra la clave (`hub.redact`).
+texto visible sale de `texts`. Nunca se imprime ni se registra la clave (`redact`).
 """
 
 import argparse
@@ -10,6 +10,10 @@ import subprocess
 import sys
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
+
+from checkpoint_core.names import DeviceNameError, normalize_device_name
+from checkpoint_core.redaction import redact
+from checkpoint_core.urls import HubUrlError, normalize_hub_url
 
 from . import PROTOCOL, __version__, hub, locks, settings, texts, watcher
 from .hubclient import HubApiError
@@ -45,7 +49,7 @@ def _out(text: str) -> None:
 
 
 def _err(text: str) -> None:
-    print(hub.redact(text), file=sys.stderr, flush=True)
+    print(redact(text), file=sys.stderr, flush=True)
 
 
 def _fail(text: str, code: int = ERROR) -> "_Exit":
@@ -228,12 +232,12 @@ def cmd_link(a: argparse.Namespace) -> int:
     if found and not a.force:
         raise _fail(texts.LINK_ALREADY.format(device=found[2] or ""))
     try:
-        url = hub.normalize_hub_url(a.hub if a.hub is not None else s.get("hub_url"))
-    except hub.HubUrlError:
+        url = normalize_hub_url(a.hub if a.hub is not None else s.get("hub_url"))
+    except HubUrlError:
         raise _fail(texts.LINK_BAD_URL, USAGE) from None
     try:
-        name = hub.normalize_device_name(a.name) if a.name is not None else hub.default_device_name()
-    except hub.DeviceNameError:
+        name = normalize_device_name(a.name) if a.name is not None else hub.default_device_name()
+    except DeviceNameError:
         raise _fail(texts.ERR_NAME_INVALID, USAGE) from None
 
     def show_code(code: str) -> None:
@@ -393,7 +397,7 @@ def _log_line(message: str) -> None:
         os.makedirs(cfg, mode=0o700, exist_ok=True)
         fd = os.open(os.path.join(cfg, LOG_FILE), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         with os.fdopen(fd, "a", encoding="utf-8") as f:
-            f.write(hub.redact(message) + "\n")
+            f.write(redact(message) + "\n")
     except OSError:
         pass
 
@@ -461,7 +465,7 @@ def _log_unexpected() -> str:
     path = os.path.join(cfg, LOG_FILE)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     with os.fdopen(fd, "a", encoding="utf-8") as f:
-        f.write(hub.redact(traceback.format_exc()) + "\n")
+        f.write(redact(traceback.format_exc()) + "\n")
     return path
 
 

@@ -476,7 +476,11 @@ def test_unexpected_failure_is_logged_without_secrets(linked, run, monkeypatch):
 
 
 def test_python_dash_m_works(home, fakehub):
-    env = {**os.environ, "HOME": str(home), "PYTHONPATH": str(SRC.parent)}
+    env = {
+        **os.environ,
+        "HOME": str(home),
+        "PYTHONPATH": os.pathsep.join([str(SRC.parent), str(SRC.parents[2] / "checkpoint-core" / "src")]),
+    }
     r = subprocess.run(
         [sys.executable, "-m", "checkpoint_client", "status"], capture_output=True, text=True, encoding="utf-8", env=env
     )

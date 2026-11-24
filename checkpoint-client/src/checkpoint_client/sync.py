@@ -26,8 +26,9 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
+from checkpoint_core import manifest as lm
+
 from . import hubclient as hc
-from . import manifest as lm
 from .hub import HubNetworkError
 from .paths import BadManifest, PathNotAllowed, parse_hub_manifest, under, validate_game_path
 

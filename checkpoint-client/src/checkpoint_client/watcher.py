@@ -20,7 +20,9 @@ import os
 import time
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
-from . import hub, locks, settings, texts
+from checkpoint_core.redaction import redact
+
+from . import locks, settings, texts
 from .hubclient import HubApiError
 from .hub import HubNetworkError
 from .sync import hub_result
@@ -177,7 +179,7 @@ class Watcher:
         try:
             self._tick()
         except Exception as e:  # noqa: BLE001  (un fallo no para el vigilante; el detalle redactado va al log)
-            self._log(hub.redact(f"vigilante: fallo inesperado ({type(e).__name__}: {e})"))
+            self._log(redact(f"vigilante: fallo inesperado ({type(e).__name__}: {e})"))
 
     def _tick(self) -> None:
         now = self._clock()

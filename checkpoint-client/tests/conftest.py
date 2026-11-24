@@ -18,6 +18,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+# checkpoint_core: fuente única en ../checkpoint-core (en el wheel va dentro)
+sys.path.insert(0, str(ROOT.parent / "checkpoint-core" / "src"))
 
 KEY = "ckd_clave-de-prueba-9876"  # literal de prueba (allowlist exacta en .gitleaks.toml)
 

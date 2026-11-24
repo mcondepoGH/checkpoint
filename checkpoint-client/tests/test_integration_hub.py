@@ -31,7 +31,7 @@ except Exception as e:  # pragma: no cover - depende del entorno
     pytest.skip(f"hub real no disponible: {e!r}", allow_module_level=True)
 
 from checkpoint_client import cli, hub, settings, texts  # noqa: E402
-from checkpoint_client import manifest as lm  # noqa: E402
+from checkpoint_core import manifest as lm  # noqa: E402
 
 pytestmark = pytest.mark.integration
 
