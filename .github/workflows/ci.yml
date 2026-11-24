@@ -30,6 +30,28 @@ jobs:
       - run: ruff format --check .
       - run: pytest -n 0 --cov=app --cov-fail-under=90
 
+  backend-windows:
+    # Motor de sincronización en Windows (bloqueo de juego con msvcrt, «Este equipo», detección con tasklist).
+    # Solo las pruebas del motor: sin ruff ni umbral de cobertura (ya los pasa el job backend en Linux).
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: >-
+          pytest -n 0
+          tests/test_locking.py tests/test_local_transport.py tests/test_local_e2e.py
+          tests/test_local_api.py tests/test_local_config.py
+          tests/test_sync.py tests/test_sync_codes.py tests/test_sync_one_device.py
+          tests/test_conflicts.py tests/test_orphans.py tests/test_fingerprint_manifest.py
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
