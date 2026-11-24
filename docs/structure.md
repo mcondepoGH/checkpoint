@@ -144,11 +144,11 @@ checkpoint-deck/
 ├── main.py                clase `Plugin` (`_main`, `_unload`): métodos que llama la interfaz (`get_version` y `check_update` son solo lectura; no hay `install_update`); `get_prefs`/`set_pref` guardan las preferencias de la interfaz (p. ej. «Mostrar juegos sin configurar») en `prefs.json`, aparte de `settings.json` (que lleva la clave `ckd_`); `resolve_conflict` resuelve un conflicto de datos; delega en py_modules
 ├── py_modules/            lógica sin Decky, solo biblioteca estándar; los nombres llevan el prefijo `checkpoint_` porque
 │   │                      Decky comparte `sys.path` entre plugins
-│   ├── checkpoint_hub.py       validación de URL, HTTP con `urllib`, ajustes con permisos 0600, máquina de estados de la vinculación
+│   ├── checkpoint_hub.py       HTTP con `urllib`, ajustes con permisos 0600, `redact`/`describe_error` (suman el steamid a los de `checkpoint_core.redaction`), máquina de estados de la vinculación
 │   ├── checkpoint_steam.py     lector de VDF/ACF y de las bibliotecas de Steam (`appmanifest_*.acf`, incluida la SD): solo appid y nombre; `scan_games` suma los atajos (techo de ACF `2**31-1`) y devuelve cuáles son
 │   ├── checkpoint_shortcuts.py lector de `userdata/<id>/config/shortcuts.vdf` (VDF binario) de los atajos de Steam (juegos que no son de Steam): appid (32 bits sin signo, techo `2**32-1`), nombre, `Exe`, `StartDir` y `LaunchOptions`; solo appid y nombre salen de la Deck; `find_launch_options` busca las de un atajo por appid; `derive_appid` (crc32 de Exe + nombre, no verificado) solo si se pide
 │   ├── checkpoint_client.py    `HubClient` con la clave `ckd_`: juegos, fingerprint, descarga con Range, subida reanudable, commit, reintentos; `refresh_library`
-│   ├── checkpoint_manifest.py  manifiesto local `[{path,sha256,size,mtime}]` con las mismas reglas que `backend/app/sync/fingerprint.py`
+│   │                           (el manifiesto local, la URL del hub, el nombre del dispositivo, la redacción y `compat` ya NO viven aquí: están en `checkpoint-core/` y `package.sh` las mete en el zip como `py_modules/checkpoint_core/`)
 │   ├── checkpoint_sync.py      motor de sincronización manual (`check_game`, `sync_game`, `sync_all`) y validación de rutas
 │   ├── checkpoint_version.py   versión propia (semver, comparación) y protocolo, leídos en ejecución del `package.json` instalado
 │   ├── checkpoint_update.py    consulta de versión nueva, SOLO LECTURA (`fetch_info` a `/api/deck/plugin/info` sin clave y `evaluate`: solo una versión estrictamente mayor; `reason: hub_old` si el hub no anuncia protocolo); no descarga ni instala: el panel (`src/index.tsx`, textos en `src/texts.ts`) da los pasos de «Instalar plugin desde URL» con `<hub>/api/deck/plugin` y la SHA-256 abreviada
@@ -170,3 +170,27 @@ Pruebas del hub de esta zona (en `backend/tests/`): `test_deck_plugin.py` (desca
 ```
 
 Reglas: el secreto de la solicitud viaja solo en `X-Pairing-Secret` y la clave `ckd_` solo en `Authorization: Bearer`; ninguno sale en logs ni en el estado que ve la interfaz; la clave se guarda en `settings.json` (directorio de ajustes de Decky) con 0600. Sincronización manual (con el juego abierto se rechaza con `game_running`; abrir y cerrar los trata `checkpoint_auto`, que al cerrar avisa con `POST /api/hook/{game}/closed` y deja los cierres sin red en una cola en disco): la ruta del save la da el hub (`GET /api/games`, campo `path`) y es dato no confiable; `checkpoint_sync.validate_game_path` y `validate_rel` la validan antes de tocar nada, y una descarga va a `<carpeta>.checkpoint-new`, se verifica y reemplaza la carpeta dejando UNA copia `<carpeta>.checkpoint-backup`. El manifiesto local debe describir la carpeta igual que `fingerprint()` del hub: si cambian las reglas allí, cambian en `checkpoint_manifest.py` y lo vigila el test de equivalencia.
+
+## Código común del plugin y del cliente (`checkpoint-core/`)
+
+Paquete Python `checkpoint_core` con lo que debe ser idéntico en el plugin de la Deck y en el cliente de Linux (`checkpoint-client/`), para no copiarlo: solo código PURO (sin asyncio, ni Decky, ni Steam, ni red) y solo biblioteca estándar. Compatible con Python 3.8 (Decky corre en su propio Python: no uses sintaxis más nueva que la del plugin); `ruff` con `target-version = "py38"`.
+
+```
+checkpoint-core/
+├── pyproject.toml, pytest.ini, README.md
+├── src/checkpoint_core/
+│   ├── manifest.py    manifiesto local `[{path,sha256,size,mtime}]` (`build_manifest`, `LocalManifestError`) con las mismas reglas que `backend/app/sync/fingerprint.py`
+│   ├── urls.py        `normalize_hub_url`, `HubUrlError`
+│   ├── names.py       `normalize_device_name`, `DeviceNameError`, `NAME_MAX` (reglas de `name_error` del hub)
+│   ├── redaction.py   `redact` y `describe_error`: claves `ck_`/`ckd_` y secretos; cada cliente suma sus patrones con `extra` (el plugin, los steamid)
+│   └── protocol.py    `KEY_PREFIX`, `parse_protocol` y `compat` (`ok`, `hub_old`, `plugin_unknown`, `plugin_outdated`)
+└── tests/             pytest propio (las reglas, sin hub)
+```
+
+La fuente es única: ni `checkpoint-deck/` ni `checkpoint-client/` guardan una copia. Cómo llega a cada consumidor:
+- **Plugin de la Deck:** `checkpoint-deck/scripts/package.sh` copia `../checkpoint-core/src/checkpoint_core/*.py` a `Checkpoint/py_modules/checkpoint_core/` dentro del zip (Decky pone `py_modules/` en `sys.path`; el zip sigue siendo autocontenido y solo stdlib). La etapa `deck` del Dockerfile hace `COPY checkpoint-core/src /checkpoint-core/src` para que `../checkpoint-core` exista desde `/deck`. Las pruebas del plugin lo importan por `tests/conftest.py` (añade la ruta del core).
+- **Cliente de Linux:** `checkpoint-client/pyproject.toml` empaqueta `checkpoint_core` desde `../checkpoint-core/src` (`package-dir`): el wheel lo lleva dentro y no hay dependencia aparte. Construye con `python -m build --wheel` (el sdist por defecto no es posible: `package-dir` apunta fuera de la carpeta del cliente). `pip install .` y `pip install -e .` desde `checkpoint-client/` también funcionan.
+
+Qué NO se unificó (sigue en cada lado a propósito): los motores de sincronización (asyncio en el plugin, síncrono en el cliente), todo lo de Steam, la vinculación y el HTTP (`checkpoint_hub`/`hub` y `checkpoint_client`/`hubclient`, que usan la red), los ajustes en disco (`save_settings` difiere: el cliente fuerza 0700 en su carpeta, el plugin no toca la de Decky) y la versión semver (`checkpoint_version`, solo la usa el plugin hasta que el cliente compruebe versiones nuevas).
+
+Regla de pruebas: cada carpeta con código tiene su propio pytest y sus propias pruebas (`backend/`, `checkpoint-deck/`, `checkpoint-client/`, `checkpoint-core/`), y una prueba vive donde vive el código que prueba. Una regla del core se prueba en `checkpoint-core/tests/`, no otra vez en el plugin ni en el cliente; allí solo quedan las pruebas de integración (p. ej. la equivalencia del manifiesto con el `fingerprint` del hub real).

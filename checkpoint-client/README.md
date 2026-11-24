@@ -44,6 +44,8 @@ Al bajar, la carpeta anterior queda en `<carpeta>.checkpoint-backup` (una copia)
 
 ## Desarrollo
 
+El código puro común con el plugin de la Deck (manifiesto local, URL del hub, nombre del dispositivo, redacción y compatibilidad por protocolo) vive en [`../checkpoint-core`](../checkpoint-core/README.md) y el wheel lo lleva dentro (`checkpoint_core`), sin dependencia aparte. Para construir un wheel: `python -m build --wheel` (el sdist por defecto no es posible, porque el core está fuera de esta carpeta).
+
 ```bash
 pip install -e '.[dev]'
 pytest            # tests con un hub falso

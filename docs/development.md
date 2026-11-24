@@ -28,6 +28,7 @@ python -m pytest -n 0 --cov=app --cov-fail-under=90                       # cobe
 - CI no cambia de comportamiento: `pytest -n 0 --cov=app --cov-fail-under=90` en serie, con todos los tests y con cobertura (`-n 0` anula el `-n 2` de `addopts`).
 - El job `backend-windows` de `ci.yml` (`windows-latest`) corre solo las pruebas del motor de sincronización (bloqueo `msvcrt`, «Este equipo» y detección con `tasklist`), sin ruff ni umbral de cobertura; lista los ficheros a mano, así que añade ahí cualquier prueba nueva del motor. Las pruebas de permisos POSIX (`chmod`) y de `fcntl`/`flock` se omiten en Windows con `skipif`.
 - En `checkpoint-deck/` no uses `--basetemp=/dev/shm/...`: el plugin rechaza rutas bajo `/dev` y fallan unos 125 tests; deja el directorio temporal por defecto (`pytest -q`: 44 s a 28 s en el NAS con `-n 2`, mismos aprobados; en serie, `-n 0`).
+- Cada carpeta con código tiene su propio `pytest`: `backend/`, `checkpoint-deck/`, `checkpoint-client/` y `checkpoint-core/` (el código puro común al plugin y al cliente; sus reglas se prueban allí una sola vez, ver `structure.md`). En `checkpoint-core/` y `checkpoint-client/`: `pip install -e '.[dev]'` y `pytest`; `ruff check . && ruff format --check .`.
 
 ## Formato, lint y auditorías
 

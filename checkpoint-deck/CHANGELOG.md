@@ -1,5 +1,13 @@
 # Registro de cambios del plugin
 
+## Sin publicar
+
+Sin cambios de comportamiento ni de protocolo.
+
+### Cambios
+
+- **Código común:** el manifiesto local, la URL del hub, el nombre del dispositivo, la redacción de claves y `compat` pasan a `checkpoint_core` (carpeta `checkpoint-core/`, compartida con el cliente de Linux, sin copias). `scripts/package.sh` lo copia al zip como `py_modules/checkpoint_core/` (el zip sigue siendo autocontenido y solo stdlib) y falla si falta `../checkpoint-core`; la etapa `deck` del Dockerfile lo copia al build. Por probar: el zip construido por Docker en una Deck real.
+
 ## 1.4.0 - 2026-11-24
 
 Interfaz de «Cambiar carpeta». Necesita el hub con `PUT /api/steam/games/{juego}/path`.

@@ -193,7 +193,7 @@ pytest -q                     # desde checkpoint-deck/ (con el entorno del hub, 
 pnpm run typecheck            # tipos de TypeScript
 ```
 
-Las pruebas `tests/test_integration_hub.py` y `tests/test_sync_engine.py` arrancan el hub real del repositorio, y `tests/test_local_manifest.py` compara el manifiesto local con `fingerprint()` del hub; se omiten solas si faltan las dependencias del backend (ejecútalas con el entorno del hub). Los módulos de `py_modules/` llevan el prefijo `checkpoint_` porque Decky comparte el `sys.path` entre plugins.
+Las pruebas `tests/test_integration_hub.py` y `tests/test_sync_engine.py` arrancan el hub real del repositorio, y `tests/test_local_manifest.py` compara el manifiesto local (`checkpoint_core.manifest`) con `fingerprint()` del hub; se omiten solas si faltan las dependencias del backend (ejecútalas con el entorno del hub). Los módulos de `py_modules/` llevan el prefijo `checkpoint_` porque Decky comparte el `sys.path` entre plugins. El código puro común con el cliente de Linux (manifiesto local, URL del hub, nombre del dispositivo, redacción y compatibilidad por protocolo) no está en `py_modules/`: vive en `../checkpoint-core/` (con sus propias pruebas) y `scripts/package.sh` lo copia al zip como `py_modules/checkpoint_core/`, así que el zip sigue siendo autocontenido; el empaquetado falla si falta `../checkpoint-core`.
 
 
 ## Licencia
