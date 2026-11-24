@@ -3,6 +3,7 @@
 import hashlib
 import os
 import random
+import sys
 
 import pytest
 
@@ -71,7 +72,24 @@ def test_rechaza_rutas_peligrosas(path):
 
 
 @pytest.mark.parametrize(
-    "path", ["it's.sav", "a&b.sav", "slot:1/x.sav", "Mi Partida/s 1.sav", "a;b", "C:/x", "é$%.sav"]
+    "path",
+    [
+        "it's.sav",
+        "a&b.sav",
+        pytest.param(
+            "slot:1/x.sav",
+            marks=pytest.mark.skipif(sys.platform == "win32", reason="':' es inválido en nombres de fichero de NTFS"),
+        ),
+        "Mi Partida/s 1.sav",
+        "a;b",
+        pytest.param(
+            "C:/x",
+            marks=pytest.mark.skipif(
+                sys.platform == "win32", reason="con unidad, en Windows sale de tmp_path y el test pasaría por vacuidad"
+            ),
+        ),
+        "é$%.sav",
+    ],
 )
 def test_acepta_nombres_como_fingerprint_real(tmp_path, path):
     """Un save con `'`, `&`, `:` o espacios debe poder igualar al hub: no se filtra por `PATH_CHARS_RE`."""
