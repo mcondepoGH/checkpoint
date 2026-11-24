@@ -38,6 +38,11 @@ def _lock_dir() -> str:
     return os.path.join(settings.config_dir(), "locks")
 
 
+def _watcher_active() -> bool:
+    """¿Hay un `watch` en marcha en este equipo? Mira su lock sin dejarlo tomado."""
+    return locks.is_locked(_lock_dir(), locks.WATCH)
+
+
 class _Exit(Exception):
     def __init__(self, code: int):
         super().__init__(code)
@@ -159,7 +164,8 @@ def _error_text(res: Dict[str, Any], ctx: _Ctx, game: Optional[Dict[str, Any]]) 
     if code == "unauthorized":
         return texts.ERR_UNAUTHORIZED
     if code == "game_running":
-        return texts.SYNC_RUNNING.format(game=(game or {}).get("name") or "")
+        text = texts.SYNC_RUNNING_WATCHED if _watcher_active() else texts.SYNC_RUNNING
+        return text.format(game=(game or {}).get("name") or "")
     if code in texts.SYNC_ERRORS:
         return texts.SYNC_ERRORS[str(code)]
     return texts.ERR_HUB_ERROR
@@ -443,6 +449,7 @@ def cmd_status(a: argparse.Namespace) -> int:
             line("protocol", str(data["protocol"]))
     except _Exit as e:
         code = e.code
+    line("watch", texts.STATUS_WATCH_ACTIVE if _watcher_active() else texts.STATUS_WATCH_STOPPED)
     line("version", __version__)
     return code
 

@@ -27,6 +27,15 @@ def test_approved_texts_are_verbatim():
     )
 
 
+def test_watcher_texts_approved_by_the_user():
+    assert texts.WATCH_RUNNING == "Ya hay un vigilante en marcha."
+    assert texts.STATUS_KEYS["watch"] == "vigilante"
+    assert (texts.STATUS_WATCH_ACTIVE, texts.STATUS_WATCH_STOPPED) == ("activo", "parado")
+    assert texts.SYNC_RUNNING_WATCHED.format(game="Hades") == (
+        "Hades está abierto: no se sincroniza. El vigilante lo sincronizará al cerrarlo."
+    )
+
+
 def test_engine_error_texts_do_not_mention_deck():
     assert all("Deck" not in t for t in texts.SYNC_ERRORS.values())
     assert texts.SYNC_ERRORS["no_space"].endswith("en este equipo para bajar los ficheros.")

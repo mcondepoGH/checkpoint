@@ -308,6 +308,15 @@ def test_sync_open_game_hook(linked, run, monkeypatch):
     assert run("sync", GAME, "--dry-run")[0] == 0  # comprobar sí vale con el juego abierto
 
 
+def test_sync_open_game_with_active_watcher_says_it_will_sync_on_close(linked, run, monkeypatch):
+    put(linked.save, "a.sav", b"1")
+    monkeypatch.setattr(cli, "is_running", lambda game: True)
+    with locks.exclusive(os.path.join(settings.config_dir(), "locks"), locks.WATCH):
+        code, _, err = run("sync", GAME)
+    assert code == 1 and err.strip() == texts.SYNC_RUNNING_WATCHED.format(game="Mi Juego")
+    assert not linked.files.get(GAME)
+
+
 def test_sync_default_hook_says_not_running():
     assert cli.is_running("lo-que-sea") is False
 
@@ -448,6 +457,23 @@ def test_status_ok(linked, run):
     assert texts.STATUS_LINE.format(key=texts.STATUS_KEYS["protocol"], value="1") in lines
     assert texts.STATUS_LINE.format(key=texts.STATUS_KEYS["version"], value=cli.__version__) in lines
     no_secrets(out)
+
+
+def _watch_line(out: str) -> str:
+    return next(line for line in out.splitlines() if line.startswith(texts.STATUS_KEYS["watch"] + ":"))
+
+
+def test_status_reports_the_watcher_without_keeping_its_lock(linked, run):
+    lock_dir = os.path.join(settings.config_dir(), "locks")
+    _, out, _ = run("status")
+    assert _watch_line(out) == "vigilante: parado"
+    assert not locks.is_locked(lock_dir, locks.WATCH)
+    with locks.exclusive(lock_dir, locks.WATCH):
+        _, out, _ = run("status")
+    assert _watch_line(out) == "vigilante: activo"
+    assert not locks.is_locked(lock_dir, locks.WATCH)  # status no dejó el lock tomado
+    _, out, _ = run("status")
+    assert _watch_line(out) == "vigilante: parado"
 
 
 def test_status_not_linked_unreachable_or_unauthorized(home, linked, run):

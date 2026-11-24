@@ -120,8 +120,11 @@ STATUS_KEYS = {
     "connection": "conexión",
     "protocol": "protocolo",
     "version": "versión",
+    "watch": "vigilante",
 }
 STATUS_OK = "ok"
+STATUS_WATCH_ACTIVE = "activo"
+STATUS_WATCH_STOPPED = "parado"
 # Resultado de `sync --dry-run` y de `games --check`.
 CHECK_UPLOAD = "{game}: hay cambios en este equipo (se subirían)."
 CHECK_DOWNLOAD = "{game}: hay cambios en el hub (se bajarían)."
@@ -133,6 +136,9 @@ ERR_RUN_NO_COMMAND = "Falta el comando: checkpoint-client run <juego> -- <comand
 ERR_RUN_LAUNCH = "No se pudo lanzar el comando: {reason}."
 ERR_GAME_UNKNOWN = "{game}: el hub no tiene ese juego para este equipo."
 
-# ---------------------------------------------------------------- pendientes de aprobar (no están en la tarjeta)
 # Segundo `watch` a la vez (exclusión mutua entre procesos del cliente).
 WATCH_RUNNING = "Ya hay un vigilante en marcha."
+# `sync` manual con el juego abierto y un vigilante activo.
+SYNC_RUNNING_WATCHED = "{game} está abierto: no se sincroniza. El vigilante lo sincronizará al cerrarlo."
+
+# ---------------------------------------------------------------- pendientes de aprobar (no están en la tarjeta)
