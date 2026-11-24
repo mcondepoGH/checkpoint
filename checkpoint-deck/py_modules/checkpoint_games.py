@@ -9,7 +9,7 @@ import os
 import re
 import stat
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import checkpoint_client as hc
 import checkpoint_lutris
@@ -222,6 +222,21 @@ def describe_failure(e: Exception) -> Dict[str, Any]:
     return {"ok": False, "error": code, "error_params": params, "error_detail": detail}
 
 
+def check_folder(path: Any, home: Path, protected: Sequence[Path] = ()) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """Los filtros de «Cambiar carpeta»: `(ruta_verificada, None)` o `(None, error)`. La carpeta debe EXISTIR y ser una carpeta
+    (`path_missing`), pasar `validate_game_path` y `verified_dir` (dentro del home o de una biblioteca de Steam, p. ej. la
+    tarjeta SD; sin enlaces ni rutas sin normalizar; legible) o es `path_forbidden`."""
+    forbidden = {"ok": False, "error": "path_forbidden", "error_params": {}, "error_detail": None}
+    try:
+        real = validate_game_path(path, home, protected)
+    except PathNotAllowed:
+        return None, dict(forbidden)
+    if not _is_real_dir(str(real)):
+        return None, {"ok": False, "error": "path_missing", "error_params": {}, "error_detail": None}
+    good = verified_dir(path, home, protected, None, _steam_roots(home))
+    return (good, None) if good is not None else (None, dict(forbidden))
+
+
 class GameTools:
     """Llamadas bloqueantes (corren en un hilo) para crear y activar juegos con la key del dispositivo."""
 
@@ -261,17 +276,10 @@ class GameTools:
         una biblioteca de Steam, p. ej. la tarjeta SD; sin enlaces ni rutas sin normalizar; legible), también `path_forbidden`.
         Todo antes de llamar al hub, que valida de nuevo y suelta el estado recordado. Un hub sin esta ruta (404 sin código,
         405) da `hub_outdated`. Devuelve `{ok, game, path}` con la ruta normalizada que aceptó el hub."""
-        try:
-            real = validate_game_path(path, self._home, self._protected)
-        except PathNotAllowed:
-            return {"ok": False, "error": "path_forbidden", "error_params": {}, "error_detail": None}
-        if not _is_real_dir(str(real)):
-            self._log("cambiar carpeta: la carpeta no existe o no es una carpeta")
-            return {"ok": False, "error": "path_missing", "error_params": {}, "error_detail": None}
-        good = verified_dir(path, self._home, self._protected, None, _steam_roots(self._home))
-        if good is None:
-            self._log("cambiar carpeta: carpeta no admitida")
-            return {"ok": False, "error": "path_forbidden", "error_params": {}, "error_detail": None}
+        good, err = check_folder(path, self._home, self._protected)
+        if err is not None:
+            self._log(f"cambiar carpeta: {err['error']}")
+            return err
         try:
             out = self._client.set_game_path(game, good)
         except (hc.HubApiError, HubNetworkError) as e:

@@ -637,3 +637,48 @@ def test_change_game_path_needs_a_link_and_a_current_plugin(fake_decky, tmp_path
     a, b = asyncio.run(go())
     assert a["error"] == "not_linked"
     assert b["error"] == "plugin_outdated"
+
+
+# ---- folder_info: tamaño, ficheros y fecha de la carpeta nueva elegida (para el modal de «Cambiar carpeta»)
+def test_folder_info_measures_a_valid_folder_without_exposing_files(fake_decky, scripthub, tmp_path, monkeypatch):
+    st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    d = Path.home() / "Saves/Con"
+    d.mkdir(parents=True)
+    (d / "a.sav").write_bytes(b"x" * 100)
+    (d / "b.sav").write_bytes(b"y" * 50)
+    vacia = Path.home() / "Saves/Vacia"
+    vacia.mkdir()
+
+    async def go():
+        return await p.folder_info(str(d)), await p.folder_info(str(vacia))
+
+    con, sin = asyncio.run(go())
+    assert con["ok"] is True and con["size"] == 150 and con["files"] == 2 and con["empty"] is False
+    assert isinstance(con["mtime"], float)
+    assert set(con) == {"ok", "size", "files", "mtime", "empty", "truncated"}  # ni nombres ni rutas
+    assert sin["ok"] is True and sin["files"] == 0 and sin["empty"] is True
+
+
+def test_folder_info_applies_the_same_filters_as_change_game_path(fake_decky, scripthub, tmp_path, monkeypatch):
+    st, hub, p = setup(fake_decky, scripthub, tmp_path, monkeypatch)
+    real = Path.home() / "Saves/Real"
+    real.mkdir(parents=True)
+    (Path.home() / "Saves/enlace").symlink_to(real)
+    (Path.home() / "Saves/fichero").write_text("x")
+
+    async def go():
+        return {
+            "missing": await p.folder_info(str(Path.home() / "no/existe")),
+            "file": await p.folder_info(str(Path.home() / "Saves/fichero")),
+            "forbidden": await p.folder_info("/etc"),
+            "dots": await p.folder_info(str(real) + "/../Real"),
+            "link": await p.folder_info(str(Path.home() / "Saves/enlace")),
+            "home": await p.folder_info(str(Path.home())),
+            "bad": await p.folder_info(None),
+        }
+
+    res = asyncio.run(go())
+    assert res["missing"]["error"] == "path_missing" and res["file"]["error"] == "path_missing"
+    for k in ("forbidden", "dots", "link", "home", "bad"):
+        assert res[k] == {"ok": False, "error": "path_forbidden", "error_params": {}, "error_detail": None}, k
+    assert res["missing"]["ok"] is False

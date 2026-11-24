@@ -28,7 +28,7 @@ from checkpoint_hub import (
 )
 from checkpoint_auto import AutoRunner, AutoSync, Notices
 from checkpoint_client import refresh_library as hub_refresh_library
-from checkpoint_games import GameTools, lutris_shortcut_appid, suggest_path, suggest_shortcut, verify_applied
+from checkpoint_games import GameTools, check_folder, lutris_shortcut_appid, suggest_path, suggest_shortcut, verify_applied
 from checkpoint_jobs import Jobs
 from checkpoint_lutris_api import LutrisSteamLookup
 from checkpoint_savesuggest import SaveSuggester
@@ -417,6 +417,26 @@ class Plugin:
         path = self.jobs.paths().get(game)
         info = await asyncio.to_thread(checkpoint_uistate.folder_info, path, Path.home())
         return {"ok": True, "game": game, "path": path, "folder": info, "last": self.stamps.get(game)}
+
+    async def folder_info(self, path: str) -> Dict[str, Any]:
+        """Tamaño, ficheros y fecha de la carpeta nueva que el usuario eligió con «Examinar…», para el modal de «Cambiar
+        carpeta». Pasa los mismos filtros que `change_game_path` (`path_missing`, `path_forbidden`) y solo mide (nunca lista ni
+        devuelve nombres). `{ok, size, files, mtime, empty, truncated}`; `empty` = sin ficheros."""
+        good, err = check_folder(path, Path.home(), protected_dirs(decky))
+        if err is not None:
+            return err
+        info = await asyncio.to_thread(checkpoint_uistate.folder_info, good, Path.home())
+        if not info.get("exists"):
+            return self._failure("path_missing")
+        files = info.get("files") or 0
+        return {
+            "ok": True,
+            "size": info.get("size"),
+            "files": files,
+            "mtime": info.get("mtime"),
+            "empty": files == 0,
+            "truncated": bool(info.get("truncated")),
+        }
 
     async def picker_start(self, path: str = "") -> Dict[str, Any]:
         """Ruta segura con la que abrir el selector de carpetas de Decky: `path` si existe, es carpeta y se puede leer; si no, el
