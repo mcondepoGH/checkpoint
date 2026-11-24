@@ -15,6 +15,7 @@ from app.sync.transport import LocalDeviceTransport
 from fakes import LocalTransport
 
 PW = "correct horse"
+USUARIO = "Zx9-usuario-no-en-rutas-7q"  # centinela: no puede aparecer en rutas del SO (p. ej. "runneradmin")
 PC, LAP = "pc-1a2b3c4d", "laptop-5e6f7a8b"
 # El dispositivo local es esta máquina: su `os` y sus rutas (con «/», como las guarda la config) dependen del SO.
 SO = "windows" if sys.platform == "win32" else "linux"
@@ -29,8 +30,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "KNOWN_HOSTS", str(tmp_path / "keys" / "kh"))
     (tmp_path / "static").mkdir()
     (tmp_path / "static/index.html").write_text("<html>app</html>", encoding="utf-8")
-    c = TestClient(create_app(Auth("admin", PW, 1, rounds=4)))
-    assert c.post("/api/login", json={"user": "admin", "password": PW}).status_code == 200
+    c = TestClient(create_app(Auth(USUARIO, PW, 1, rounds=4)))
+    assert c.post("/api/login", json={"user": USUARIO, "password": PW}).status_code == 200
     c.tmp = tmp_path
     return c
 
@@ -75,7 +76,7 @@ def test_runtime_requiere_sesion(client):
 def test_nada_sensible_en_config(client):
     put_config(client, cfg(client.tmp))
     txt = client.get("/api/config").text
-    for secreto in (PW, "admin", str(settings.SSH_KEY), "known_hosts", "id_ed25519"):
+    for secreto in (PW, USUARIO, str(settings.SSH_KEY), "known_hosts", "id_ed25519"):
         assert secreto not in txt
     assert set(client.get("/api/config").json()) == {"version", "config", "error", "runtime", "platform"}
 
