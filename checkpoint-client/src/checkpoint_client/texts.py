@@ -17,6 +17,8 @@ HELP_SYNC_DRY_RUN = "solo comprueba: no cambia nada"
 HELP_SYNC_RESOLVE = "resuelve un conflicto: hub o este equipo"
 HELP_RUN = "baja el guardado, lanza el juego y lo sube al cerrarlo: checkpoint-client run <juego> -- <comando>"
 HELP_WATCH = "vigila los juegos del hub y sube su guardado al cerrarse"
+HELP_INSTALL = "deja el vigilante arrancando solo al iniciar sesión (systemd --user en Linux)"
+HELP_UNINSTALL = "quita el arranque automático (no borra la vinculación ni los datos)"
 HELP_STATUS = "muestra la vinculación, la conexión con el hub, el vigilante y la versión"
 HELP_UNLINK = "borra la clave de este equipo (la revocación real se hace en el hub, en Dispositivos)"
 
@@ -63,6 +65,15 @@ WATCH_OFFLINE = "{game} cerrado, pero el hub no responde: se reintentará."
 WATCH_NO_PROCESS = "{game} no tiene proceso configurado en el hub: no se puede vigilar."
 WATCH_ALREADY_OPEN = "{game} ya estaba abierto: se subirá al cerrarlo, no se baja."
 WATCH_STOPPED = "Vigilante detenido."
+
+# ---------------------------------------------------------------- instalación
+INSTALL_DONE = (
+    "Instalado: el vigilante arrancará al iniciar sesión (unidad systemd --user «checkpoint-client»). "
+    "Estado: systemctl --user status checkpoint-client."
+)
+INSTALL_FAILED = "No se pudo crear la unidad systemd --user: {reason}. No se ha cambiado nada."
+INSTALL_NO_SYSTEMD = "systemd --user no está disponible en esta sesión."
+INSTALL_ONLY_LINUX = "El arranque automático solo está disponible en Linux (systemd)."
 
 # ---------------------------------------------------------------- errores
 ERR_CONNECTION = "No se pudo conectar con el hub. Revisa la dirección y la red. Hub: {url}."
@@ -142,3 +153,8 @@ WATCH_RUNNING = "Ya hay un vigilante en marcha."
 SYNC_RUNNING_WATCHED = "{game} está abierto: no se sincroniza. El vigilante lo sincronizará al cerrarlo."
 
 # ---------------------------------------------------------------- pendientes de aprobar (no están en la tarjeta)
+# `uninstall` en Linux hace `disable --now`: PARA el vigilante de systemd. El texto aprobado de la tarjeta («Desinstalado el
+# arranque automático. No detiene el vigilante que ya está en marcha.») es el de Windows y aquí no sería cierto.
+UNINSTALL_DONE_LINUX = "Desinstalado el arranque automático y detenido el vigilante de systemd."
+# Fallo al quitar la unidad (la tarjeta solo aprueba el fallo al crearla).
+UNINSTALL_FAILED = "No se pudo quitar la unidad systemd --user: {reason}."

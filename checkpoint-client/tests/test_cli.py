@@ -517,11 +517,10 @@ def test_help_texts_come_from_texts_module(capsys):
     assert cli.main(["--help"]) == 0
     out = " ".join(capsys.readouterr().out.split())
     assert texts.HELP_ROOT in out and texts.HELP_LINK in out and texts.HELP_RUN.split(":")[0] in out
-    for cmd in ("link", "games", "sync", "run", "status", "unlink", "watch"):
+    for cmd in ("link", "games", "sync", "run", "status", "unlink", "watch", "install", "uninstall"):
         assert cmd in out
-    assert texts.HELP_WATCH in out
-    for later in ("install", "uninstall", "check-update"):
-        assert later not in out
+    assert texts.HELP_WATCH in out and texts.HELP_INSTALL in out and texts.HELP_UNINSTALL in out
+    assert "check-update" not in out  # llegará con su subtarea
 
 
 def test_cli_has_no_loose_text_literals():

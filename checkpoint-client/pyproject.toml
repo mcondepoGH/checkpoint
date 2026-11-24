@@ -19,7 +19,7 @@ checkpoint-client = "checkpoint_client.cli:main"
 
 [tool.setuptools]
 package-dir = { checkpoint_client = "src/checkpoint_client", checkpoint_core = "../checkpoint-core/src/checkpoint_core" }
-packages = ["checkpoint_client", "checkpoint_core"]
+packages = ["checkpoint_client", "checkpoint_client.install", "checkpoint_core"]
 
 [tool.ruff]
 target-version = "py312"

@@ -6,6 +6,7 @@ texto visible sale de `texts`. Nunca se imprime ni se registra la clave (`redact
 
 import argparse
 import os
+import signal
 import subprocess
 import sys
 import traceback
@@ -18,6 +19,7 @@ from checkpoint_core.urls import HubUrlError, normalize_hub_url
 from . import PROTOCOL, __version__, hub, locks, settings, texts, watcher
 from .hubclient import HubApiError
 from .hub import HubNetworkError
+from .install import systemd
 from .sync import SyncEngine, hub_result
 
 OK, ERROR, USAGE, CONFLICT = 0, 1, 2, 3
@@ -90,6 +92,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("game")
     run.add_argument("command", nargs=argparse.REMAINDER)
     sub.add_parser("watch", help=texts.HELP_WATCH, description=texts.HELP_WATCH)
+    sub.add_parser("install", help=texts.HELP_INSTALL, description=texts.HELP_INSTALL)
+    sub.add_parser("uninstall", help=texts.HELP_UNINSTALL, description=texts.HELP_UNINSTALL)
     sub.add_parser("status", help=texts.HELP_STATUS, description=texts.HELP_STATUS)
     return ap
 
@@ -408,6 +412,19 @@ def _log_line(message: str) -> None:
         pass
 
 
+def _stop_on_sigterm():
+    """systemd para el servicio con SIGTERM: se trata como Ctrl+C (parada limpia, suelta el lock). Devuelve el manejador
+    anterior para restaurarlo, o None si no se puede instalar (fuera del hilo principal)."""
+
+    def stop(_signum, _frame):
+        raise KeyboardInterrupt
+
+    try:
+        return signal.signal(signal.SIGTERM, stop)
+    except ValueError:
+        return None
+
+
 def cmd_watch(a: argparse.Namespace) -> int:
     ctx = _connect()
     _games(ctx)  # falla pronto si el hub no deja ver los juegos
@@ -423,13 +440,46 @@ def cmd_watch(a: argparse.Namespace) -> int:
                 log=_log_line,
             )
             w.start()
+            previous = _stop_on_sigterm()
             try:
                 w.run()
             except KeyboardInterrupt:
                 pass
+            finally:
+                if previous is not None:
+                    signal.signal(signal.SIGTERM, previous)
     except locks.Busy:
         raise _fail(texts.WATCH_RUNNING) from None
     _out(texts.WATCH_STOPPED)
+    return OK
+
+
+def _linux_only() -> None:
+    if not sys.platform.startswith("linux"):
+        raise _fail(texts.INSTALL_ONLY_LINUX)
+
+
+def cmd_install(a: argparse.Namespace) -> int:
+    _linux_only()
+    try:
+        systemd.install()
+    except systemd.Unavailable:
+        raise _fail(texts.INSTALL_NO_SYSTEMD) from None
+    except systemd.InstallError as e:
+        raise _fail(texts.INSTALL_FAILED.format(reason=e.reason)) from None
+    _out(texts.INSTALL_DONE)
+    return OK
+
+
+def cmd_uninstall(a: argparse.Namespace) -> int:
+    _linux_only()
+    try:
+        systemd.uninstall()
+    except systemd.Unavailable:
+        raise _fail(texts.INSTALL_NO_SYSTEMD) from None
+    except systemd.InstallError as e:
+        raise _fail(texts.UNINSTALL_FAILED.format(reason=e.reason)) from None
+    _out(texts.UNINSTALL_DONE_LINUX)
     return OK
 
 
@@ -461,6 +511,8 @@ COMMANDS = {
     "sync": cmd_sync,
     "run": cmd_run,
     "watch": cmd_watch,
+    "install": cmd_install,
+    "uninstall": cmd_uninstall,
     "status": cmd_status,
 }
 
