@@ -9,7 +9,10 @@ description = "Cliente de Checkpoint para Linux: sincroniza los guardados de tus
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
-dependencies = ["psutil>=5.9"]  # el vigilante detecta procesos con psutil (keyring llegará con el llavero)
+dependencies = [
+    "psutil>=5.9",  # el vigilante detecta procesos con psutil
+    "keyring>=24",  # la clave ckd_ va al llavero del sistema (sin llavero: fichero 0600)
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]

@@ -239,3 +239,59 @@ def home(tmp_path, monkeypatch):
 @pytest.fixture
 def settings_dir(tmp_path):
     return str(tmp_path / "settings")
+
+
+def _memory_keyring_class():
+    """Llavero en memoria. `fail_set`/`fail_get`/`fail_delete` lanzan KeyringError."""
+    from keyring import backend, errors
+
+    class Memory(backend.KeyringBackend):
+        priority = 1
+
+        def __init__(self):
+            super().__init__()
+            self.items = {}
+            self.fail_set = self.fail_get = self.fail_delete = False
+            self.lose_on_set = False  # acepta la escritura pero no la guarda (backend roto)
+
+        def set_password(self, service, username, password):
+            if self.fail_set:
+                raise errors.KeyringError("cartera bloqueada")
+            if not self.lose_on_set:
+                self.items[(service, username)] = password
+
+        def get_password(self, service, username):
+            if self.fail_get:
+                raise errors.KeyringError("cartera bloqueada")
+            return self.items.get((service, username))
+
+        def delete_password(self, service, username):
+            if self.fail_delete:
+                raise errors.KeyringError("cartera bloqueada")
+            if (service, username) not in self.items:
+                raise errors.PasswordDeleteError("no existe")
+            del self.items[(service, username)]
+
+    return Memory
+
+
+@pytest.fixture(autouse=True)
+def no_real_keyring():
+    """Nunca se toca el llavero real: por defecto no hay llavero (backend `fail`); los tests que lo necesitan piden
+    `memory_keyring`."""
+    import keyring
+    from keyring.backends import fail
+
+    previous = keyring.get_keyring()
+    keyring.set_keyring(fail.Keyring())
+    yield
+    keyring.set_keyring(previous)
+
+
+@pytest.fixture
+def memory_keyring(no_real_keyring):
+    import keyring
+
+    kr = _memory_keyring_class()()
+    keyring.set_keyring(kr)
+    return kr

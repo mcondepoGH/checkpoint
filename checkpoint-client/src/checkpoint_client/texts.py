@@ -156,3 +156,10 @@ SYNC_RUNNING_WATCHED = "{game} está abierto: no se sincroniza. El vigilante lo 
 UNINSTALL_DONE_LINUX = "Desinstalado el arranque automático y detenido el vigilante de systemd."
 # Fallo al quitar la unidad (la tarjeta solo aprueba el fallo al crearla).
 UNINSTALL_FAILED = "No se pudo quitar la unidad systemd --user: {reason}."
+
+# Dónde se guarda la clave (textos de «Instalación» de la tarjeta; «llavero» y «fichero» son los valores de
+# «Clave guardada en {llavero|fichero}» de la vinculación).
+KEYRING_SAVED = "Clave guardada en el llavero del sistema."
+KEYRING_UNAVAILABLE = "No hay llavero disponible: la clave se guarda en {path} (solo legible por tu usuario)."
+LOCATION_KEYRING = "llavero"
+LOCATION_FILE = "fichero"

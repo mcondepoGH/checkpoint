@@ -25,6 +25,11 @@ def test_wheel_carries_checkpoint_core_from_its_single_source():
     assert not any("checkpoint-core" in d or "checkpoint_core" in d for d in meta["project"]["dependencies"])
 
 
+def test_declares_psutil_and_keyring_dependencies():
+    deps = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["dependencies"]
+    assert any(d.startswith("psutil") for d in deps) and any(d.startswith("keyring") for d in deps)
+
+
 def test_changelog_has_current_version():
     assert f"## {checkpoint_client.__version__}" in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 

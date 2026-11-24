@@ -16,7 +16,7 @@ from checkpoint_core.names import DeviceNameError, normalize_device_name
 from checkpoint_core.redaction import redact
 from checkpoint_core.urls import HubUrlError, normalize_hub_url
 
-from . import PROTOCOL, __version__, hub, locks, settings, texts, watcher
+from . import PROTOCOL, __version__, hub, locks, keystore, settings, texts, watcher
 from .hubclient import HubApiError
 from .hub import HubNetworkError
 from .install import systemd
@@ -107,8 +107,15 @@ class _Ctx:
         )
 
 
+def _find_link(cfg: str, s: Dict[str, Any]) -> Optional[Tuple[str, str, Optional[str]]]:
+    """La vinculación (hub, clave, dispositivo) con la clave de donde esté (llavero o fichero; puede migrarla)."""
+    key = keystore.get_key(cfg, s)
+    return settings.linked({**s, "key": key}) if key else None
+
+
 def _linked() -> Tuple[str, str, Optional[str]]:
-    found = settings.linked(settings.load_settings(settings.config_dir()))
+    cfg = settings.config_dir()
+    found = _find_link(cfg, settings.load_settings(cfg))
     if found is None:
         raise _fail(texts.ERR_NOT_LINKED)
     return found
@@ -238,7 +245,7 @@ def _progress(name: str):
 def cmd_link(a: argparse.Namespace) -> int:
     cfg = settings.config_dir()
     s = settings.load_settings(cfg)
-    found = settings.linked(s)
+    found = _find_link(cfg, s)
     if found and not a.force:
         raise _fail(texts.LINK_ALREADY.format(device=found[2] or ""))
     try:
@@ -258,9 +265,14 @@ def cmd_link(a: argparse.Namespace) -> int:
         device, key = hub.pair(url, name, on_code=show_code, poll_s=hub.POLL_S)
     except hub.PairingError as e:
         raise _fail(_pairing_text(e, url)) from None
-    s.update({"hub_url": url, "device": device, "key": key, "device_name": name})
-    settings.save_settings(cfg, s)
-    _out(texts.LINK_DONE.format(device=device, where="fichero"))
+    s = settings.load_settings(cfg)  # puede haberse migrado a otro sitio mientras se esperaba
+    keystore.delete_key(cfg, s)  # una vinculación nueva no deja la clave de la anterior en el llavero
+    s = {k: v for k, v in s.items() if k not in ("key", keystore.STORE_FIELD)}
+    s.update({"hub_url": url, "device": device, "device_name": name})
+    where = keystore.store_key(cfg, s, key)
+    if where == keystore.FILE:
+        _out(texts.KEYRING_UNAVAILABLE.format(path=keystore.settings_path(cfg)))
+    _out(texts.LINK_DONE.format(device=device, where=keystore.location_label(where)))
     return OK
 
 
@@ -281,9 +293,10 @@ def _pairing_text(e: "hub.PairingError", url: str) -> str:
 def cmd_unlink(a: argparse.Namespace) -> int:
     _linked()
     cfg = settings.config_dir()
+    s = settings.load_settings(cfg)  # tras `_linked()`: ya con la migración hecha, si tocaba
+    keystore.delete_key(cfg, s)
     s = settings.load_settings(cfg)
-    for k in ("key", "device"):
-        s.pop(k, None)
+    s.pop("device", None)
     settings.save_settings(cfg, s)
     return OK
 
