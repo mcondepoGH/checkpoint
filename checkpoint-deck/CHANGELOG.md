@@ -1,8 +1,8 @@
 # Registro de cambios del plugin
 
-## Sin publicar
+## 1.4.0 - 2026-11-24
 
-Interfaz de «Cambiar carpeta» (por probar en una Deck real; sin versión asignada). Necesita el hub con `PUT /api/steam/games/{juego}/path`.
+Interfaz de «Cambiar carpeta». Necesita el hub con `PUT /api/steam/games/{juego}/path`.
 
 ### Cambios
 

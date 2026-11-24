@@ -1,6 +1,6 @@
 # Cambios
 
-## Sin publicar
+## 2.4.0 (2026-11-24)
 
 ### Novedades
 
