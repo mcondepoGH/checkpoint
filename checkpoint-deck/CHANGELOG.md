@@ -1,5 +1,16 @@
 # Registro de cambios del plugin
 
+## Sin publicar
+
+Interfaz de «Cambiar carpeta» (por probar en una Deck real; sin versión asignada). Necesita el hub con `PUT /api/steam/games/{juego}/path`.
+
+### Cambios
+
+- **Detalle del juego:** «Cambiar carpeta» deja de estar desactivado («Próximamente»): abre «Examinar…» y, al elegir, un modal con la carpeta actual y la nueva. Con el juego abierto sale desactivado («Cierra el juego para cambiar la carpeta»). Tras aplicar, fila «Deshacer cambio de carpeta» bajo el botón (sin confirmar; solo el último cambio, en memoria; también desactivada con el juego abierto) y toasts «Carpeta cambiada correctamente» / «Carpeta anterior restaurada».
+- **Carpeta distinta sugerida** (detalle y tarjeta): nuevo «Usar esta carpeta» (mismo modal, con tamaño, ficheros y fecha de la sugerida); se mantiene «Ignorar la sugerencia». En la tarjeta se quita «Ver y cambiar carpeta»: «Ver detalle» ya estaba debajo.
+- **Errores propios** del cambio (hub sincronizando, juego abierto, carpeta inexistente o desaparecida, hub no compatible, hub que no acepta la carpeta).
+- **Selector:** «Examinar…» se extrae del formulario de alta para reutilizarlo; si el panel se desmonta con el selector abierto, vuelve al detalle del juego.
+
 ## 1.3.3 - 2026-11-16
 
 `checkpointProtocol: 1` (sin cambios). Toasts sin nombre de juego (por probar en una Deck real).

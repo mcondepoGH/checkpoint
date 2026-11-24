@@ -22,6 +22,7 @@ import { CardKind, SaveGame, bestPath, cardKind, gameKey, otherPaths, unconfigur
 import { Notice, RunningApps, ToastKind, getLastNotice, startGameWatch, startNoticePump } from "./autosync";
 import {
   Banner,
+  FolderChanges,
   Level,
   SyncGate,
   TabInput,
@@ -29,6 +30,7 @@ import {
   VersionNotifier,
   banners,
   canSyncRest,
+  changeFolderBlock,
   conflictGames,
   countStates,
   errorGames,
@@ -54,10 +56,12 @@ import {
   BANNER,
   CHANGED_IGNORE,
   CHANGED_TITLE,
-  CHANGED_VIEW,
+  CHANGED_USE,
   CHANGE_FOLDER,
   CHANGE_FOLDER_HELP,
-  COMING_SOON,
+  CHANGE_UNDO,
+  FOLDER_CHANGED_TOAST,
+  FOLDER_RESTORED_TOAST,
   DETAIL_ERROR,
   DETAIL_FOLDER_MISSING,
   DETAIL_HISTORY_NOTE,
@@ -114,6 +118,9 @@ import {
   firstConfirm,
   formatDate,
   formatSize,
+  NewFolderInfo,
+  changeConfirm,
+  changeError,
   pendingParts,
   summaryToast,
   BROWSE_HELP,
@@ -315,6 +322,10 @@ interface ChangedItem {
   files?: number | null;
   mtime?: number | null;
 }
+interface ChangedPath extends GameFailure {
+  path?: string;
+  previous?: string | null;
+}
 interface GameDetailData {
   ok: boolean;
   path?: string | null;
@@ -352,6 +363,7 @@ const getGamePaths = callable<[], { ok: boolean; paths: Record<string, string | 
 const suggestChanges = callable<[], { ok: boolean; error?: string; items?: ChangedItem[] }>("suggest_changes");
 const ignoreSuggestion = callable<[game: string, path: string], { ok: boolean; error?: string }>("ignore_suggestion");
 const gameDetail = callable<[game: string], GameDetailData>("game_detail");
+const changeGamePath = callable<[game: string, path: string], ChangedPath>("change_game_path");
 const reportError = callable<[message: string], { ok: boolean }>("report_error");
 
 // ---- captura de fallos (mismo patrón que el hub: crashwatch + avisos con detalles saneados) ----
@@ -542,6 +554,29 @@ const mmss = (s: number) =>
   `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
 // Un juego instalado en la Deck que el hub aún no tiene: «Configurar» rellena nombre y ruta (lo detectado) y pide confirmar
+/** Selector nativo de Decky sobre una carpeta: valida antes la ruta inicial (`picker_start`) y devuelve la carpeta elegida, o null si
+ *  se cancela o falla (el fallo conocido de Decky lo avisa `pickerListeners`). `onBusy` marca la espera de `picker_start`. El panel
+ *  puede estar desmontado cuando resuelve: quien llama no debe depender de `setState` de su componente. */
+async function browseFolder(want: string, onBusy: (b: boolean) => void): Promise<string | null> {
+  let start = "/";
+  onBusy(true);
+  try {
+    const r = await pickerStart(want);
+    if (r.ok && typeof r.path === "string" && r.path.startsWith("/")) start = r.path;
+  } catch (e) {
+    capture("ruta inicial del selector")(e);
+  } finally {
+    onBusy(false);
+  }
+  try {
+    const picked = await openFilePicker(FileSelectionType.FOLDER, ...pickerArgs(start));
+    return picked?.path ? picked.path : null;
+  } catch (e) {
+    if (e !== "User canceled") capture("selector de carpetas")(e); // cancelar rechaza con ese texto: no es un fallo
+    return null;
+  }
+}
+
 function UnconfiguredGame({ appid, name, source, disabled, onDone, onClose }: { appid: number; name: string; source?: string; disabled: boolean; onDone: (s: SyncState) => void; onClose?: () => void }) {
   // El selector de carpetas de Decky cierra la Quick Access y desmonta el panel: el formulario se recupera del borrador
   // (src/drafts.ts, a nivel de módulo) para no perder la carpeta elegida al volver.
@@ -616,29 +651,15 @@ function UnconfiguredGame({ appid, name, source, disabled, onDone, onClose }: { 
   const browse = async () => {
     setError(null);
     setPickerFailed(false);
-    let start = "/";
-    setBusy(true);
-    try {
-      // Atajo de Lutris: «Examinar…» abre en el prefijo (`browse_start`) salvo que la carpeta escrita sea propia (ni candidata ni vacía).
-      const typed = path.trim();
-      const own = typed !== "" && !(sug?.candidates ?? []).includes(typed);
-      const r = await pickerStart(sug?.browse_start && !own ? sug.browse_start : (sug?.candidates ?? []).includes(path) ? path : typed);
-      if (r.ok && typeof r.path === "string" && r.path.startsWith("/")) start = r.path;
-    } catch (e) {
-      capture("ruta inicial del selector")(e);
-    } finally {
-      setBusy(false);
-    }
-    try {
-      const picked = await openFilePicker(FileSelectionType.FOLDER, ...pickerArgs(start));
-      if (picked?.path) {
-        // El panel puede estar desmontado cuando el selector resuelve: setPath no llega a nadie, así que la ruta va también
-        // al borrador (este closure sigue vivo) y el formulario remontado sale abierto con ella.
-        drafts.patch(appid, { path: picked.path }, { open: true, gname, path: picked.path, sug });
-        setPath(picked.path);
-      }
-    } catch (e) {
-      if (e !== "User canceled") capture("selector de carpetas")(e); // cancelar rechaza con ese texto: no es un fallo
+    // Atajo de Lutris: «Examinar…» abre en el prefijo (`browse_start`) salvo que la carpeta escrita sea propia (ni candidata ni vacía).
+    const typed = path.trim();
+    const own = typed !== "" && !(sug?.candidates ?? []).includes(typed);
+    const picked = await browseFolder(sug?.browse_start && !own ? sug.browse_start : (sug?.candidates ?? []).includes(path) ? path : typed, setBusy);
+    if (picked) {
+      // El panel puede estar desmontado cuando el selector resuelve: setPath no llega a nadie, así que la ruta va también
+      // al borrador (este closure sigue vivo) y el formulario remontado sale abierto con ella.
+      drafts.patch(appid, { path: picked }, { open: true, gname, path: picked, sug });
+      setPath(picked);
     }
   };
 
@@ -1353,9 +1374,68 @@ function HomeTab({ ctx, form }: { ctx: Ctx; form: ReactNode }) {
 // ---- Juegos ----
 type Changed = ChangedItem;
 
-function GameDetail({ ctx, g, changed, onBack, onIgnore, toggle }: { ctx: Ctx; g: GameRow; changed: Changed | undefined; onBack: () => void; onIgnore: (c: Changed) => void; toggle: (g: GameRow, on: boolean) => void }) {
+// Cambio de carpeta de un juego ya configurado. El estado (último cambio para «Deshacer», último error) vive en módulo: el detalle se
+// desmonta al «Volver» y el panel entero puede estar desmontado cuando el selector resuelve y se llama a `askFolder`.
+const folders = new FolderChanges();
+let detailGame: string | null = null; // detalle desde el que se abrió el selector: el panel remontado vuelve a él (solo una vez)
+
+/** Repinta el componente cuando cambia el estado de `folders`; `onKind` además recibe de qué tipo fue (para recargar datos). */
+function useFolders(onKind?: (kind: "changed" | "error") => void): void {
+  const [, setTick] = useState(0);
+  const cb = useRef(onKind);
+  cb.current = onKind;
+  useEffect(
+    () =>
+      folders.subscribe((k) => {
+        setTick((n) => n + 1);
+        cb.current?.(k);
+      }),
+    [],
+  );
+}
+
+/** Aplica el cambio (o su Deshacer, que es la misma llamada con la ruta anterior). Nunca lanza: el resultado va a `folders` y a un toast. */
+async function applyFolder(g: { id: string; name: string }, path: string, opts: { fromSuggestion?: boolean; undo?: boolean } = {}): Promise<void> {
+  folders.clearError(g.id);
+  try {
+    const r = await changeGamePath(g.id, path);
+    if (!r.ok || typeof r.path !== "string") {
+      folders.fail(g.id, changeError(r, !!opts.fromSuggestion));
+      return;
+    }
+    if (opts.undo) folders.undone(g.id);
+    else folders.applied(g.id, { path: r.path, previous: r.previous ?? null });
+    showToast("ok", opts.undo ? FOLDER_RESTORED_TOAST : FOLDER_CHANGED_TOAST);
+  } catch (e) {
+    capture("cambiar la carpeta del juego")(e);
+    folders.fail(g.id, changeError({ error: "unexpected" }));
+  }
+}
+
+/** Modal de confirmación del cambio de carpeta; al aceptar se aplica. `info`: lo que ya se sabe de la carpeta nueva (solo la sugerida). */
+function askFolder(g: { id: string; name: string }, current: string | null, next: string, fromSuggestion: boolean, info?: NewFolderInfo): void {
+  const c = changeConfirm(g.name, current, next, info);
+  showModal(
+    <ConfirmModal
+      strTitle={c.title}
+      strDescription={c.description}
+      strOKButtonText={c.ok}
+      strCancelButtonText="Cancelar"
+      onOK={() => {
+        applyFolder(g, next, { fromSuggestion }).catch(capture("cambiar la carpeta del juego"));
+      }}
+    />,
+  );
+}
+const suggestedInfo = (c: ChangedItem): NewFolderInfo | undefined => (typeof c.files === "number" ? { size: c.size, files: c.files, mtime: c.mtime } : undefined);
+
+function GameDetail({ ctx, g, changed, current, onBack, onIgnore, toggle }: { ctx: Ctx; g: GameRow; changed: Changed | undefined; current: string | null; onBack: () => void; onIgnore: (c: Changed) => void; toggle: (g: GameRow, on: boolean) => void }) {
   const [d, setD] = useState<GameDetailData | null>(null);
   const [failed, setFailed] = useState(false);
+  const [rev, setRev] = useState(0); // sube al cambiar la carpeta: se vuelve a medir
+  useFolders((k) => {
+    if (k === "changed") setRev((n) => n + 1);
+  });
   useEffect(() => {
     let live = true;
     gameDetail(g.id)
@@ -1369,8 +1449,18 @@ function GameDetail({ ctx, g, changed, onBack, onIgnore, toggle }: { ctx: Ctx; g
     return () => {
       live = false;
     };
-  }, [g.id]);
+  }, [g.id, rev]);
   const busy = ctx.sync.running;
+  const block = changeFolderBlock({ playing: ctx.playing === g.name, busy });
+  const here = d?.path ?? current;
+  const undo = folders.undoOf(g.id);
+  const pick = async () => {
+    folders.clearError(g.id);
+    detailGame = g.id;
+    const picked = await browseFolder(here ?? "", () => undefined);
+    detailGame = null;
+    if (picked) askFolder(g, here, picked, false);
+  };
   const badge = gameBadge(g.state, g.enabled);
   const f = d?.folder;
   const can = !busy && g.enabled && ctx.playing !== g.name && !syncBlockReason({ ...ctx.gate, playing: null }) && ["unknown", "up_to_date", "upload", "download", "error"].includes(g.state);
@@ -1428,6 +1518,11 @@ function GameDetail({ ctx, g, changed, onBack, onIgnore, toggle }: { ctx: Ctx; g
             </div>
           </PanelSectionRow>
           <PanelSectionRow>
+            <ButtonItem layout="below" disabled={block.disabled} description={block.hint ?? undefined} onClick={() => askFolder(g, here, changed.path, true, suggestedInfo(changed))}>
+              {CHANGED_USE}
+            </ButtonItem>
+          </PanelSectionRow>
+          <PanelSectionRow>
             <ButtonItem layout="below" onClick={() => onIgnore(changed)}>
               {CHANGED_IGNORE}
             </ButtonItem>
@@ -1440,12 +1535,23 @@ function GameDetail({ ctx, g, changed, onBack, onIgnore, toggle }: { ctx: Ctx; g
             Sincronizar
           </ButtonItem>
         </PanelSectionRow>
-        {/* FASE 2: cambiar la carpeta de un juego ya configurado necesita backend y hub; el hueco queda desactivado a propósito */}
         <PanelSectionRow>
-          <ButtonItem layout="below" disabled description={CHANGE_FOLDER_HELP} onClick={() => undefined}>
-            {`${CHANGE_FOLDER} · ${COMING_SOON}`}
+          <ButtonItem layout="below" disabled={block.disabled} description={block.hint ?? CHANGE_FOLDER_HELP} onClick={pick}>
+            {CHANGE_FOLDER}
           </ButtonItem>
         </PanelSectionRow>
+        {undo && (
+          <PanelSectionRow>
+            <ButtonItem layout="below" disabled={block.disabled} description={block.hint ?? undefined} onClick={() => applyFolder(g, undo.previous, { undo: true })}>
+              {CHANGE_UNDO}
+            </ButtonItem>
+          </PanelSectionRow>
+        )}
+        {folders.errorOf(g.id) && (
+          <PanelSectionRow>
+            <div role="alert" style={WRAP}>{folders.errorOf(g.id)}</div>
+          </PanelSectionRow>
+        )}
         <PanelSectionRow>
           <ButtonItem layout="below" onClick={onBack}>
             {GAME_BACK}
@@ -1464,7 +1570,11 @@ function GamesTab({ ctx }: { ctx: Ctx }) {
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [paths, setPaths] = useState<Record<string, string | null>>({});
   const [changes, setChanges] = useState<Record<string, Changed>>({});
-  const [detail, setDetail] = useState<string | null>(null);
+  const [detail, setDetail] = useState<string | null>(() => {
+    const back = detailGame; // vuelve al detalle si el panel se desmontó con el selector abierto
+    detailGame = null;
+    return back;
+  });
   const [, setTick] = useState(0); // repinta al plegar o desplegar (el estado vive en `gameOpen`)
   const busy = sync.running;
 
@@ -1490,6 +1600,16 @@ function GamesTab({ ctx }: { ctx: Ctx }) {
       live = false;
     };
   }, [ids, busy]);
+
+  // Tras cambiar la carpeta (o deshacerlo): carpetas, estado del juego («unknown») y sugerencias de nuevo
+  useFolders((k) => {
+    if (k !== "changed") return;
+    getGamePaths().then((r) => r.ok && setPaths(r.paths)).catch(capture("carpetas de los juegos"));
+    getSyncState().then(setSync).catch(capture("estado de los juegos"));
+    suggestChanges()
+      .then((r) => r.ok && setChanges(Object.fromEntries((r.items ?? []).map((c) => [c.game, c]))))
+      .catch(capture("carpetas distintas sugeridas"));
+  });
 
   const toggle = (g: GameRow, on: boolean) => {
     setToggleError(null);
@@ -1534,7 +1654,7 @@ function GamesTab({ ctx }: { ctx: Ctx }) {
   };
 
   const open = detail ? sync.games.find((g) => g.id === detail) : undefined;
-  if (open) return <GameDetail ctx={ctx} g={open} changed={changes[open.id]} onBack={() => setDetail(null)} onIgnore={ignore} toggle={toggle} />;
+  if (open) return <GameDetail ctx={ctx} g={open} changed={changes[open.id]} current={paths[open.id] ?? null} onBack={() => setDetail(null)} onIgnore={ignore} toggle={toggle} />;
 
   // Con un juego abierto solo ese no se sincroniza a mano (se sincroniza solo al cerrarlo); el resto sí
   const canSync = (g: GameRow) => !busy && g.enabled && ctx.playing !== g.name && !syncBlockReason({ ...ctx.gate, playing: null }) && ["unknown", "up_to_date", "upload", "download", "error"].includes(g.state);
@@ -1577,6 +1697,7 @@ function GamesTab({ ctx }: { ctx: Ctx }) {
         const ch = changes[g.id];
         const openNow = ctx.playing === g.name;
         const expanded = gameExpanded(g, gameOpen.get(g.id));
+        const block = changeFolderBlock({ playing: openNow, busy });
         return (
           <PanelSection key={g.id}>
             {/* Cabecera: solo nombre + estado (+ «Abierto ahora»). Es un botón (foco de mando, A / toque) que pliega o despliega la tarjeta. */}
@@ -1643,8 +1764,8 @@ function GamesTab({ ctx }: { ctx: Ctx }) {
                       </div>
                     </PanelSectionRow>
                     <PanelSectionRow>
-                      <ButtonItem layout="below" onClick={() => setDetail(g.id)}>
-                        {CHANGED_VIEW}
+                      <ButtonItem layout="below" disabled={block.disabled} description={block.hint ?? undefined} onClick={() => askFolder(g, path ?? null, ch.path, true, suggestedInfo(ch))}>
+                        {CHANGED_USE}
                       </ButtonItem>
                     </PanelSectionRow>
                     <PanelSectionRow>
@@ -1652,6 +1773,11 @@ function GamesTab({ ctx }: { ctx: Ctx }) {
                         {CHANGED_IGNORE}
                       </ButtonItem>
                     </PanelSectionRow>
+                    {folders.errorOf(g.id) && (
+                      <PanelSectionRow>
+                        <div role="alert" style={WRAP}>{folders.errorOf(g.id)}</div>
+                      </PanelSectionRow>
+                    )}
                   </>
                 )}
                 <PanelSectionRow>
