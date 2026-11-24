@@ -6,6 +6,10 @@
 
 - `GET /api/games` con key de dispositivo (`ckd_`) añade `process`: el proceso del juego configurado en el hub (cadena, o `null` si no tiene), para que un cliente sin SSH sepa qué vigilar. Con key de usuario no se expone. Campo nuevo compatible: `PROTOCOL` y `MIN_PLUGIN_PROTOCOL` no cambian.
 
+### Cambios
+
+- Cada Release lleva adjunto el wheel del cliente de Linux (job `client` de `release.yml`, versión propia del cliente). CI: jobs nuevos `client` (Python 3.12) y `core` (Python 3.8 y 3.12); `audit.yml` audita las dependencias del cliente y Dependabot vigila `checkpoint-client` y `checkpoint-core`.
+
 ## 2.4.1 (2026-11-24)
 
 ### Correcciones

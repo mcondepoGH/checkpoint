@@ -23,6 +23,7 @@ Checkpoint sincroniza las partidas guardadas de un juego entre dos dispositivos,
 - [Primeros pasos](#primeros-pasos)
 - [Lanzadores](#lanzadores)
 - [Plugin de Steam Deck](#plugin-de-steam-deck)
+- [Cliente de Linux](#cliente-de-linux)
 - [Seguridad](#seguridad)
 - [Más documentación](#más-documentación)
 
@@ -172,6 +173,10 @@ El `process` de cada juego (para el cierre automático) debe coincidir con el pr
 - **Dónde está el zip**: en Docker, `/app/deck/Checkpoint.zip` (lo construye la etapa `deck` del Dockerfile). En modo nativo hay que generarlo con `pnpm run zip` en `checkpoint-deck/`; sin zip, la descarga responde `404`.
 - **Manifiesto del plugin en la imagen Docker**: el zip lleva `data/save_manifest.json` (rutas de guardado de Steam y Lutris, ~2 MB, no se commitea) para «Sugerir carpeta». El build lo genera solo en la etapa `savemanifest`: baja `manifest.yaml` de [ludusavi-manifest](https://github.com/mtkennerly/ludusavi-manifest) en un commit fijo (`ARG LUDUSAVI_MANIFEST_COMMIT` del `Dockerfile`) y ejecuta `checkpoint-deck/scripts/gen_save_manifest.py`. Hace falta red en el build; si algo falla, el build falla. Para actualizarlo cambia ese `ARG` (o `--build-arg LUDUSAVI_MANIFEST_COMMIT=<hash completo>`); `--build-arg SKIP_SAVE_MANIFEST=1` lo omite a propósito.
 - **Versiones**: el plugin tiene versión propia y un protocolo de compatibilidad con el hub; detalles en su README y en [`docs/structure.md`](docs/structure.md).
+
+## Cliente de Linux
+
+[`checkpoint-client/`](checkpoint-client/README.md) es un cliente de línea de comandos para Linux de escritorio, también sin SSH: se vincula con un código de 6 dígitos, sincroniza, lanza juegos (`run`) y vigila su cierre (`watch`, con arranque automático por `systemd --user`). Tiene versión propia, independiente de la del hub. Cada Release del hub lleva adjunto su wheel (`checkpoint_client-X.Y.Z-py3-none-any.whl`), que se instala con `pipx install <url del wheel>`; `checkpoint-client check-update` avisa de una versión nueva y no instala nada.
 
 ## Seguridad
 

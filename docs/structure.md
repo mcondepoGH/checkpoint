@@ -1,6 +1,6 @@
 # Estructura del código
 
-Mapa de carpetas del backend y del frontend, qué hace cada una, qué puede importar de qué y cómo añadir un módulo nuevo. Las reglas de dependencia las comprueban dos tests (`backend/tests/test_architecture.py` y `frontend/test/architecture.test.mjs`): si rompes una, el test falla y dice qué import sobra.
+Mapa de carpetas del backend, el frontend, el cliente de Linux y el código común, qué hace cada una, qué puede importar de qué y cómo añadir un módulo nuevo. Las reglas de dependencia las comprueban dos tests (`backend/tests/test_architecture.py` y `frontend/test/architecture.test.mjs`): si rompes una, el test falla y dice qué import sobra.
 
 ## Backend (`backend/app/`)
 
@@ -170,6 +170,14 @@ Pruebas del hub de esta zona (en `backend/tests/`): `test_deck_plugin.py` (desca
 ```
 
 Reglas: el secreto de la solicitud viaja solo en `X-Pairing-Secret` y la clave `ckd_` solo en `Authorization: Bearer`; ninguno sale en logs ni en el estado que ve la interfaz; la clave se guarda en `settings.json` (directorio de ajustes de Decky) con 0600. Sincronización manual (con el juego abierto se rechaza con `game_running`; abrir y cerrar los trata `checkpoint_auto`, que al cerrar avisa con `POST /api/hook/{game}/closed` y deja los cierres sin red en una cola en disco): la ruta del save la da el hub (`GET /api/games`, campo `path`) y es dato no confiable; `checkpoint_sync.validate_game_path` y `validate_rel` la validan antes de tocar nada, y una descarga va a `<carpeta>.checkpoint-new`, se verifica y reemplaza la carpeta dejando UNA copia `<carpeta>.checkpoint-backup`. El manifiesto local debe describir la carpeta igual que `fingerprint()` del hub: si cambian las reglas allí, cambian en `checkpoint_manifest.py` y lo vigila el test de equivalencia.
+
+## Cliente de Linux (`checkpoint-client/`)
+
+Paquete Python `checkpoint_client` (CLI `checkpoint-client`, Python 3.12, dependencias `psutil` y `keyring`) que sincroniza sin SSH con el hub, como el plugin de la Deck pero para Linux de escritorio. Es independiente del hub (no lo importa ni lo ejecuta; el Dockerfile no lo copia y `.dockerignore` lo excluye) y tiene versión propia semver en su `pyproject.toml`, que no depende del tag del hub. Su `README.md` explica el uso; aquí solo el empaquetado y la CI.
+
+- **Wheel:** `python -m build --wheel` desde `checkpoint-client/` (el sdist no es posible: `package-dir` toma `checkpoint_core` de `../checkpoint-core/src`). El job `client` de `release.yml` lo construye en cada tag, comprueba que lleva `checkpoint_client/` y `checkpoint_core/` y ningún `secrets.py`, y lo sube a la Release del tag (`gh release upload --clobber`, con `contents: write` solo en ese job). `checkpoint-client check-update` lee la versión nueva del nombre de ese asset en la última Release estable.
+- **CI (`ci.yml`):** job `client` (Python 3.12: instalación editable con extras `dev`, `ruff check`, `ruff format --check`, `pytest`; las pruebas de integración con el hub real se omiten porque el job no instala las dependencias del backend) y job `core` (`checkpoint-core/`, mismos pasos en Python 3.8 y 3.12).
+- **Auditoría y dependencias:** `audit.yml` audita las dependencias de ejecución de cada `pyproject.toml` que no tenga `requirements.txt` al lado (hoy, `psutil` y `keyring` del cliente) con `pip-audit`; `dependabot.yml` vigila `/checkpoint-client` y `/checkpoint-core` con `pip`.
 
 ## Código común del plugin y del cliente (`checkpoint-core/`)
 
