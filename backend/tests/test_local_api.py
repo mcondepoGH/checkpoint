@@ -16,6 +16,8 @@ from fakes import LocalTransport
 
 PW = "correct horse"
 PC, LAP = "pc-1a2b3c4d", "laptop-5e6f7a8b"
+# El dispositivo local es esta máquina: su `os` y sus rutas (con «/», como las guarda la config) dependen del SO.
+SO = "windows" if sys.platform == "win32" else "linux"
 
 
 @pytest.fixture
@@ -36,11 +38,15 @@ def client(tmp_path, monkeypatch):
 def cfg(tmp, **local):
     return {
         "devices": {
-            PC: {"name": "PC", "local": True, "os": "linux", **local},
+            PC: {"name": "PC", "local": True, "os": SO, **local},
             LAP: {"name": "Laptop", "host": "192.0.2.10", "user": "usuario", "os": "linux"},
         },
         "games": {
-            "g1": {"name": "Juego", "devices": [PC, LAP], "paths": {PC: str(tmp / "pc saves"), LAP: "/home/usuario/g"}}
+            "g1": {
+                "name": "Juego",
+                "devices": [PC, LAP],
+                "paths": {PC: (tmp / "pc saves").as_posix(), LAP: "/home/usuario/g"},
+            }
         },
     }
 
@@ -79,7 +85,7 @@ def test_guardar_local_ok_en_native(client):
     r = put_config(client, cfg(client.tmp))
     assert r.status_code == 200 and r.json()["changed"] is True
     saved = client.get("/api/config").json()["config"]["devices"][PC]
-    assert saved == {"name": "PC", "local": True, "os": "linux"}
+    assert saved == {"name": "PC", "local": True, "os": SO}
     txt = settings.CONFIG_PATH.read_text(encoding="utf-8")
     assert "local: true" in txt
     assert yaml.safe_load(txt)["devices"][LAP]["host"] == "192.0.2.10"
@@ -103,7 +109,7 @@ def test_validate_en_vivo_docker_y_native(client, monkeypatch):
 
 def test_dos_locales_422(client):
     d = cfg(client.tmp)
-    d["devices"][LAP] = {"name": "Otro", "local": True, "os": "linux"}
+    d["devices"][LAP] = {"name": "Otro", "local": True, "os": SO}
     r = put_config(client, d)
     assert r.status_code == 422 and f"devices.{LAP}.local" in r.json()["errors"]
 
@@ -137,7 +143,7 @@ def test_config_con_local_ya_en_fichero_y_docker_se_ve_el_error(client, monkeypa
 
 # ---- /api/devices/test ----
 def test_test_local_sin_ruta(client):
-    r = client.post("/api/devices/test", json={"device": {"local": True, "os": "linux"}}).json()
+    r = client.post("/api/devices/test", json={"device": {"local": True, "os": SO}}).json()
     assert r["ok"] and r["code"] == "err.transport.local_info"
 
 
@@ -149,22 +155,22 @@ def test_test_local_no_toca_ssh(client, monkeypatch):
     monkeypatch.setattr("app.core.bootstrap.ensure_host_key", boom)
     monkeypatch.setattr("app.sync.transport.base._run", boom)
     r = client.post(
-        "/api/devices/test", json={"device": {"local": True, "os": "linux"}, "paths": [str(client.tmp)]}
+        "/api/devices/test", json={"device": {"local": True, "os": SO}, "paths": [client.tmp.as_posix()]}
     ).json()
     assert r["ok"]
 
 
 def test_test_local_ruta_ok_inexistente_creable_y_fichero(client):
     t = client.tmp
-    ok = client.post("/api/devices/test", json={"device": {"local": True, "os": "linux"}, "paths": [str(t)]}).json()
+    ok = client.post("/api/devices/test", json={"device": {"local": True, "os": SO}, "paths": [t.as_posix()]}).json()
     assert ok["ok"] and ok["code"] == "err.transport.folder_ok"
     nueva = client.post(
-        "/api/devices/test", json={"device": {"local": True, "os": "linux"}, "paths": [str(t / "a" / "b")]}
+        "/api/devices/test", json={"device": {"local": True, "os": SO}, "paths": [(t / "a" / "b").as_posix()]}
     ).json()
     assert nueva["ok"] and nueva["code"] == "err.transport.folder_will_be_created"
     (t / "f").write_text("x", encoding="utf-8")
     f = client.post(
-        "/api/devices/test", json={"device": {"local": True, "os": "linux"}, "paths": [str(t / "f")]}
+        "/api/devices/test", json={"device": {"local": True, "os": SO}, "paths": [(t / "f").as_posix()]}
     ).json()
     assert not f["ok"] and f["code"] == "err.transport.not_a_folder_short"
 
@@ -181,13 +187,13 @@ def test_test_local_ruta_ilegible_y_no_escribible(client):
     (t / "ro").chmod(0o555)
     try:
         a = client.post(
-            "/api/devices/test", json={"device": {"local": True, "os": "linux"}, "paths": [str(t / "ni")]}
+            "/api/devices/test", json={"device": {"local": True, "os": SO}, "paths": [(t / "ni").as_posix()]}
         ).json()
         b = client.post(
-            "/api/devices/test", json={"device": {"local": True, "os": "linux"}, "paths": [str(t / "ro")]}
+            "/api/devices/test", json={"device": {"local": True, "os": SO}, "paths": [(t / "ro").as_posix()]}
         ).json()
         c = client.post(
-            "/api/devices/test", json={"device": {"local": True, "os": "linux"}, "paths": [str(t / "ro" / "x")]}
+            "/api/devices/test", json={"device": {"local": True, "os": SO}, "paths": [(t / "ro" / "x").as_posix()]}
         ).json()
     finally:
         (t / "ni").chmod(0o755)
@@ -197,32 +203,36 @@ def test_test_local_ruta_ilegible_y_no_escribible(client):
     assert not c["ok"] and c["code"] == "err.transport.cannot_create_no_permission"
 
 
+# normalize_path: en windows toda ruta sin unidad es path_windows; en linux se distingue relativa de «..»
+INVALIDAS = (
+    ["err.config.path_windows"] * 2 if SO == "windows" else ["err.config.path_absolute", "err.config.path_dotdot"]
+)
+
+
 def test_test_local_varias_rutas_y_rutas_invalidas(client):
     t = client.tmp
-    so = "windows" if sys.platform == "win32" else "linux"
     r = client.post(
-        "/api/devices/test", json={"device": {"local": True, "os": so}, "paths": [t.as_posix(), "relativa", "/a/../b"]}
+        "/api/devices/test", json={"device": {"local": True, "os": SO}, "paths": [t.as_posix(), "relativa", "/a/../b"]}
     ).json()
     assert (
         not r["ok"]
         and r["message"].count("\n") == 2
-        and [x.get("code") for x in r["results"]]
-        == ["err.transport.folder_ok", "err.config.path_absolute", "err.config.path_dotdot"]
+        and [x.get("code") for x in r["results"]] == ["err.transport.folder_ok", *INVALIDAS]
     )
-    r = client.post("/api/devices/test", json={"device": {"local": True, "os": "linux"}, "paths": "x"}).json()
+    r = client.post("/api/devices/test", json={"device": {"local": True, "os": SO}, "paths": "x"}).json()
     assert not r["ok"]
-    r = client.post("/api/devices/test", json={"device": {"local": True, "os": "linux"}, "paths": [1]}).json()
+    r = client.post("/api/devices/test", json={"device": {"local": True, "os": SO}, "paths": [1]}).json()
     assert not r["ok"]
 
 
 def test_test_local_con_host_es_invalido(client):
-    r = client.post("/api/devices/test", json={"device": {"local": True, "os": "linux", "host": "192.0.2.1"}}).json()
+    r = client.post("/api/devices/test", json={"device": {"local": True, "os": SO, "host": "192.0.2.1"}}).json()
     assert not r["ok"] and r["params"]["causes"][0]["path"] == "host"
 
 
 def test_test_local_en_docker_rechazado(client, monkeypatch):
     monkeypatch.setenv("CHECKPOINT_RUNTIME", "docker")
-    r = client.post("/api/devices/test", json={"device": {"local": True, "os": "linux"}}).json()
+    r = client.post("/api/devices/test", json={"device": {"local": True, "os": SO}}).json()
     assert not r["ok"] and r["code"] == "err.config.local_docker"
 
 
