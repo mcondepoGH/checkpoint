@@ -104,3 +104,68 @@ jobs:
       scan-type: image
       scan-ref: ${{ needs.release.outputs.image-ref }}
       ignore-unfixed: true   # los CVE sin corrección no abren issues
+
+  # Wheel del cliente de Linux (checkpoint-client/), adjunto a la Release que acaba de crear `release`.
+  # La versión del cliente es la de su pyproject.toml (propia, independiente del tag del hub): el wheel se llama
+  # checkpoint_client-<versión del cliente>-*.whl, y `checkpoint-client check-update` la lee del nombre del asset.
+  # Una pre-release (-rc) también lleva el wheel, pero check-update solo mira la última Release ESTABLE. Solo se
+  # sube el wheel (nunca un sdist: package-dir apunta a ../checkpoint-core, fuera de la carpeta del cliente).
+  client:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # subir el asset a la Release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Comprobar que existe la Release del tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --json tagName,isPrerelease --jq '"Release \(.tagName) (pre-release: \(.isPrerelease))"'
+
+      - name: Construir el wheel
+        working-directory: checkpoint-client
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check "build==1.6.1"
+          python -m build --wheel
+          ls -l dist
+
+      - name: Verificar el contenido del wheel
+        working-directory: checkpoint-client
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import glob, sys, zipfile
+
+          wheels = glob.glob("dist/*.whl")
+          if len(wheels) != 1:
+              sys.exit(f"::error::Se esperaba un solo wheel en dist/ y hay {len(wheels)}: {wheels}")
+          names = zipfile.ZipFile(wheels[0]).namelist()
+          for pkg in ("checkpoint_client/", "checkpoint_core/"):
+              if not any(n.startswith(pkg) for n in names):
+                  sys.exit(f"::error::El wheel no contiene {pkg}")
+          bad = [n for n in names if n.rsplit("/", 1)[-1] == "secrets.py"]
+          if bad:
+              sys.exit(f"::error::El wheel contiene ficheros prohibidos: {bad}")
+          print(f"{wheels[0]}: {len(names)} ficheros, con checkpoint_client/ y checkpoint_core/ y sin secrets.py")
+          PY
+
+      - name: Subir el wheel a la Release
+        working-directory: checkpoint-client
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" dist/*.whl --clobber
