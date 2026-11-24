@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from conftest import KEY, set_hash
 
-from checkpoint_client import cli, hub, settings, texts
+from checkpoint_client import cli, hub, locks, settings, texts, watcher
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "checkpoint_client"
 GAME = "g1"
@@ -487,9 +487,10 @@ def test_help_texts_come_from_texts_module(capsys):
     assert cli.main(["--help"]) == 0
     out = " ".join(capsys.readouterr().out.split())
     assert texts.HELP_ROOT in out and texts.HELP_LINK in out and texts.HELP_RUN.split(":")[0] in out
-    for cmd in ("link", "games", "sync", "run", "status", "unlink"):
+    for cmd in ("link", "games", "sync", "run", "status", "unlink", "watch"):
         assert cmd in out
-    for later in ("watch", "install", "uninstall", "check-update"):
+    assert texts.HELP_WATCH in out
+    for later in ("install", "uninstall", "check-update"):
         assert later not in out
 
 
@@ -510,3 +511,124 @@ def test_cli_has_no_loose_text_literals():
         if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in docs and " " in n.value
     ]
     assert not loose, loose
+
+
+# ---------------------------------------------------------------- vigilante y exclusión mutua
+class _Psutil:
+    def __init__(self, *names):
+        self.names = list(names)
+
+    def process_iter(self, attrs=None):
+        import types
+
+        return [types.SimpleNamespace(info={"name": n, "exe": None, "cmdline": None}) for n in self.names]
+
+
+def game_lock():
+    return locks.exclusive(os.path.join(settings.config_dir(), "locks"), locks.game_name(GAME))
+
+
+def test_sync_refuses_when_the_real_detector_sees_the_game_open(linked, run, monkeypatch):
+    put(linked.save, "a.sav", b"1")
+    ps = _Psutil("MIJUEGO.EXE")
+    monkeypatch.setattr(cli, "_DETECTOR", watcher.ProcessDetector(ps))
+    code, _, err = run("sync", GAME)
+    assert code == 1 and err.strip() == texts.SYNC_RUNNING.format(game="Mi Juego")
+    assert not linked.files.get(GAME)
+    ps.names.clear()
+    assert run("sync", GAME)[0] == 0 and linked.files[GAME] == {"a.sav": b"1"}
+
+
+def test_sync_refuses_while_another_client_process_holds_the_game(linked, run):
+    put(linked.save, "a.sav", b"1")
+    with game_lock():
+        code, _, err = run("sync", GAME)
+    assert code == 1 and err.strip() == texts.SYNC_ERRORS["busy"]
+    assert not linked.files.get(GAME)
+
+
+def test_sync_all_reports_the_busy_game_and_goes_on(linked, run):
+    put(linked.save, "a.sav", b"1")
+    with game_lock():
+        code, out, err = run("sync", "--all")
+    assert code == 1 and texts.SYNC_ERRORS["busy"] in err
+    assert out.strip().endswith(texts.SYNC_SUMMARY.format(ok=0, c=0, e=1))
+
+
+def test_run_holds_the_game_lock_while_playing_and_releases_it(linked, run, monkeypatch):
+    put(linked.save, "a.sav", b"1")
+    seen = []
+
+    def fake_launch(command):
+        seen.append(locks.is_locked(os.path.join(settings.config_dir(), "locks"), locks.game_name(GAME)))
+        return 0
+
+    monkeypatch.setattr(cli, "launch", fake_launch)
+    assert run("run", GAME, "--", "x")[0] == 0
+    assert seen == [True]
+    with game_lock():  # libre al terminar
+        pass
+
+
+def test_run_refuses_to_launch_while_the_game_is_held(linked, run, monkeypatch):
+    launched = []
+    monkeypatch.setattr(cli, "launch", lambda c: launched.append(c) or 0)
+    with game_lock():
+        code, _, err = run("run", GAME, "--", "x")
+    assert code == 1 and err.strip() == texts.SYNC_ERRORS["busy"] and launched == []
+
+
+def test_watch_starts_and_stops_with_ctrl_c(linked, run, monkeypatch):
+    monkeypatch.setattr(cli, "_DETECTOR", watcher.ProcessDetector(_Psutil()))
+
+    def stop(_s):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(watcher.time, "sleep", stop)
+    code, out, err = run("watch")
+    assert code == 0 and err == ""
+    assert out.splitlines() == [texts.WATCH_START.format(n=1), texts.WATCH_STOPPED]
+
+
+def test_watch_warns_about_games_without_process(linked, run, monkeypatch):
+    linked.games[0]["process"] = None
+    monkeypatch.setattr(cli, "_DETECTOR", watcher.ProcessDetector(_Psutil()))
+    monkeypatch.setattr(watcher.time, "sleep", lambda _s: (_ for _ in ()).throw(KeyboardInterrupt()))
+    code, out, err = run("watch")
+    assert code == 0 and err.strip() == texts.WATCH_NO_PROCESS.format(game="Mi Juego")
+    assert out.splitlines()[0] == texts.WATCH_START.format(n=0)
+
+
+def test_watch_uploads_on_close_end_to_end(linked, run, monkeypatch):
+    put(linked.save, "a.sav", b"partida")
+    ps = _Psutil("mijuego.exe")
+    monkeypatch.setattr(cli, "_DETECTOR", watcher.ProcessDetector(ps))
+    steps = []
+
+    def sleep(_s):
+        steps.append(_s)
+        if len(steps) == 1:  # primera pausa: el juego ya estaba abierto al arrancar; ahora se cierra
+            ps.names.clear()
+        elif len(steps) >= 3:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(watcher.time, "sleep", sleep)
+    code, out, err = run("watch")
+    assert code == 0, err
+    lines = out.splitlines()
+    assert texts.WATCH_ALREADY_OPEN.format(game="Mi Juego") in lines
+    assert texts.WATCH_CLOSED.format(game="Mi Juego") in lines
+    assert texts.SYNC_UPLOADED.format(game="Mi Juego", n=1) in lines and lines[-1] == texts.WATCH_STOPPED
+    assert linked.files[GAME] == {"a.sav": b"partida"}
+    assert [e[:2] for e in linked.events] == [("opened", GAME), ("closed", GAME)]
+
+
+def test_second_watch_is_refused(linked, run):
+    with locks.exclusive(os.path.join(settings.config_dir(), "locks"), "watch"):
+        code, out, err = run("watch")
+    assert code == 1 and out == "" and err.strip() == texts.WATCH_RUNNING
+
+
+def test_watch_needs_a_link(home, run):
+    code, _, err = run("watch")
+    assert code == 1 and err.strip() == texts.ERR_NOT_LINKED

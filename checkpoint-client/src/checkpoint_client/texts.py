@@ -16,6 +16,7 @@ HELP_SYNC = "sincroniza un juego (o todos con --all) con el hub"
 HELP_SYNC_DRY_RUN = "solo comprueba: no cambia nada"
 HELP_SYNC_RESOLVE = "resuelve un conflicto: hub o este equipo"
 HELP_RUN = "baja el guardado, lanza el juego y lo sube al cerrarlo: checkpoint-client run <juego> -- <comando>"
+HELP_WATCH = "vigila los juegos del hub y sube su guardado al cerrarse"
 HELP_STATUS = "muestra la vinculación, la conexión con el hub, el vigilante y la versión"
 HELP_UNLINK = "borra la clave de este equipo (la revocación real se hace en el hub, en Dispositivos)"
 
@@ -53,6 +54,15 @@ SYNC_MISSING_DIR = "{game}: carpeta no encontrada, se omite."
 SYNC_RUNNING = "{game} está abierto: no se sincroniza. Ciérralo y vuelve a intentarlo."
 SYNC_ITEM = "Juego {i}/{n} ({name}): {message}"
 SYNC_SUMMARY = "{ok} al día o sincronizados, {c} en conflicto, {e} con error."
+
+# ---------------------------------------------------------------- vigilante
+WATCH_START = "Vigilando {n} juegos. Ctrl+C para salir."
+WATCH_OPENED = "{game} abierto."
+WATCH_CLOSED = "{game} cerrado: subiendo guardado…"
+WATCH_OFFLINE = "{game} cerrado, pero el hub no responde: se reintentará."
+WATCH_NO_PROCESS = "{game} no tiene proceso configurado en el hub: no se puede vigilar."
+WATCH_ALREADY_OPEN = "{game} ya estaba abierto: se subirá al cerrarlo, no se baja."
+WATCH_STOPPED = "Vigilante detenido."
 
 # ---------------------------------------------------------------- errores
 ERR_CONNECTION = "No se pudo conectar con el hub. Revisa la dirección y la red. Hub: {url}."
@@ -122,3 +132,7 @@ ERR_BAD_RESOLVE = "--resolve solo admite hub o device."
 ERR_RUN_NO_COMMAND = "Falta el comando: checkpoint-client run <juego> -- <comando>."
 ERR_RUN_LAUNCH = "No se pudo lanzar el comando: {reason}."
 ERR_GAME_UNKNOWN = "{game}: el hub no tiene ese juego para este equipo."
+
+# ---------------------------------------------------------------- pendientes de aprobar (no están en la tarjeta)
+# Segundo `watch` a la vez (exclusión mutua entre procesos del cliente).
+WATCH_RUNNING = "Ya hay un vigilante en marcha."

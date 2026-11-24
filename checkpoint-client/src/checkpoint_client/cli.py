@@ -1,4 +1,4 @@
-"""CLI de checkpoint-client: link, unlink, games, sync, run y status.
+"""CLI de checkpoint-client: link, unlink, games, sync, run, watch y status.
 
 Códigos de salida (como `backend/app/cli.py`): 0 correcto, 1 error, 2 uso, 3 conflicto. Los errores van a stderr y todo
 texto visible sale de `texts`. Nunca se imprime ni se registra la clave (`hub.redact`).
@@ -11,7 +11,7 @@ import sys
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import PROTOCOL, __version__, hub, settings, texts
+from . import PROTOCOL, __version__, hub, locks, settings, texts, watcher
 from .hubclient import HubApiError
 from .hub import HubNetworkError
 from .sync import SyncEngine, hub_result
@@ -21,10 +21,17 @@ SKIPPED = ("no_path", "disabled", "missing_dir")
 LOG_FILE = "checkpoint-client.log"
 
 
+_DETECTOR = watcher.ProcessDetector()  # con psutil real; los tests lo sustituyen
+
+
 def is_running(game: str) -> bool:
-    """Gancho para el vigilante (subtarea siguiente): ¿está abierto el juego `game`? Hoy el núcleo no detecta
-    procesos y responde siempre False; los tests y el vigilante lo sustituyen."""
-    return False
+    """¿Está abierto el juego `game` (id del hub)? Mira el `process` que el hub dio en el último `GET /api/games`
+    (lo registra `_games`); un juego sin proceso o desconocido cuenta como cerrado."""
+    return _DETECTOR.is_running(game)
+
+
+def _lock_dir() -> str:
+    return os.path.join(settings.config_dir(), "locks")
 
 
 class _Exit(Exception):
@@ -73,6 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help=texts.HELP_RUN, description=texts.HELP_RUN)
     run.add_argument("game")
     run.add_argument("command", nargs=argparse.REMAINDER)
+    sub.add_parser("watch", help=texts.HELP_WATCH, description=texts.HELP_WATCH)
     sub.add_parser("status", help=texts.HELP_STATUS, description=texts.HELP_STATUS)
     return ap
 
@@ -81,7 +89,9 @@ def build_parser() -> argparse.ArgumentParser:
 class _Ctx:
     def __init__(self, hub_url: str, key: str, device: Optional[str]):
         self.hub, self.key, self.device = hub_url, key, device
-        self.engine = SyncEngine(hub_url, key, home=None, protected=[settings.config_dir()], is_running=is_running)
+        self.engine = SyncEngine(
+            hub_url, key, home=None, protected=[settings.config_dir()], is_running=lambda g: is_running(g)
+        )
 
 
 def _linked() -> Tuple[str, str, Optional[str]]:
@@ -117,7 +127,9 @@ def _connect() -> _Ctx:
 
 def _games(ctx: _Ctx) -> List[Dict[str, Any]]:
     try:
-        return ctx.engine.list_games()
+        games = ctx.engine.list_games()
+        _DETECTOR.set_games(games)
+        return games
     except (HubApiError, HubNetworkError) as e:
         res = ctx.engine._error(e)  # noqa: SLF001  (misma traducción de errores que el motor)
         raise _fail(_error_text(res, ctx, None)) from None
@@ -183,6 +195,19 @@ def _report(res: Dict[str, Any], ctx: _Ctx, game: Dict[str, Any], item: Optional
         _err(wrap(_error_text(res, ctx, game)))
         return ERROR
     return OK
+
+
+def _sync_locked(
+    ctx: _Ctx, g: Dict[str, Any], games: List[Dict[str, Any]], resolve: Optional[str] = None
+) -> Dict[str, Any]:
+    """`sync_game` (o `resolve_conflict`) con el lock del juego: si otro proceso del cliente lo tiene, error `busy`."""
+    try:
+        with locks.exclusive(_lock_dir(), locks.game_name(g["id"])):
+            if resolve:
+                return ctx.engine.resolve_conflict(g["id"], resolve, games, _progress(g["name"]))
+            return ctx.engine.sync_game(g["id"], games, _progress(g["name"]))
+    except locks.Busy:
+        return {"state": "error", "code": "busy"}
 
 
 def _progress(name: str):
@@ -285,11 +310,7 @@ def cmd_sync(a: argparse.Namespace) -> int:
         raise _fail(texts.SYNC_ERRORS["unknown_game"])
     if a.dry_run:
         return _report(ctx.engine.check_game(g["id"], games), ctx, g)
-    if a.resolve:
-        res = ctx.engine.resolve_conflict(g["id"], a.resolve, games, _progress(g["name"]))
-    else:
-        res = ctx.engine.sync_game(g["id"], games, _progress(g["name"]))
-    return _report(res, ctx, g)
+    return _report(_sync_locked(ctx, g, games, a.resolve), ctx, g)
 
 
 def _sync_all(ctx: _Ctx, games: List[Dict[str, Any]], dry_run: bool) -> int:
@@ -302,7 +323,7 @@ def _sync_all(ctx: _Ctx, games: List[Dict[str, Any]], dry_run: bool) -> int:
         if dry_run:
             res = ctx.engine.check_game(g["id"], games)
         else:
-            res = ctx.engine.sync_game(g["id"], games, _progress(g["name"]))
+            res = _sync_locked(ctx, g, games)
         kind = _report(res, ctx, g, (i, len(games)))
         code = _worst(kind, code)
         ok, conflicts, errors = ok + (kind == OK), conflicts + (kind == CONFLICT), errors + (kind == ERROR)
@@ -338,6 +359,15 @@ def cmd_run(a: argparse.Namespace) -> int:
     g = _find(games, a.game)
     if g is None:
         raise _fail(texts.SYNC_ERRORS["unknown_game"])
+    try:
+        # mientras se juega el lock es de `run`: el vigilante no toca este juego
+        with locks.exclusive(_lock_dir(), locks.game_name(g["id"])):
+            return _run_game(ctx, g, games, command)
+    except locks.Busy:
+        raise _fail(texts.SYNC_ERRORS["busy"]) from None
+
+
+def _run_game(ctx: _Ctx, g: Dict[str, Any], games: List[Dict[str, Any]], command: List[str]) -> int:
     res = ctx.engine.sync_game(g["id"], games, _progress(g["name"]))
     if res.get("state") in ("no_path", "disabled"):  # nada que sincronizar: no se lanza el juego a ciegas
         raise _fail((texts.SYNC_NO_PATH if res["state"] == "no_path" else texts.SYNC_DISABLED).format(game=g["name"]))
@@ -354,6 +384,43 @@ def cmd_run(a: argparse.Namespace) -> int:
     kind = _report(res, ctx, g)
     _notify(ctx, "closed", g["id"], res)
     return kind
+
+
+def _log_line(message: str) -> None:
+    """Línea del vigilante en el log del cliente (0600), con claves redactadas. Nunca rutas ni ficheros."""
+    try:
+        cfg = settings.config_dir()
+        os.makedirs(cfg, mode=0o700, exist_ok=True)
+        fd = os.open(os.path.join(cfg, LOG_FILE), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as f:
+            f.write(hub.redact(message) + "\n")
+    except OSError:
+        pass
+
+
+def cmd_watch(a: argparse.Namespace) -> int:
+    ctx = _connect()
+    _games(ctx)  # falla pronto si el hub no deja ver los juegos
+    try:
+        with locks.exclusive(_lock_dir(), locks.WATCH):  # un solo vigilante por equipo
+            w = watcher.Watcher(
+                ctx.engine,
+                _DETECTOR,
+                settings.config_dir(),
+                report=lambda res, g: _report(res, ctx, g),
+                out=_out,
+                err=_err,
+                log=_log_line,
+            )
+            w.start()
+            try:
+                w.run()
+            except KeyboardInterrupt:
+                pass
+    except locks.Busy:
+        raise _fail(texts.WATCH_RUNNING) from None
+    _out(texts.WATCH_STOPPED)
+    return OK
 
 
 def cmd_status(a: argparse.Namespace) -> int:
@@ -382,6 +449,7 @@ COMMANDS = {
     "games": cmd_games,
     "sync": cmd_sync,
     "run": cmd_run,
+    "watch": cmd_watch,
     "status": cmd_status,
 }
 
