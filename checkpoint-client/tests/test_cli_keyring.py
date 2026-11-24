@@ -149,7 +149,7 @@ def test_unexpected_failure_log_has_no_key_with_keyring(fakehub, home, run, memo
     def boom(*a, **k):
         raise RuntimeError(f"fallo con {KEY}")
 
-    monkeypatch.setattr(cli, "_check", boom)
+    monkeypatch.setattr(cli, "_ping", boom)
     code, out, err = run("status")
     assert code == 1 and KEY not in out + err
     assert KEY not in tree_text(settings.config_dir())

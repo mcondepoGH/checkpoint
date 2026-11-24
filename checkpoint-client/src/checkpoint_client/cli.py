@@ -126,8 +126,8 @@ def _linked() -> Tuple[str, str, Optional[str]]:
     return found
 
 
-def _check(hub_url: str, key: str) -> Dict[str, Any]:
-    """Ping al hub: devuelve sus datos o termina con el error que toque. Un hub antiguo solo avisa."""
+def _ping(hub_url: str, key: str) -> Dict[str, Any]:
+    """Ping al hub: devuelve sus datos (con `compat`) o termina con el error que toque."""
     res, data = hub.check_connection(hub_url, key, PROTOCOL)
     if res == "unauthorized":
         raise _fail(texts.ERR_UNAUTHORIZED)
@@ -137,10 +137,22 @@ def _check(hub_url: str, key: str) -> Dict[str, Any]:
         raise _fail(texts.ERR_RATE_LIMITED.format(s=data.get("wait_s", 0)))
     if res != "ok":
         raise _fail(texts.ERR_HUB_ERROR)
+    return data
+
+
+def _compat(data: Dict[str, Any]) -> None:
+    """Compatibilidad por protocolo: un cliente más antiguo que `min_plugin_protocol` del hub NO sincroniza (sale con
+    error); un hub que no anuncia protocolo solo avisa."""
     if data["compat"] == "plugin_outdated":
         raise _fail(texts.ERR_CLIENT_OUTDATED.format(min=data["min_plugin_protocol"], n=PROTOCOL))
     if data["compat"] == "hub_old":
         _err(texts.ERR_HUB_OLD)
+
+
+def _check(hub_url: str, key: str) -> Dict[str, Any]:
+    """`_ping` y comprobación de protocolo: todo comando que sincroniza (`sync`, `games`, `run`, `watch`) pasa por aquí."""
+    data = _ping(hub_url, key)
+    _compat(data)
     return data
 
 
@@ -512,10 +524,10 @@ def cmd_status(a: argparse.Namespace) -> int:
         line("hub", hub_url)
         if device:
             line("device", device)
-        data = _check(hub_url, key)
+        data = _ping(hub_url, key)
         line("connection", texts.STATUS_OK)
-        if data.get("protocol") is not None:
-            line("protocol", str(data["protocol"]))
+        line("protocol", str(PROTOCOL))  # el del cliente; el aviso dice qué exige el hub
+        _compat(data)
     except _Exit as e:
         code = e.code
     line("watch", texts.STATUS_WATCH_ACTIVE if _watcher_active() else texts.STATUS_WATCH_STOPPED)

@@ -55,6 +55,14 @@ Solo avisa: no descarga ni instala nada, y no hace falta estar vinculado. Reglas
 - Ningún otro comando consulta GitHub (ni `status`, ni `sync`, ni `watch`).
 - Para probar sin red real, la variable `CHECKPOINT_CLIENT_RELEASES_URL` sustituye la URL de la API de Releases.
 
+### Protocolo con el hub
+
+El cliente declara su protocolo (`PROTOCOL = 1` en `checkpoint_client/__init__.py`, un entero) y el hub anuncia el suyo y el mínimo que acepta (`protocol` y `min_plugin_protocol` en `GET /api/hook/ping`; el hub no cambia). `status` muestra `protocolo:` (el del cliente) y comprueba la compatibilidad:
+
+- **Cliente demasiado antiguo** (su protocolo es menor que el mínimo del hub): «Este cliente es demasiado antiguo para el hub (exige el protocolo {min} y este es el {n}). Actualízalo; mientras tanto no se sincroniza.» (stderr, salida 1). `sync`, `games`, `run` y `watch` se niegan antes de tocar nada ni lanzar el juego.
+- **Hub antiguo** (no anuncia protocolo): «El hub es de una versión antigua (no anuncia su protocolo): puede que algo no funcione. Actualiza el hub.» Solo avisa, no bloquea.
+- La comprobación es un `ping` al empezar cada comando; un `watch` ya en marcha no la repite.
+
 ### Vigilante (`watch`)
 
 Detecta con `psutil` cuándo se abre y se cierra cada juego, por el nombre de proceso (`process`) que el hub da para este equipo (se configura en el hub). Al cerrar espera unos segundos, sube el guardado y avisa al hub. No baja nada antes de abrir: si el juego ya estaba abierto al arrancar el vigilante, tampoco; sube al cerrarlo. Si el hub no responde al cerrar, el cierre queda en una cola en disco (`~/.config/checkpoint-client/watch.json`) y se reintenta cada minuto, también tras reiniciar. Un juego sin `process` se avisa y se omite (`run` sigue funcionando). Con el juego abierto, `sync` a mano lo rechaza.

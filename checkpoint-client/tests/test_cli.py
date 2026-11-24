@@ -747,3 +747,85 @@ def test_other_commands_never_check_for_updates(fakegithub, linked, run):
     for argv in (("status",), ("games",), ("sync", GAME), ("sync", "--all"), ("sync", GAME, "--dry-run")):
         run(*argv)
     assert fakegithub.requests == []
+
+
+# ---------------------------------------------------------------- protocolo (cliente antiguo, hub antiguo, compatible)
+OUTDATED = (200, {"ok": True, "device": "pc-ab12", "protocol": 5, "min_plugin_protocol": 3}, {})
+OLD_HUB = (200, {"ok": True, "device": "pc-ab12"}, {})
+
+
+def _line(out: str, key: str) -> str:
+    return next(line for line in out.splitlines() if line.startswith(texts.STATUS_KEYS[key] + ":"))
+
+
+def test_status_protocol_compatible(linked, run):
+    code, out, err = run("status")
+    assert code == 0 and err == "" and _line(out, "protocol") == "protocolo: 1"
+
+
+def test_status_outdated_client_says_it_and_still_reports_the_rest(linked, run):
+    linked.ping = OUTDATED
+    code, out, err = run("status")
+    assert code == 1 and err.strip() == texts.ERR_CLIENT_OUTDATED.format(min=3, n=1)
+    assert err.strip() == (
+        "Este cliente es demasiado antiguo para el hub (exige el protocolo 3 y este es el 1). "
+        "Actualízalo; mientras tanto no se sincroniza."
+    )
+    assert _line(out, "connection") == "conexión: ok" and _line(out, "protocol") == "protocolo: 1"
+    assert texts.STATUS_KEYS["version"] in out and texts.STATUS_KEYS["watch"] in out
+
+
+def test_status_old_hub_warns_but_exits_0(linked, run):
+    linked.ping = OLD_HUB
+    code, out, err = run("status")
+    assert code == 0 and err.strip() == texts.ERR_HUB_OLD
+    assert err.strip() == (
+        "El hub es de una versión antigua (no anuncia su protocolo): puede que algo no funcione. Actualiza el hub."
+    )
+    assert _line(out, "protocol") == "protocolo: 1"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("sync", GAME),
+        ("sync", "--all"),
+        ("sync", GAME, "--dry-run"),
+        ("games",),
+        ("games", "--check"),
+    ],
+)
+def test_outdated_client_refuses_every_sync_path(linked, run, argv):
+    linked.ping = OUTDATED
+    put(linked.save, "a.sav", b"1")
+    code, out, err = run(*argv)
+    assert code == 1 and err.strip() == texts.ERR_CLIENT_OUTDATED.format(min=3, n=1) and out == ""
+    assert not linked.files.get(GAME) and linked.events == []
+
+
+def test_outdated_client_does_not_launch_the_game_with_run(linked, run, tmp_path):
+    linked.ping = OUTDATED
+    marker = tmp_path / "launched"
+    code, out, err = run("run", GAME, "--", sys.executable, "-c", f"open({str(marker)!r}, 'w').close()")
+    assert code == 1 and err.strip() == texts.ERR_CLIENT_OUTDATED.format(min=3, n=1)
+    assert not marker.exists() and linked.events == []
+
+
+def test_outdated_client_watch_does_not_start(linked, run):
+    linked.ping = OUTDATED
+    code, out, err = run("watch")
+    assert code == 1 and err.strip() == texts.ERR_CLIENT_OUTDATED.format(min=3, n=1) and out == ""
+    assert not locks.is_locked(os.path.join(settings.config_dir(), "locks"), locks.WATCH)
+
+
+def test_old_hub_warns_and_run_still_launches(linked, run, tmp_path):
+    linked.ping = OLD_HUB
+    marker = tmp_path / "launched"
+    code, _, err = run("run", GAME, "--", sys.executable, "-c", f"open({str(marker)!r}, 'w').close()")
+    assert code == 0 and texts.ERR_HUB_OLD in err and marker.exists()
+
+
+def test_client_protocol_is_the_integer_documented():
+    from checkpoint_client import PROTOCOL
+
+    assert PROTOCOL == 1 and isinstance(PROTOCOL, int) and not isinstance(PROTOCOL, bool)
