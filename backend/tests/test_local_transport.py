@@ -12,6 +12,10 @@ from app.config.models import parse_config
 from app.sync.engine import fingerprint, relfiles
 from app.sync.transport import LocalDeviceTransport, TransportError, get_transport, local_folder_status, local_path
 
+sin_symlinks = pytest.mark.skipif(
+    sys.platform == "win32", reason="crear symlinks en Windows exige privilegios (WinError 1314)"
+)
+
 # chmod en Windows solo conmuta el atributo de solo lectura: no puede negar lectura ni listado ni la creación en una carpeta.
 root_only = pytest.mark.skipif(
     sys.platform == "win32" or (hasattr(os, "geteuid") and os.geteuid() == 0),
@@ -147,6 +151,7 @@ def test_pull_fichero_grande(tr, tmp_path):
     assert (d / "big.bin").read_bytes() == big
 
 
+@sin_symlinks
 def test_pull_ignora_symlinks_fuera_de_ruta(tr, tmp_path):
     fuera = tmp_path / "secreto"
     put(fuera, "pass.txt", "SECRETO")
@@ -163,6 +168,7 @@ def test_pull_ignora_symlinks_fuera_de_ruta(tr, tmp_path):
     assert "SECRETO" not in "".join(p.read_text(encoding="utf-8") for p in d.rglob("*") if p.is_file())
 
 
+@sin_symlinks
 def test_pull_carpeta_de_saves_es_symlink_se_resuelve(tr, tmp_path):
     real = tmp_path / "real"
     put(real, "a.sav", "A")
@@ -334,6 +340,7 @@ def test_push_en_sitio_fichero_por_carpeta(tr, tmp_path, monkeypatch):
     assert relfiles(dst) == {"x/f.sav", "y"}
 
 
+@sin_symlinks
 def test_push_no_sigue_symlinks_del_destino(tr, tmp_path, monkeypatch):
     """Un symlink dentro del destino que apunta fuera nunca se escribe a través de él."""
     for swap in (True, False):
@@ -353,6 +360,7 @@ def test_push_no_sigue_symlinks_del_destino(tr, tmp_path, monkeypatch):
         assert not (dst / "enlace").is_symlink()
 
 
+@sin_symlinks
 def test_push_conserva_symlinks_ajenos_al_contenido(tr, tmp_path):
     fuera = tmp_path / "fuera"
     put(fuera, "d.txt")
@@ -365,6 +373,7 @@ def test_push_conserva_symlinks_ajenos_al_contenido(tr, tmp_path):
     assert relfiles(dst) == {"a.sav"} and (fuera / "d.txt").exists()
 
 
+@sin_symlinks
 def test_push_destino_es_symlink_a_carpeta_actualiza_el_real(tr, tmp_path):
     real = tmp_path / "real"
     put(real, "viejo.sav")
@@ -376,6 +385,7 @@ def test_push_destino_es_symlink_a_carpeta_actualiza_el_real(tr, tmp_path):
     assert relfiles(real) == {"a.sav"}
 
 
+@sin_symlinks
 def test_push_origen_con_symlinks_no_los_copia(tr, tmp_path):
     fuera = tmp_path / "fuera"
     put(fuera, "pass.txt", "SECRETO")

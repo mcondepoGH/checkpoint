@@ -3,6 +3,7 @@ Todo en tmp_path con datos sintéticos; ningún test toca el `data/` real."""
 
 import json
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -15,6 +16,10 @@ from app.core import settings
 from app.main import create_app
 from app.services import orphans
 from app.sync import locking, trash
+
+sin_symlinks = pytest.mark.skipif(
+    sys.platform == "win32", reason="crear symlinks en Windows exige privilegios (WinError 1314)"
+)
 
 CFG = parse_config(
     {
@@ -112,6 +117,7 @@ def test_lo_vigente_nunca_aparece(tmp_path):
     assert orphans.scan(CFG, tmp_path / "no-existe") == []
 
 
+@sin_symlinks
 def test_enlaces_simbolicos_se_ignoran(tmp_path):
     out = tmp_path / "fuera"
     mk(out, "s.sav", "secreto")
@@ -250,6 +256,7 @@ def test_juego_con_sync_en_curso_se_salta(tmp_path):
     assert (tmp_path / "versions/g" / V1 / "gone").exists()
 
 
+@sin_symlinks
 def test_enlace_simbolico_de_una_parte_no_se_sigue(tmp_path):
     out_dir = tmp_path / "fuera"
     mk(out_dir, "s.sav", "secreto")
@@ -329,6 +336,7 @@ def test_purga_manifiesto_ilegible_usa_el_mtime(tmp_path):
     assert trash.purge_expired(tmp_path, 30) == 1
 
 
+@sin_symlinks
 def test_purga_sin_papelera_o_enlace(tmp_path):
     assert trash.purge_expired(tmp_path, 30) == 0
     out = tmp_path / "fuera"

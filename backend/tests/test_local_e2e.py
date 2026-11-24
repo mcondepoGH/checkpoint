@@ -24,6 +24,10 @@ from app.sync.engine import (
 from app.sync.transport import LocalDeviceTransport, TransportError
 from fakes import LocalTransport
 
+sin_symlinks = pytest.mark.skipif(
+    sys.platform == "win32", reason="crear symlinks en Windows exige privilegios (WinError 1314)"
+)
+
 
 class LEnv:
     def __init__(self, tmp, keep=None, process="juego.bin"):
@@ -37,7 +41,7 @@ class LEnv:
         game = {
             "name": "Juego",
             "devices": ["pc-1a2b3c4d", "laptop-5e6f7a8b"],
-            "paths": {"pc-1a2b3c4d": str(self.pc_dir), "laptop-5e6f7a8b": "/home/usuario/g"},
+            "paths": {"pc-1a2b3c4d": self.pc_dir.as_posix(), "laptop-5e6f7a8b": "/home/usuario/g"},
         }
         if process:
             game["process"] = process
@@ -46,7 +50,11 @@ class LEnv:
         self.cfg = parse_config(
             {
                 "devices": {
-                    "pc-1a2b3c4d": {"name": "PC", "local": True, "os": "linux"},
+                    "pc-1a2b3c4d": {
+                        "name": "PC",
+                        "local": True,
+                        "os": "windows" if sys.platform == "win32" else "linux",
+                    },
                     "laptop-5e6f7a8b": {"name": "Laptop", "host": "192.0.2.10", "user": "usuario", "os": "linux"},
                 },
                 "games": {"g": game},
@@ -606,6 +614,7 @@ def test_restaurar_version_y_sincronizar_propaga_al_local(env):
 
 
 # ---- seguridad ----
+@sin_symlinks
 def test_symlink_en_saves_locales_no_filtra_ni_se_escribe_fuera(env):
     fuera = env.tmp / "fuera"
     fuera.mkdir()

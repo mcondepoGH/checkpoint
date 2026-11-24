@@ -199,8 +199,9 @@ def test_test_local_ruta_ilegible_y_no_escribible(client):
 
 def test_test_local_varias_rutas_y_rutas_invalidas(client):
     t = client.tmp
+    so = "windows" if sys.platform == "win32" else "linux"
     r = client.post(
-        "/api/devices/test", json={"device": {"local": True, "os": "linux"}, "paths": [str(t), "relativa", "/a/../b"]}
+        "/api/devices/test", json={"device": {"local": True, "os": so}, "paths": [t.as_posix(), "relativa", "/a/../b"]}
     ).json()
     assert (
         not r["ok"]
