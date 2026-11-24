@@ -7,8 +7,7 @@ from checkpoint_client import texts
 
 def test_approved_texts_are_verbatim():
     assert (
-        texts.HELP_ROOT
-        == "checkpoint-client: sincroniza los guardados de tus juegos con el hub de Checkpoint, sin SSH"
+        texts.HELP_ROOT == "checkpoint-client: sincroniza los guardados de tus juegos con el hub de Checkpoint, sin SSH"
     )
     assert texts.LINK_WAITING == "Esperando aceptación en el hub… (Ctrl+C para cancelar)"
     assert texts.LINK_CODE.format(code="123 456") == (

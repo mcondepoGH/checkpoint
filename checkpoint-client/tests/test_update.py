@@ -37,7 +37,10 @@ def test_parse_wheel_version(name, version):
 
 
 def test_pick_wheel_uses_the_asset_of_the_release():
-    assert update.pick_wheel(release()) == ("1.2.0", "https://github.com/mcondepoGH/checkpoint/releases/download/v1.4.0/" + WHEEL)
+    assert update.pick_wheel(release()) == (
+        "1.2.0",
+        "https://github.com/mcondepoGH/checkpoint/releases/download/v1.4.0/" + WHEEL,
+    )
 
 
 def test_pick_wheel_none_when_the_release_has_no_wheel():
@@ -159,7 +162,13 @@ def test_cache_from_another_source_is_not_used(settings_dir):
 
 @pytest.mark.parametrize(
     "content",
-    ["no es json", "[]", '{"source": 1}', json.dumps({"checked_at": "ayer"}), json.dumps({"checked_at": 1e9, "latest": 5})],
+    [
+        "no es json",
+        "[]",
+        '{"source": 1}',
+        json.dumps({"checked_at": "ayer"}),
+        json.dumps({"checked_at": 1e9, "latest": 5}),
+    ],
 )
 def test_garbage_cache_is_ignored(settings_dir, content):
     Path(settings_dir).mkdir(parents=True)

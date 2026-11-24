@@ -544,7 +544,9 @@ def cmd_check_update(a: argparse.Namespace) -> int:
     """Consulta (con caché) la última Release de GitHub y AVISA; no instala ni descarga nada ni usa la vinculación."""
     r = update.check(settings.config_dir(), __version__)
     if r["state"] == "error":
-        raise _fail(texts.UPDATE_FAILED.format(reason=texts.UPDATE_REASONS.get(r["reason"], texts.UPDATE_REASONS["http"])))
+        raise _fail(
+            texts.UPDATE_FAILED.format(reason=texts.UPDATE_REASONS.get(r["reason"], texts.UPDATE_REASONS["http"]))
+        )
     if r["state"] == "available":
         _out(texts.UPDATE_AVAILABLE.format(v=r["latest"], c=r["current"]))
         _out(texts.UPDATE_COMMAND.format(url=r["wheel_url"]))
