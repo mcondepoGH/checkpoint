@@ -545,6 +545,14 @@ def test_proceso_windows_tasklist(monkeypatch):
         run_with(monkeypatch, "win32", [cp(1, b"", b"x")], []).process_running("game.exe")
 
 
+def test_proceso_windows_tasklist_nombre_largo_truncado(monkeypatch):
+    # tasklist recorta la columna «Image Name» a 25 caracteres: el nombre completo nunca aparece en la salida
+    largo = "un-juego-con-nombre-muy-largo.exe"
+    out = (largo[:25] + "  12  Console\n").encode()
+    t = run_with(monkeypatch, "win32", [cp(0, out)], [])
+    assert t.process_running(largo) is True
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="tasklist solo existe en Windows")
 def test_tasklist_real():
     nombre = os.path.basename(sys.executable)  # python.exe: el propio intérprete de la prueba está en marcha

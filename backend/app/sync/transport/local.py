@@ -239,7 +239,8 @@ class LocalDeviceTransport(Transport):
             p = self._exec(["tasklist", "/FI", f"IMAGENAME eq {name}", "/NH"])
             if p.returncode != 0:
                 raise TransportError("err.transport.tasklist_failed", detail=_err(p))
-            return name.lower() in p.stdout.decode("utf-8", "replace").lower()
+            # tasklist recorta «Image Name» a 25 caracteres: se busca el prefijo (el filtro /FI ya compara el nombre entero)
+            return name[:25].lower() in p.stdout.decode("utf-8", "replace").lower()
         pat = "[" + re.escape(name[0]) + "]" + re.escape(name[1:])
         try:
             p = self._exec(["pgrep", "-f", "--", pat])
