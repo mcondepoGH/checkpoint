@@ -169,9 +169,8 @@ def suggest_shortcut(
     return empty
 
 
-def verify_applied(path: Any, home: Path, protected: Sequence[Path] = ()) -> Optional[str]:
-    """Ruta que el usuario confirmó de una sugerencia del manifiesto, vuelta a verificar al aplicarla (`verified_dir`, con las
-    bibliotecas de Steam como raíces permitidas: tarjeta SD). None si ya no vale. Solo lectura."""
+def _steam_roots(home: Path) -> List[str]:
+    """Carpetas de Steam y sus bibliotecas (incluida la tarjeta SD): raíces permitidas para `verified_dir`."""
     roots: List[str] = []
     try:
         for root in checkpoint_steam.find_steam_roots(Path(home)):
@@ -179,7 +178,13 @@ def verify_applied(path: Any, home: Path, protected: Sequence[Path] = ()) -> Opt
             roots.extend(os.path.realpath(d) for d in checkpoint_steam.library_dirs(root))
     except OSError:
         pass
-    return verified_dir(path, home, protected, _accept, roots)
+    return roots
+
+
+def verify_applied(path: Any, home: Path, protected: Sequence[Path] = ()) -> Optional[str]:
+    """Ruta que el usuario confirmó de una sugerencia del manifiesto, vuelta a verificar al aplicarla (`verified_dir`, con las
+    bibliotecas de Steam como raíces permitidas: tarjeta SD). None si ya no vale. Solo lectura."""
+    return verified_dir(path, home, protected, _accept, _steam_roots(home))
 
 
 def lutris_shortcut_appid(home: Path, row_id: int, shortcut_appids: Sequence[int]) -> Optional[int]:
@@ -210,6 +215,8 @@ def describe_failure(e: Exception) -> Dict[str, Any]:
         code = "unknown_game"
     elif e.code == "err.main.config_changed":
         code = "config_changed"
+    elif e.code == "err.main.run_in_progress":
+        code = "run_in_progress"
     else:
         code, params = "hub_error", {"code": e.code or str(e.status)}
     return {"ok": False, "error": code, "error_params": params, "error_detail": detail}
@@ -247,6 +254,34 @@ class GameTools:
             self._log(f"crear juego: {out['error_detail']}")
             return out
         return {"ok": True, "game": game}
+
+    def change_path(self, game: str, path: str) -> Dict[str, Any]:
+        """Cambia la carpeta de guardado de ESTA Deck para un juego ya configurado. Como `create`: la carpeta debe EXISTIR y ser
+        una carpeta (`path_missing`) y pasar `validate_game_path` (`path_forbidden`); además `verified_dir` (dentro del home o de
+        una biblioteca de Steam, p. ej. la tarjeta SD; sin enlaces ni rutas sin normalizar; legible), también `path_forbidden`.
+        Todo antes de llamar al hub, que valida de nuevo y suelta el estado recordado. Un hub sin esta ruta (404 sin código,
+        405) da `hub_outdated`. Devuelve `{ok, game, path}` con la ruta normalizada que aceptó el hub."""
+        try:
+            real = validate_game_path(path, self._home, self._protected)
+        except PathNotAllowed:
+            return {"ok": False, "error": "path_forbidden", "error_params": {}, "error_detail": None}
+        if not _is_real_dir(str(real)):
+            self._log("cambiar carpeta: la carpeta no existe o no es una carpeta")
+            return {"ok": False, "error": "path_missing", "error_params": {}, "error_detail": None}
+        good = verified_dir(path, self._home, self._protected, None, _steam_roots(self._home))
+        if good is None:
+            self._log("cambiar carpeta: carpeta no admitida")
+            return {"ok": False, "error": "path_forbidden", "error_params": {}, "error_detail": None}
+        try:
+            out = self._client.set_game_path(game, good)
+        except (hc.HubApiError, HubNetworkError) as e:
+            if isinstance(e, hc.HubApiError) and (e.status == 405 or (e.status == 404 and e.code != "err.steam.game_unknown")):
+                res = {"ok": False, "error": "hub_outdated", "error_params": {}, "error_detail": describe_error(e)}
+            else:
+                res = describe_failure(e)
+            self._log(f"cambiar carpeta: {res['error_detail']}")
+            return res
+        return {"ok": True, "game": out["game"], "path": out["path"]}
 
     def set_enabled(self, game: str, enabled: bool) -> Dict[str, Any]:
         try:

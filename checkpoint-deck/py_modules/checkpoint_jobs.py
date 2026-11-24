@@ -243,6 +243,19 @@ class Jobs:
             e["enabled"] = enabled
             e["state"] = "disabled" if not enabled else ("unknown" if e["state"] == "disabled" else e["state"])
 
+    def set_path_row(self, game: str, path: str) -> None:
+        """El hub ya cambió la carpeta de este dispositivo en el juego: la ruta nueva y el estado vuelve a «unknown» (el
+        recordado ya no vale). No sincroniza. Un juego desactivado sigue desactivado."""
+        with self._lock:
+            e = next((g for g in self._games if g["id"] == game), None)
+            if e is None:
+                return
+            self._paths[game] = path
+            if e["state"] != "disabled":
+                e["state"] = "unknown"
+            for k in ("code", "params", "last"):
+                e.pop(k, None)
+
     def add_game(self, game: Dict[str, Any]) -> None:
         """Un juego recién creado en el hub: pasa de «sin configurar» a la lista. Sin ruta (no sale del plugin)."""
         with self._lock:

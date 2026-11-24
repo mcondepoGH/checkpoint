@@ -432,3 +432,34 @@ def test_a_failing_on_synced_callback_never_breaks_the_task():
 
     s = asyncio.run(go())
     assert s["error"] is None and {g["id"]: g["state"] for g in s["games"]}["g1"] == "up_to_date"
+
+
+def test_set_path_row_updates_the_path_and_resets_the_state_without_syncing():
+    async def go():
+        j, _ = make_lib(LIB)
+        j.start("refresh")
+        await settle(j)
+        j._games[0]["state"] = "conflict"
+        j._games[0]["code"] = "x"
+        j.set_path_row("g1", "/nueva/ruta")
+        s = j.snapshot()["games"][0]
+        j.set_path_row("nope", "/otra")  # desconocido: no hace nada
+        return j, s
+
+    j, g1 = asyncio.run(go())
+    assert j.paths()["g1"] == "/nueva/ruta" and "nope" not in j.paths()
+    assert g1["state"] == "unknown" and "code" not in g1 and "params" not in g1
+    assert not j.snapshot()["running"]
+
+
+def test_set_path_row_keeps_a_disabled_game_disabled():
+    async def go():
+        j, _ = make_lib(LIB)
+        j.start("refresh")
+        await settle(j)
+        j.set_enabled_row("g1", False)
+        j.set_path_row("g1", "/n")
+        return j.snapshot()["games"][0]
+
+    g = asyncio.run(go())
+    assert (g["enabled"], g["state"]) == (False, "disabled")

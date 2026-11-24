@@ -313,6 +313,14 @@ class HubClient:
             raise HubApiError(200, "bad_response")
         return out
 
+    def set_game_path(self, game: str, path: str) -> Dict[str, Any]:
+        """Cambia la carpeta de guardado de ESTE dispositivo en uno de sus juegos: `{game, path}` (la ruta ya normalizada
+        por el hub). El hub olvida el estado recordado de este dispositivo y juego."""
+        out = self.call("PUT", f"/api/steam/games/{quote(game, safe='')}/path", body={"path": path})
+        if not isinstance(out, dict) or not isinstance(out.get("path"), str) or not isinstance(out.get("game"), str):
+            raise HubApiError(200, "bad_response")
+        return out
+
     def post_library(self, games: List[Tuple[int, str]]) -> Dict[str, Any]:
         body = {"games": [{"appid": a, "name": n} for a, n in games]}
         out = self.call("POST", "/api/steam/library", body=body)

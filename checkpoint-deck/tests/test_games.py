@@ -133,6 +133,21 @@ def test_client_set_enabled_quotes_the_game_id(scripthub):
     assert hub.requests[0].path == "/api/steam/games/a%20b%2Fc/enabled"
 
 
+def test_client_set_game_path_puts_the_path_and_quotes_the_id(scripthub):
+    hub = scripthub(lambda r: (200, {"game": "a b/c", "path": "/p/x"}, {}))
+    assert hc.HubClient(hub.url, KEY).set_game_path("a b/c", "/p/x") == {"game": "a b/c", "path": "/p/x"}
+    q = hub.requests[0]
+    assert (q.method, q.path, json.loads(q.body)) == ("PUT", "/api/steam/games/a%20b%2Fc/path", {"path": "/p/x"})
+    assert q.headers["authorization"] == f"Bearer {KEY}"
+
+
+def test_client_set_game_path_rejects_a_strange_answer(scripthub):
+    for bad in (["no"], {"game": "g"}, {"game": "g", "path": 3}):
+        hub = scripthub(lambda r, bad=bad: (200, bad, {}))
+        with pytest.raises(hc.HubApiError):
+            hc.HubClient(hub.url, KEY).set_game_path("g", "/p")
+
+
 def test_client_rejects_a_strange_answer(scripthub):
     hub = scripthub(lambda r: (200, ["no"], {}))
     c = hc.HubClient(hub.url, KEY)
@@ -207,6 +222,80 @@ def test_set_enabled_ok_and_errors(scripthub, home):
     sin_hub = tools("http://127.0.0.1:1", home)
     sin_hub._client._sleep = lambda _s: None  # sin espera real entre los reintentos del cliente
     assert sin_hub.set_enabled("g", True)["error"] == "connection"
+
+
+def hub_error(status, code, params=None):
+    return lambda r: (status, {"detail": {"code": code, "params": params or {}}}, {})
+
+
+def test_change_path_ok_sends_the_verified_path(scripthub, home):
+    new = home / "saves/Nueva"
+    new.mkdir(parents=True)
+    hub = scripthub(lambda r: (200, {"game": "g", "path": str(new)}, {}))
+    assert tools(hub.url, home).change_path("g", str(new)) == {"ok": True, "game": "g", "path": str(new)}
+    q = hub.requests[0]
+    assert (q.method, q.path, json.loads(q.body)) == ("PUT", "/api/steam/games/g/path", {"path": str(new)})
+
+
+def test_change_path_rejects_locally_without_calling_the_hub(scripthub, home):
+    hub = scripthub(lambda r: (200, {"game": "g", "path": "/x"}, {}))
+    t = tools(hub.url, home)
+    f = home / "fichero"
+    f.write_text("x")
+    link = home / "enlace"
+    link.symlink_to(home / "saves")
+    assert t.change_path("g", str(home / "no/existe"))["error"] == "path_missing"
+    assert t.change_path("g", str(f))["error"] == "path_missing"
+    assert t.change_path("g", "/etc")["error"] == "path_forbidden"
+    assert t.change_path("g", str(link))["error"] == "path_forbidden"
+    assert t.change_path("g", "relativa")["error"] == "path_forbidden"
+    assert t.change_path("g", "/tmp")["error"] == "path_forbidden"  # fuera del home y de las bibliotecas de Steam
+    assert hub.requests == []
+
+
+def test_change_path_accepts_a_folder_in_a_steam_library_on_the_sd_card(scripthub, home, tmp_path):
+    card = tmp_path / "card"
+    acf(card, 1, "Uno", "Uno")
+    (card / "steamapps/compatdata/1/pfx/drive_c/users/steamuser/AppData/Roaming/Uno").mkdir(parents=True)
+    (steam(home) / "steamapps").mkdir(parents=True, exist_ok=True)
+    (steam(home) / "steamapps/libraryfolders.vdf").write_text(
+        f'"libraryfolders"\n{{\n\t"0"\n\t{{\n\t\t"path"\t\t"{steam(home)}"\n\t}}\n\t"1"\n\t{{\n\t\t"path"\t\t"{card}"\n\t}}\n}}\n'
+    )
+    target = card / "steamapps/compatdata/1/pfx/drive_c/users/steamuser/AppData/Roaming/Uno"
+    hub = scripthub(lambda r: (200, {"game": "g", "path": str(target)}, {}))
+    assert tools(hub.url, home).change_path("g", str(target))["ok"] is True
+
+
+def test_change_path_maps_the_hub_answers(scripthub, home):
+    d = home / "saves/Otra"
+    d.mkdir(parents=True)
+    cases = [
+        (hub_error(409, "err.main.run_in_progress"), "run_in_progress"),
+        (hub_error(404, "err.steam.game_unknown"), "unknown_game"),
+        (hub_error(422, "err.steam.game_invalid", {"field": "path", "reason": "err.x", "otro": "Secreto"}), "game_invalid"),
+        (hub_error(409, "err.main.config_changed"), "config_changed"),
+        (lambda r: (404, {"detail": "Not Found"}, {}), "hub_outdated"),  # hub sin la ruta
+        (lambda r: (405, {"detail": "Method Not Allowed"}, {}), "hub_outdated"),
+        (hub_error(401, "err.auth.x"), "unauthorized"),
+    ]
+    for handler, code in cases:
+        out = tools(scripthub(handler).url, home).change_path("g", str(d))
+        assert out["ok"] is False and out["error"] == code, code
+    out = tools(scripthub(cases[2][0]).url, home).change_path("g", str(d))
+    assert out["error_params"] == {"field": "path", "reason": "err.x"}
+
+
+def test_describe_failure_run_in_progress_for_any_call(scripthub, home):
+    hub = scripthub(hub_error(409, "err.main.run_in_progress"))
+    assert tools(hub.url, home).set_enabled("g", True)["error"] == "run_in_progress"
+
+
+def test_change_path_without_hub_is_connection(home):
+    t = tools("http://127.0.0.1:1", home)
+    t._client._sleep = lambda _s: None
+    d = home / "saves"
+    d.mkdir()
+    assert t.change_path("g", str(d))["error"] == "connection"
 
 
 # ---- suggest_shortcut (atajos de Lutris)
