@@ -1,0 +1,22 @@
+# Configuración de gitleaks (la recoge el workflow .github/workflows/gitleaks.yml desde la raíz).
+# Se extiende la configuración por defecto: solo se añade una excepción mínima.
+[extend]
+useDefault = true
+
+# Falsos positivos: valores de PRUEBA que aparecen como literales en los tests. No son credenciales
+# reales. La excepción es estrecha a propósito:
+#   - regexTarget = "secret": se compara solo el valor detectado, no la línea entera.
+#   - cada regex está anclada (^...$) a un literal exacto: una variante distinta (por ejemplo
+#     `ckd_` + una clave aleatoria larga) SIGUE detectándose.
+#   - No se limita por `paths`: en gitleaks 8.30.1, `paths` + `condition = "AND"` NO exige la
+#     regex (verificado: con una regex que no coincide con nada, todo tests/ queda permitido, un
+#     punto ciego). Por eso solo se usan regex exactas sobre el secreto.
+# Para añadir un valor nuevo hay que listarlo aquí a mano, nunca con comodines.
+[[allowlists]]
+description = "Literales falsos de fixtures de test (no son credenciales reales)"
+regexTarget = "secret"
+regexes = [
+  '''^ckd_(secretisima123|clave-de-prueba-9876)$''',
+  '''^ck_AbC123xyz$''',
+  '''^(claro-123456|wrong-pass-123|SECRETO-12345)$''',
+]
