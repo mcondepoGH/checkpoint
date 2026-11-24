@@ -351,3 +351,12 @@ def test_opened_and_closed_notifications(world):
     eng.notify_opened(GAME, {"state": "ok"})
     eng.notify_closed(GAME)
     assert [e[:2] for e in world.hub.events] == [("opened", GAME), ("closed", GAME)]
+
+
+def test_hub_result_keeps_only_state_and_error_code():
+    assert se.hub_result({"state": "uploaded", "files": 3, "game": "g"}) == {"state": "uploaded"}
+    assert se.hub_result({"state": "error", "code": "connection", "params": {"path": "/x"}}) == {
+        "state": "error",
+        "code": "connection",
+    }
+    assert se.hub_result({"state": "disabled"}) is None

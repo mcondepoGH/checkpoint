@@ -24,6 +24,13 @@ LINK_CODE = (
     "Código de vinculación: {code}. Acéptalo en el hub (Configuración > Biblioteca > Solicitudes de vinculación). "
     "Caduca en 10 minutos."
 )
+
+
+def spaced_code(code: str) -> str:
+    """Código de 6 dígitos en dos grupos de 3 (123456 -> 123 456), como en el texto aprobado."""
+    return f"{code[:3]} {code[3:]}"
+
+
 LINK_WAITING = "Esperando aceptación en el hub… (Ctrl+C para cancelar)"
 LINK_DONE = "Vinculado a {device}. Clave guardada en {where}."
 LINK_REJECTED = "El hub rechazó la solicitud. Vuelve a ejecutar «checkpoint-client link» si fue un error."

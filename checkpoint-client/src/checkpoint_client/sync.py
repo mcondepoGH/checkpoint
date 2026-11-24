@@ -37,6 +37,19 @@ MIN_FREE_MARGIN = 8 * 1024 * 1024
 
 Progress = Callable[[str, int, int], None]
 
+# Estados de una sync local que el hub entiende en el resultado de `opened`/`closed` (lista cerrada del hub)
+HUB_STATES = {"uploaded", "downloaded", "up_to_date", "missing_dir", "no_path", "conflict", "error"}
+
+
+def hub_result(res: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Resultado de una sync local para el hub: solo `state` y, en un error, `code`. Nunca rutas, ficheros ni `params`.
+    None si el estado no es de los que el hub entiende (p. ej. `disabled`)."""
+    state = res.get("state")
+    if state not in HUB_STATES:
+        return None
+    code = res.get("code")
+    return {"state": state, **({"code": code} if state == "error" and isinstance(code, str) else {})}
+
 
 class _Fail(Exception):
     def __init__(self, code: str, **params: Any):

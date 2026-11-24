@@ -166,6 +166,8 @@ class FakeHub:
             def do_GET(self):
                 raw = self._read()
                 if self.path.startswith("/api/hook/ping"):
+                    if not self._authorized():
+                        return self._send(401, {"detail": {"code": "err.auth"}})
                     return self._send(*hub.ping)
                 if self.path.startswith("/api/games"):
                     if not self._authorized():
