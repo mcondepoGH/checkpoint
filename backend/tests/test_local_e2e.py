@@ -98,9 +98,15 @@ def read(d, n="s.sav"):
     return (d / n).read_text(encoding="utf-8")
 
 
-def fake_run(running):
+def fake_run(running, name="juego.bin"):
+    """Simula el comando de detección del SO: pgrep en POSIX (rc 0/1, pid) y tasklist en Windows (rc 0 siempre;
+    con coincidencia lista la imagen, sin ella imprime un INFO)."""
+
     def run(args, **kw):
         r = running()
+        if sys.platform.startswith("win"):
+            out = f"{name:<25} 4242 Console 1 10.000 KB\r\n" if r else "INFO: No tasks are running.\r\n"
+            return subprocess.CompletedProcess(args, 0, out.encode("cp850"), b"")
         return subprocess.CompletedProcess(args, 0 if r else 1, b"4242\n" if r else b"", b"")
 
     return run
