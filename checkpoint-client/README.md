@@ -2,7 +2,7 @@
 
 Cliente de [Checkpoint](../README.md) para Linux: sincroniza los guardados de tus juegos con el hub por HTTP, con una clave de dispositivo `ckd_` y **sin SSH**. Es una CLI (sin interfaz gráfica ni bandeja). Windows y el modo «Solo cliente» van aparte.
 
-Estado: núcleo, vigilante y arranque automático en Linux (`0.1.0`, sin publicar). Todavía no hay llavero ni comprobación de versiones nuevas.
+Estado: núcleo, vigilante, arranque automático y llavero en Linux (`0.1.0`, sin publicar). Todavía no hay comprobación de versiones nuevas.
 
 ## Instalación
 
@@ -18,7 +18,7 @@ pipx install .
 checkpoint-client link http://192.168.1.10:8088
 ```
 
-Muestra un código de 6 dígitos. Acéptalo en el hub (Configuración > Biblioteca > Solicitudes de vinculación). La clave `ckd_` se guarda una sola vez en `~/.config/checkpoint-client/settings.json` (permisos 0600); nunca se imprime. `checkpoint-client unlink` la borra de este equipo (la revocación real se hace en el hub, en Dispositivos).
+Muestra un código de 6 dígitos. Acéptalo en el hub (Configuración > Biblioteca > Solicitudes de vinculación). La clave `ckd_` se guarda una sola vez (ver «Dónde se guarda la clave»); nunca se imprime. `checkpoint-client unlink` la borra de este equipo (la revocación real se hace en el hub, en Dispositivos).
 
 ## Uso
 
@@ -55,6 +55,18 @@ checkpoint-client uninstall   # detiene el vigilante, desactiva y borra la unida
 `install` escribe `~/.config/systemd/user/checkpoint-client.service` (o bajo `$XDG_CONFIG_HOME`), con `ExecStart` apuntando por ruta absoluta al `checkpoint-client` del entorno donde está instalado (sin shell), `Restart=on-failure` y `RestartSec=30`. La unidad no lleva claves ni la dirección del hub: el vigilante lee la vinculación de `~/.config/checkpoint-client` como siempre, así que hay que haber hecho `link` antes. Es idempotente: repetirlo reescribe la unidad y la reinicia solo si cambió; si falla, deja la unidad como estaba. Si se mueve o reinstala el cliente (otro entorno de pipx), vuelve a ejecutar `install`. `uninstall` no borra la vinculación ni los datos. Para parar, systemd manda SIGTERM: el vigilante termina limpio («Vigilante detenido.») y suelta su lock. Si `systemd --user` no está disponible (sin sesión de usuario de systemd), `install` y `uninstall` lo dicen y no cambian nada. Con el servicio activo, `status` muestra `vigilante: activo` y `sync` a mano con un juego abierto dice que el vigilante lo sincronizará al cerrarlo.
 
 Los logs del servicio están en el diario: `journalctl --user -u checkpoint-client`. Para que arranque sin iniciar sesión en una pantalla (p. ej. tras un reinicio sin login) haría falta `loginctl enable-linger`: no lo hace `install`.
+
+## Dónde se guarda la clave
+
+La clave `ckd_` de este equipo no queda en claro si hay llavero:
+
+- **Con llavero del sistema** (Secret Service: GNOME Keyring, KWallet...; biblioteca `keyring`): la clave vive allí, con servicio `checkpoint-client` y usuario `<dispositivo>@<hub>` (el id de dispositivo lo da el hub al vincular). `~/.config/checkpoint-client/settings.json` solo guarda metadatos (hub, dispositivo) y `"key_store": "keyring"`.
+- **Sin llavero** (Linux sin Secret Service, sesión sin escritorio, error al usarlo): la clave se guarda en `settings.json` (0600, carpeta 0700) con `"key_store": "file"`, y `link` lo avisa con la ruta.
+- **Migración:** una clave que esté en `settings.json` (versiones anteriores o alternativa a fichero) se mueve sola al llavero en cuanto hay uno: se guarda, se lee de vuelta y solo entonces se borra del fichero. Si el llavero falla, la clave se queda donde estaba.
+- `unlink` borra la clave del llavero y del fichero. La revocación real se hace en el hub, en Dispositivos.
+- Si el llavero está bloqueado o ya no tiene la clave, el equipo cuenta como no vinculado: vuelve a ejecutar `link --force`.
+
+Comprobarlo a mano: `secret-tool lookup service checkpoint-client username <dispositivo>@<hub>` (o Seahorse/KDE Wallet) debe mostrar la clave y `grep ckd_ ~/.config/checkpoint-client/settings.json` no debe encontrar nada.
 
 ## Desarrollo
 
