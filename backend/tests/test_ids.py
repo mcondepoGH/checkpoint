@@ -203,7 +203,7 @@ class Disk:
     def __init__(self, tmp):
         self.tmp, self.data = tmp, tmp / "data"
         self.roots = {PC: tmp / "pc", LAPTOP: tmp / "laptop"}
-        self.pc_dir, self.lap_dir = self.roots[PC] / "C:/Saves/dq", self.roots[LAPTOP] / "home/usuario/dq"
+        self.pc_dir, self.lap_dir = self.roots[PC] / "Saves/dq", self.roots[LAPTOP] / "home/usuario/dq"
         self.hub = self.data / "hub" / GID
         self.cfg = parse_config(BASE)
         for d in (self.pc_dir, self.lap_dir, self.hub):
@@ -391,8 +391,8 @@ def cli_env(tmp_path, monkeypatch):
     settings.CONFIG_PATH.write_text(yaml.safe_dump(d, allow_unicode=True), encoding="utf-8")
     roots = {"h1": tmp_path / "pc", "h2": tmp_path / "laptop"}
     monkeypatch.setattr("app.sync.engine.get_transport", lambda dev: LocalTransport(roots[dev.host]))
-    (roots["h1"] / "C:/Saves/z").mkdir(parents=True)
-    (roots["h1"] / "C:/Saves/z/s.sav").write_text("a", encoding="utf-8")
+    (roots["h1"] / "Saves/z").mkdir(parents=True)
+    (roots["h1"] / "Saves/z/s.sav").write_text("a", encoding="utf-8")
     (roots["h2"] / "home/usuario/z").mkdir(parents=True)
     return tmp_path
 
@@ -432,8 +432,8 @@ def api(client, tmp_path, monkeypatch):  # noqa: F811
     (tmp_path / "config" / "config.yaml").write_text(yaml.safe_dump(NEW, allow_unicode=True), encoding="utf-8")
     roots = {"h1": tmp_path / "pc", "h2": tmp_path / "laptop"}
     monkeypatch.setattr("app.sync.engine.get_transport", lambda dev: LocalTransport(roots[dev.host]))
-    (roots["h1"] / "C:/Saves/z").mkdir(parents=True)
-    (roots["h1"] / "C:/Saves/z/s.sav").write_text("a", encoding="utf-8")
+    (roots["h1"] / "Saves/z").mkdir(parents=True)
+    (roots["h1"] / "Saves/z/s.sav").write_text("a", encoding="utf-8")
     (roots["h2"] / "home/usuario/z").mkdir(parents=True)
     return client
 
@@ -478,7 +478,7 @@ def test_api_rename_keeps_data_reachable(api, tmp_path):
 
 def test_api_conflict_resolution_device_by_name(api, tmp_path):
     gid = "zelda-0a1b2c3d"
-    roots = {"pc": tmp_path / "pc/C:/Saves/z", "lap": tmp_path / "laptop/home/usuario/z"}
+    roots = {"pc": tmp_path / "pc/Saves/z", "lap": tmp_path / "laptop/home/usuario/z"}
     wait_run(api, api.post(f"/api/sync/{gid}", json={}).json()["run_id"])
     for d, c, t in [(roots["pc"], "pc", 1000), (roots["lap"], "lap", 2000)]:
         (d / "s.sav").write_text(c, encoding="utf-8")

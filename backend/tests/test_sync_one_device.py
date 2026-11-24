@@ -22,7 +22,7 @@ class Env:
     def __init__(self, tmp):
         self.data = tmp / "data"
         self.root = tmp / "pc"
-        self.pc_dir = self.root / "C:/Saves/g"
+        self.pc_dir = self.root / "Saves/g"  # el fake de transporte quita la unidad de `C:/Saves/g`
         self.hub = self.data / "hub" / "g"
         self.logs = []
 

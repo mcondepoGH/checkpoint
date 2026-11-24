@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,10 @@ from app.sync.engine import (
 )
 from app.sync.locking import acquire
 from fakes import LocalTransport
+
+sin_symlinks = pytest.mark.skipif(
+    sys.platform == "win32", reason="crear symlinks en Windows exige privilegios (WinError 1314)"
+)
 
 CFG = parse_config(
     {
@@ -39,7 +44,7 @@ class Env:
     def __init__(self, tmp):
         self.data = tmp / "data"
         self.pc_root, self.laptop_root = tmp / "pc", tmp / "laptop"
-        self.pc_dir = self.pc_root / "C:/Saves/g"
+        self.pc_dir = self.pc_root / "Saves/g"  # el fake de transporte quita la unidad de `C:/Saves/g`
         self.laptop_dir = self.laptop_root / "home/usuario/g"
         self.hub = self.data / "hub" / "g"
         self.logs = []
@@ -315,6 +320,7 @@ def test_prune_protects_new_version_and_min_one(env):
     assert prune_versions(env.data, "g", 0) == []
 
 
+@sin_symlinks
 def test_prune_stays_inside_game_dir_ignores_symlinks(env, tmp_path):
     from app.sync.engine import prune_versions
 
@@ -429,9 +435,9 @@ def test_free_names_use_id_paths_only(tmp_path):
         }
     )
     pc, laptop, data = tmp_path / "pc", tmp_path / "laptop", tmp_path / "data"
-    (pc / "C:/S/g").mkdir(parents=True)
+    (pc / "S/g").mkdir(parents=True)
     (laptop / "home/d/g").mkdir(parents=True)
-    for d, c, t in [(pc / "C:/S/g", "old", 1000), (laptop / "home/d/g", "new", 2000)]:
+    for d, c, t in [(pc / "S/g", "old", 1000), (laptop / "home/d/g", "new", 2000)]:
         (d / "s.sav").write_text(c, encoding="utf-8")
         os.utime(d / "s.sav", (t, t))
     tr = {a: LocalTransport(pc), b: LocalTransport(laptop)}

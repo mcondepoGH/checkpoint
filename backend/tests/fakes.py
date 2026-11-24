@@ -1,5 +1,6 @@
 """Dobles de prueba."""
 
+import re
 import shutil
 from pathlib import Path
 
@@ -22,7 +23,8 @@ class LocalTransport(Transport):
         self.root, self.running, self.down = Path(root), running, down
 
     def _p(self, path):
-        return self.root / path.lstrip("/")
+        # Hace de remoto Windows sin salir de root: quita la unidad (`C:/Saves/g` -> `Saves/g`).
+        return self.root / re.sub(r"^[A-Za-z]:", "", path).lstrip("/")
 
     def check(self):
         if self.down:
