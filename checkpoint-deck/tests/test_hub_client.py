@@ -460,3 +460,4 @@ def test_describe_error_no_recorta_a_300_y_sigue_saneando():
     assert KEY not in out
     assert len(describe_error(ValueError("x" * 5000))) == DETAIL_MAX
     assert len(describe_error(ValueError("x" * 5000), limit=50)) == 50
+    assert "76561198000000000" not in describe_error(ValueError("steamid 76561198000000000"))  # lo suma el plugin al core

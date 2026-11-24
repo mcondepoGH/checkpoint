@@ -5,7 +5,8 @@ import json
 
 import pytest
 
-from checkpoint_hub import DeviceNameError, Pairing, load_settings, normalize_device_name, save_settings
+from checkpoint_core.names import DeviceNameError
+from checkpoint_hub import Pairing, load_settings, save_settings
 from test_pairing import ACCEPTED, KEY, finish, make
 
 
@@ -68,12 +69,6 @@ def test_invalid_names_rejected_and_not_saved(settings_dir, raw, code):
     assert e.value.code == code
     assert "device_name" not in load_settings(settings_dir)
     assert p.state()["device_name"] == "Steam Deck"
-
-
-def test_valid_edge_names():
-    assert normalize_device_name("a" * 64) == "a" * 64
-    assert normalize_device_name("Deck 🎮") == "Deck 🎮"
-    assert normalize_device_name("a.b") == "a.b"
 
 
 def test_invalid_name_in_settings_file_falls_back_to_default(settings_dir):

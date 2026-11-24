@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import checkpoint_client as hc
-import checkpoint_manifest as lm
+from checkpoint_core import manifest as lm
 import checkpoint_steam
 from checkpoint_hub import HubNetworkError
 

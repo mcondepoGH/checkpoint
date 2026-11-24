@@ -12,6 +12,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "py_modules"))
+sys.path.insert(0, str(ROOT.parent / "checkpoint-core" / "src"))  # fuente única de checkpoint_core (el zip lo copia a py_modules/)
 
 
 class FakeHub:

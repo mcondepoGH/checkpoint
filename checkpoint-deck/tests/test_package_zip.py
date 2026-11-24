@@ -8,9 +8,11 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+CORE = ROOT.parent / "checkpoint-core" / "src" / "checkpoint_core"  # fuente única del código puro común (plugin y cliente)
 # Mínimo fijo + todo checkpoint_*.py real de py_modules/: si se añade un módulo y no entra al zip, el test falla.
+# El manifiesto local ya no es un módulo del plugin: vive en `checkpoint_core` (su zip se comprueba aparte).
 MODULES = sorted(
-    {"hub", "steam", "client", "manifest", "sync", "jobs", "auto", "version", "update"}
+    {"hub", "steam", "client", "sync", "jobs", "auto", "version", "update"}
     | {p.stem.removeprefix("checkpoint_") for p in (ROOT / "py_modules").glob("checkpoint_*.py")}
 )
 
@@ -25,6 +27,10 @@ def copia(tmp_path):
     shutil.copytree(
         ROOT, dst, ignore=shutil.ignore_patterns("node_modules", "dist", "out", "__pycache__", ".pytest_cache")
     )
+    # `package.sh` busca el core en `../checkpoint-core/src/checkpoint_core` (como en el repo y en la etapa `deck` del Dockerfile)
+    shutil.copytree(CORE, tmp_path / "checkpoint-core" / "src" / "checkpoint_core", ignore=shutil.ignore_patterns("__pycache__"))
+    (tmp_path / "checkpoint-core" / "src" / "checkpoint_core" / "__pycache__").mkdir()  # basura que NO debe entrar al zip
+    (tmp_path / "checkpoint-core" / "src" / "checkpoint_core" / "__pycache__" / "x.pyc").write_bytes(b"x")
     # Basura que NO debe entrar al zip
     (dst / "py_modules" / "__pycache__").mkdir()
     (dst / "py_modules" / "__pycache__" / "x.pyc").write_bytes(b"x")
@@ -149,3 +155,57 @@ def test_sin_manifiesto_explicito_empaqueta_con_aviso(copia):
         r = empaquetar(copia, *args, env=env)
         assert r.returncode == 0 and "SIN el manifiesto" in r.stderr, r.stderr
         assert not any("data" in n for n in zipfile.ZipFile(copia / "out" / "Checkpoint.zip").namelist())
+
+
+def test_zip_incluye_checkpoint_core_junto_a_py_modules(copia):
+    con_dist(copia)
+    r = empaquetar(copia)
+    assert r.returncode == 0, r.stderr
+    names = zipfile.ZipFile(copia / "out" / "Checkpoint.zip").namelist()
+    core = sorted(p.name for p in CORE.glob("*.py"))
+    assert {"__init__.py", "manifest.py", "urls.py", "names.py", "redaction.py", "protocol.py"} <= set(core)
+    for f in core:
+        assert f"Checkpoint/py_modules/checkpoint_core/{f}" in names
+    assert not any(n.startswith("Checkpoint/py_modules/checkpoint_core/") and not n.endswith(".py") for n in names)
+    assert not any("__pycache__" in n for n in names)
+
+
+def test_zip_es_autocontenido_checkpoint_core_se_importa_solo_con_py_modules(copia, tmp_path):
+    """Como en la Deck: Decky pone `py_modules/` en `sys.path`; con solo eso (y `-I`, sin el repo) el plugin importa."""
+    con_dist(copia)
+    assert empaquetar(copia).returncode == 0
+    destino = tmp_path / "instalado"
+    zipfile.ZipFile(copia / "out" / "Checkpoint.zip").extractall(destino)
+    py = destino / "Checkpoint" / "py_modules"
+    code = (
+        "import sys; sys.path.insert(0, sys.argv[1]);"
+        "import checkpoint_core, checkpoint_hub, checkpoint_sync, checkpoint_client;"
+        "assert checkpoint_core.__file__.startswith(sys.argv[1]);"
+        "assert checkpoint_hub.normalize_hub_url('http://hub:8088/') == 'http://hub:8088';"
+        "assert checkpoint_sync.lm.build_manifest.__module__ == 'checkpoint_core.manifest'"
+    )
+    r = subprocess.run(["python3", "-I", "-c", code, str(py)], capture_output=True, text=True, cwd=tmp_path)
+    assert r.returncode == 0, r.stderr
+
+
+def test_falla_sin_checkpoint_core(copia):
+    con_dist(copia)
+    shutil.rmtree(copia.parent / "checkpoint-core")
+    r = empaquetar(copia)
+    assert r.returncode != 0 and "checkpoint-core" in r.stderr
+    assert not (copia / "out" / "Checkpoint.zip").exists()
+
+
+def test_el_arbol_del_plugin_no_guarda_copias_del_codigo_comun():
+    assert not (ROOT / "py_modules" / "checkpoint_core").exists()
+    assert not (ROOT / "py_modules" / "checkpoint_manifest.py").exists()
+
+
+def test_dockerfile_copia_checkpoint_core_a_la_etapa_deck():
+    """La etapa `deck` trabaja en /deck y package.sh busca ../checkpoint-core: sin este COPY el build de Docker fallaría."""
+    raiz = ROOT.parent
+    df = (raiz / "Dockerfile").read_text(encoding="utf-8")
+    deck = df[df.index("AS deck"): df.index("# --- 4)")]
+    assert "COPY checkpoint-core/src /checkpoint-core/src" in deck and "WORKDIR /deck" in deck
+    ignore = (raiz / ".dockerignore").read_text(encoding="utf-8").split()
+    assert not any(x.startswith("checkpoint-core") for x in ignore)

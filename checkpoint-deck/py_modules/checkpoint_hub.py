@@ -17,88 +17,25 @@ import os
 import re
 import tempfile
 import time
-import unicodedata
 import urllib.error
 import urllib.request
 from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
-from urllib.parse import urlsplit
+
+from checkpoint_core.names import DeviceNameError, normalize_device_name
+from checkpoint_core.protocol import KEY_PREFIX, compat, parse_protocol
+from checkpoint_core.redaction import DETAIL_MAX
+from checkpoint_core.redaction import describe_error as core_describe_error
+from checkpoint_core.redaction import redact as core_redact
+from checkpoint_core.urls import HubUrlError, normalize_hub_url
 
 DEVICE_NAME = "Steam Deck"
 POLL_S = 3.0  # cada cuánto se pregunta al hub mientras la solicitud está pendiente
 BACKOFF_MAX_S = 30.0  # espera máxima entre reintentos tras un error de red
 TIMEOUT_S = 10.0
 MAX_BODY = 64 * 1024  # el hub responde JSON pequeño; no se lee más
-KEY_PREFIX = "ckd_"
 SETTINGS_FILE = "settings.json"
-DETAIL_MAX = 1500  # el detalle de un fallo se ve entero en la Deck (saneado antes de recortar)
-NAME_MAX = 64  # igual que `NAME_MAX` del hub (backend/app/config/models.py)
 
 
-# ---------------------------------------------------------------- URL del hub
-class HubUrlError(ValueError):
-    """`code`: empty | scheme | credentials | path | invalid."""
-
-    def __init__(self, code: str):
-        super().__init__(code)
-        self.code = code
-
-
-def normalize_hub_url(raw: Any) -> str:
-    """`http(s)://host[:puerto]` sin barra final. Rechaza credenciales, rutas, parámetros y fragmentos."""
-    if not isinstance(raw, str) or not raw.strip():
-        raise HubUrlError("empty")
-    text = raw.strip()
-    if any(c.isspace() or ord(c) < 32 for c in text):
-        raise HubUrlError("invalid")
-    try:
-        parts = urlsplit(text)
-        host, port = parts.hostname, parts.port  # `port` lanza ValueError si es inválido
-    except ValueError:
-        raise HubUrlError("invalid") from None
-    if parts.scheme not in ("http", "https"):
-        raise HubUrlError("scheme")
-    if "@" in parts.netloc:
-        raise HubUrlError("credentials")
-    if not host:
-        raise HubUrlError("invalid")
-    if parts.path not in ("", "/") or parts.query or parts.fragment or text.endswith(("?", "#")):
-        raise HubUrlError("path")
-    shown = f"[{host}]" if ":" in host else host
-    return f"{parts.scheme}://{shown}" + (f":{port}" if port else "")
-
-
-# ---------------------------------------------------------------- nombre del dispositivo
-class DeviceNameError(ValueError):
-    """`code`: empty | spaces | too_long | slash | control | dots (las mismas reglas que `name_error` del hub)."""
-
-    def __init__(self, code: str):
-        super().__init__(code)
-        self.code = code
-
-
-def normalize_device_name(raw: Any) -> str:
-    """Recorta los bordes y aplica las reglas del hub para un nombre visible; lanza DeviceNameError."""
-    if not isinstance(raw, str) or not raw.strip():
-        raise DeviceNameError("empty")
-    name = raw.strip()
-    if "  " in name:
-        raise DeviceNameError("spaces")
-    if len(name) > NAME_MAX:
-        raise DeviceNameError("too_long")
-    if "/" in name or "\\" in name:
-        raise DeviceNameError("slash")
-    for ch in name:
-        cat = unicodedata.category(ch)
-        if ch == "\u200d":  # unión de emojis compuestos
-            continue
-        if cat[0] == "C" or cat in ("Zl", "Zp") or (cat == "Zs" and ch != " "):
-            raise DeviceNameError("control")
-    if not name.strip("."):
-        raise DeviceNameError("dots")
-    return name
-
-
-# ---------------------------------------------------------------- HTTP
 class HubNetworkError(Exception):
     """No se pudo hablar con el hub (red caída, tiempo agotado, respuesta ilegible)."""
 
@@ -195,31 +132,18 @@ def save_settings(directory: str, data: Dict[str, Any], name: str = SETTINGS_FIL
         raise
 
 
-# Claves de Checkpoint (ck_/ckd_...) y steamid64 (17 cifras que empiezan por 7656119): nunca salen en un log ni en la interfaz
-_SENSITIVE = re.compile(r"\bckd?_[A-Za-z0-9_-]+|\b7656119\d{10}\b")
+# steamid64 (17 cifras que empiezan por 7656119): se suma a las claves de Checkpoint, que redacta `checkpoint_core`.
+# Nunca salen en un log ni en la interfaz. Es lo único de la redacción que depende de Steam y por eso no está en el core.
+_STEAMID = re.compile(r"\b7656119\d{10}\b")
 
 
 def redact(text: str, *secrets: Optional[str]) -> str:
-    for s in secrets:
-        if s:
-            text = text.replace(s, "***")
-    return _SENSITIVE.sub("***", text)
+    return core_redact(text, *secrets, extra=(_STEAMID,))
 
 
 def describe_error(e: BaseException, *secrets: Optional[str], limit: int = DETAIL_MAX) -> str:
-    """`Tipo: mensaje` de una excepción, saneado y recortado, para el log y para el detalle que ve la interfaz.
-    Un HubApiError/HubNetworkError añade el endpoint (método y ruta, sin servidor ni consulta) y el estado."""
-    status = getattr(e, "status", None)
-    if status is not None:
-        code = getattr(e, "code", None)
-        detail = f"estado {status}" + (f", código {code}" if code else "")
-    else:
-        detail = str(e)
-    text = type(e).__name__ + (f": {detail}" if detail else "")
-    endpoint = getattr(e, "endpoint", None)
-    if endpoint:
-        text += f" [{endpoint}]"
-    return redact(text, *secrets)[:limit]
+    """`Tipo: mensaje` de una excepción, saneado (claves y steamid) y recortado, para el log y para el detalle que ve la interfaz."""
+    return core_describe_error(e, *secrets, limit=limit, extra=(_STEAMID,))
 
 
 # ---------------------------------------------------------------- vinculación
@@ -466,23 +390,6 @@ class Pairing:
 _UNSET: Any = object()
 
 
-def _proto(v: Any) -> Optional[int]:
-    return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
-
-
-def compat(plugin_protocol: Optional[int], hub_protocol: Optional[int], min_plugin_protocol: Optional[int]) -> str:
-    """Compatibilidad plugin <-> hub por protocolo (enteros):
-    - `hub_old`: el hub no anuncia protocolo (versión vieja): AVISO, no bloquea.
-    - `plugin_unknown`: este plugin no declara `checkpointProtocol` (package.json ilegible): no se puede juzgar, no bloquea.
-    - `plugin_outdated`: protocolo del plugin < `min_plugin_protocol` del hub: BLOQUEADO hasta actualizar.
-    - `ok`."""
-    if hub_protocol is None or min_plugin_protocol is None:
-        return "hub_old"
-    if plugin_protocol is None:
-        return "plugin_unknown"
-    return "plugin_outdated" if plugin_protocol < min_plugin_protocol else "ok"
-
-
 def check_connection(hub: str, key: Optional[str], plugin_protocol: Any = _UNSET) -> Tuple[str, Dict[str, Any]]:
     """(resultado, datos). resultado: ok | not_linked | unauthorized | rate_limited | connection | hub_error.
     Con `plugin_protocol` (puede ser None) el resultado `ok` añade `compat`, `protocol`, `min_plugin_protocol` y `plugin_protocol`."""
@@ -495,7 +402,7 @@ def check_connection(hub: str, key: Optional[str], plugin_protocol: Any = _UNSET
     if r.status == 200 and isinstance(r.body, dict) and r.body.get("ok") is True:
         data: Dict[str, Any] = {"device": r.body.get("device") if isinstance(r.body.get("device"), str) else None}
         if plugin_protocol is not _UNSET:
-            hp, mp = _proto(r.body.get("protocol")), _proto(r.body.get("min_plugin_protocol"))
+            hp, mp = parse_protocol(r.body.get("protocol")), parse_protocol(r.body.get("min_plugin_protocol"))
             data.update(
                 compat=compat(plugin_protocol, hp, mp), protocol=hp, min_plugin_protocol=mp, plugin_protocol=plugin_protocol
             )

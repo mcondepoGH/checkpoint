@@ -16,10 +16,10 @@ import checkpoint_browse
 import checkpoint_steam
 import checkpoint_update
 import checkpoint_uistate
+from checkpoint_core.names import DeviceNameError
+from checkpoint_core.urls import HubUrlError
 from checkpoint_hub import (
-    DeviceNameError,
     HubNetworkError,
-    HubUrlError,
     Pairing,
     check_connection,
     load_settings,

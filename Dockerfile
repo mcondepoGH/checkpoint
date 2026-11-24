@@ -41,6 +41,8 @@ WORKDIR /deck
 COPY checkpoint-deck/package.json checkpoint-deck/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY checkpoint-deck/ ./
+# El código común al plugin y al cliente (fuente única): package.sh lo busca en ../checkpoint-core/src/checkpoint_core y lo mete en el zip.
+COPY checkpoint-core/src /checkpoint-core/src
 # El manifiesto lo genera la etapa savemanifest y entra al zip como data/save_manifest.json; package.sh lo valida y falla si falta.
 COPY --from=savemanifest /out /savemanifest
 RUN if [ "$SKIP_SAVE_MANIFEST" = "1" ]; then export SAVE_MANIFEST=none; else export SAVE_MANIFEST=/savemanifest/save_manifest.json; fi \
