@@ -74,12 +74,71 @@
     box-shadow: 0 0 14px -3px var(--accent);
   }
 }
+// Píldora compacta de «nueva versión»: acento cian en reposo, punto pulsante en la esquina (ámbar con .is-pre).
 .update-badge {
-  color: var(--accent-2);
-  border-color: var(--accent-2);
-  font-weight: 700;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   flex: none;
+  height: 30px;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 55%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 10%, transparent);
+  color: var(--accent-2);
+  font-size: v.$fs-label;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   white-space: nowrap;
+  &::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-2);
+    box-shadow: 0 0 0 0 var(--accent-2);
+    animation: update-dot 2s ease-out infinite;
+  }
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent-2) 18%, transparent);
+    border-color: var(--accent-2);
+    color: var(--accent-2);
+    transform: none;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--accent-2);
+    outline-offset: 2px;
+  }
+  &.is-pre {
+    border-color: color-mix(in srgb, var(--warn) 55%, transparent);
+    background: color-mix(in srgb, var(--warn) 10%, transparent);
+    color: var(--warn);
+    &:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--warn) 18%, transparent);
+      border-color: var(--warn);
+      color: var(--warn);
+    }
+    &:focus-visible {
+      outline-color: var(--warn);
+    }
+    &::after {
+      background: var(--warn);
+      box-shadow: 0 0 0 0 var(--warn);
+    }
+  }
+}
+@keyframes update-dot {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
 }
 .pre-tag {
   display: inline-block;

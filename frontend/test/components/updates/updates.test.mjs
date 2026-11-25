@@ -1,6 +1,7 @@
 // Insignia de actualización y ajuste: lógica pura + render a HTML (esbuild, ya incluido con Vite; si no está, se salta).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { es } from '../../helpers/locales.mjs';
 import {
   updatesApplicable,
@@ -99,6 +100,16 @@ const r = (C, props) => mod.renderToStaticMarkup(mod.React.createElement(C, prop
 test('UpdateBadge visible con actualización', { skip }, () => {
   const h = r(mod.UpdateBadge, { info: NEW, onOpen() {} });
   assert.match(h, /Nueva versión disponible/);
+  // una sola píldora: un único botón con icono y texto dentro, sin etiqueta aparte
+  assert.equal((h.match(/<button/g) || []).length, 1);
+  assert.match(h, /<button[^>]*class="[^"]*update-badge[^"]*"[^>]*aria-label="Nueva versión disponible: 0\.5\.0"/);
+  assert.match(h, /<svg/);
+  assert.ok(!/pre-tag|is-pre/.test(h));
+});
+
+test('UpdateBadge conserva onOpen en el botón', { skip }, () => {
+  const src = readFileSync(new URL('../../../src/components/updates/UpdateBadge.jsx', import.meta.url), 'utf8');
+  assert.match(src, /onClick=\{onOpen\}/);
 });
 
 test('UpdateBadge oculta sin actualización o desactivada', { skip }, () => {
@@ -145,6 +156,8 @@ test('UpdateBadge y UpdateDialog marcan «preliminar» solo cuando aplica', { sk
   const bp = r(mod.UpdateBadge, { info: PRE, onOpen() {} });
   assert.match(bp, /preliminar/);
   assert.match(bp, /0\.6\.0-rc\.1/);
+  assert.match(bp, /class="[^"]*update-badge is-pre/);
+  assert.ok(!/pre-tag/.test(bp)); // la marca va integrada, sin segunda etiqueta
   assert.ok(!/preliminar/.test(r(mod.UpdateBadge, { info: NEW, onOpen() {} })));
   const dp = r(mod.UpdateDialog, { info: PRE, onClose() {} });
   assert.match(dp, /pre-tag/);

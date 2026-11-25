@@ -2,6 +2,10 @@
 
 ## Sin publicar
 
+### Cambios
+
+- Aviso de actualización de la cabecera: una única píldora compacta (30 px, icono y texto dentro, acento cian) con un punto pulsante en la esquina, ámbar si la versión es preliminar (sustituye a la etiqueta «Preliminar» aparte; el texto sigue en el `title` y el `aria-label`). El pulso respeta `prefers-reduced-motion`.
+
 ## 2.5.0-rc.2 (2026-11-25)
 
 ### Novedades
