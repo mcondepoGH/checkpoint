@@ -2,6 +2,8 @@
 
 ## Sin publicar
 
+## 2.5.1 (2026-11-25)
+
 ### Correcciones
 
 - Ajustes > General: tras un fallo al comprobar actualizaciones, la tarjeta «Comprobar actualizaciones» ya no dice «Estás al día»: muestra «No se pudo comprobar si hay actualizaciones.» (si hay una actualización conocida, sigue ofreciéndola). El detalle del fallo no se muestra en la interfaz.
