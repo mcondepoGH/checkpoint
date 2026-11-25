@@ -604,9 +604,21 @@
       "link": "Ver la versión en GitHub",
       "manual": "Checkpoint no se actualiza solo: descarga la nueva versión, recompila la web y reinicia Checkpoint."
     },
+    "install": {
+      "button": "Actualizar ahora",
+      "confirm": "Checkpoint descargará la versión {version}, se cerrará y volverá a abrirse en unos segundos.",
+      "confirmYes": "Sí, actualizar",
+      "checking": "Comprobando…",
+      "downloading": "Descargando {version}…",
+      "installing": "Instalando…",
+      "restarting": "Reiniciando… Esta página se recargará sola.",
+      "done": "Actualizado a la versión {version}.",
+      "windowsNote": "Se actualiza desde aquí; tus datos y ajustes se conservan."
+    },
     "check": {
       "title": "Comprobar actualizaciones",
       "text": "Consulta las versiones publicadas en GitHub (solo lectura, cada pocas horas) y avisa si hay una nueva. No instala nada.",
+      "textWindows": "Consulta las versiones publicadas en GitHub (cada pocas horas) y avisa si hay una nueva. Puedes instalarla con un clic.",
       "channel": "Canal",
       "now": "Comprobar ahora",
       "limited": "Acabas de comprobarlo; espera un minuto para volver a hacerlo."
@@ -717,7 +729,12 @@
       "updates": {
         "enabled_bool": "debe ser verdadero o falso",
         "channel_invalid": "debe ser «stable» o «beta»",
-        "field_required": "indica «enabled» o «channel»"
+        "field_required": "indica «enabled» o «channel»",
+        "download_failed": "No se pudo descargar la actualización: {reason}",
+        "install_failed": "No se pudo instalar la actualización: {reason}. Se mantiene la versión actual.",
+        "install_not_supported": "La actualización con un clic solo está disponible con el instalador de Windows.",
+        "hash_mismatch": "La descarga no coincide con el hash publicado. No se ha instalado nada.",
+        "sync_running": "Hay una sincronización en curso. Espera a que termine."
       },
       "game_ambiguous": "{cause}",
       "game_unknown": "juego desconocido",

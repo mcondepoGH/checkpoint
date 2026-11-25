@@ -118,6 +118,32 @@ def fetch_releases(repo: str) -> list:
     return data
 
 
+INSTALLER_NAME = (
+    "Checkpoint-Setup-{version}.exe"  # instalador de Windows adjunto a la Release; su hash: <nombre>.sha256
+)
+
+
+def _github_download(url) -> Optional[str]:
+    """Solo se aceptan descargas https de github.com (las redirecciones a su CDN las sigue `_HttpsOnly`)."""
+    if not isinstance(url, str):
+        return None
+    m = re.match(r"^https://github\.com/[^/?#\s]+/[^/?#\s]+/releases/download/[^?#\s]+$", url)
+    return url if m else None
+
+
+def pick_installer(assets, version) -> Optional[dict]:
+    """El instalador de Windows de esa versión y la URL de su hash, o None si falta alguno de los dos (sin hash
+    publicado no se ofrece la actualización con un clic)."""
+    name = INSTALLER_NAME.format(version=version)
+    urls = {}
+    for a in assets if isinstance(assets, list) else []:
+        if isinstance(a, dict) and a.get("name") in (name, name + ".sha256"):
+            urls[a["name"]] = _github_download(a.get("browser_download_url"))
+    if not urls.get(name) or not urls.get(name + ".sha256"):
+        return None
+    return {"name": name, "url": urls[name], "sha256_url": urls[name + ".sha256"]}
+
+
 def pick_latest(releases, channel: str = DEFAULT_CHANNEL) -> Optional[dict]:
     """Versión más alta ofrecible. stable: sin borradores ni pre-releases (marcadas o por sufijo del tag).
     beta: también pre-releases; gana la más alta de todas (1.0.0 > 1.0.0-rc.2 > 1.0.0-rc.1)."""
@@ -137,8 +163,10 @@ def pick_latest(releases, channel: str = DEFAULT_CHANNEL) -> Optional[dict]:
     if not best:
         return None
     url = best.get("html_url")
+    version = format_semver(best["tag_name"])
     return {
-        "version": format_semver(best["tag_name"]),
+        "version": version,
+        "installer": pick_installer(best.get("assets"), version),
         "prerelease": bool(best.get("prerelease")) or best_k[1] == 0,
         "notes": str(best.get("body") or "")[:NOTES_MAX],
         "url": url if isinstance(url, str) and url.startswith("https://") else None,
@@ -229,6 +257,19 @@ class UpdateChecker:
                 "latest": old.get("latest"),
             }
         self._write(CACHE_FILE, self._cache)
+
+    def latest_installer(self) -> Optional[dict]:
+        """Instalador de Windows de la última versión conocida (caché), o None. No hace red."""
+        with self._lock:
+            if self._cache is None:
+                self._cache = self._read(CACHE_FILE) or {}
+            inst = ((self._cache or {}).get("latest") or {}).get("installer")
+        if not isinstance(inst, dict) or not isinstance(inst.get("name"), str):
+            return None
+        # La caché está en disco: se vuelve a validar lo que se va a descargar.
+        if not (_github_download(inst.get("url")) and _github_download(inst.get("sha256_url"))):
+            return None
+        return inst
 
     def state(self, refresh: bool = False) -> dict:
         actual = installed_version()

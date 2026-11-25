@@ -13,6 +13,7 @@ from . import orphans
 from .hooks import HookService
 from .pairing import PairingService
 from .runs import RunRegistry, game_busy
+from .selfupdate import SelfUpdater, sync_running
 from .steam import SteamService
 
 
@@ -23,6 +24,7 @@ class AppContext:
         self.runs = RunRegistry()
         self.scheduler = Scheduler(self.auto_cfg, self.runs.active)
         self.checker = updates.UpdateChecker()
+        self.updater = SelfUpdater(self.checker, busy=lambda: sync_running(self.scheduler, self.runs))
         self.hooks = HookService(self.scheduler, self.runs, self.auto_cfg)
         self.scheduler.maintenance.append(self.hooks.purge_staging)  # purga horaria del staging de subidas HTTP
         self.pairing = PairingService(

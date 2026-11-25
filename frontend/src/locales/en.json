@@ -604,9 +604,21 @@
       "link": "View the release on GitHub",
       "manual": "Checkpoint does not update itself: download the new version, rebuild the web app and restart Checkpoint."
     },
+    "install": {
+      "button": "Update now",
+      "confirm": "Checkpoint will download version {version}, close and reopen in a few seconds.",
+      "confirmYes": "Yes, update",
+      "checking": "Checking…",
+      "downloading": "Downloading {version}…",
+      "installing": "Installing…",
+      "restarting": "Restarting… This page will reload by itself.",
+      "done": "Updated to version {version}.",
+      "windowsNote": "It updates from here; your data and settings are kept."
+    },
     "check": {
       "title": "Check for updates",
       "text": "Looks up the versions published on GitHub (read-only, every few hours) and notifies you if there is a new one. It installs nothing.",
+      "textWindows": "Looks up the versions published on GitHub (every few hours) and notifies you if there is a new one. You can install it with one click.",
       "channel": "Channel",
       "now": "Check now",
       "limited": "You just checked; wait a minute before checking again."
@@ -717,7 +729,12 @@
       "updates": {
         "enabled_bool": "must be true or false",
         "channel_invalid": "must be “stable” or “beta”",
-        "field_required": "provide “enabled” or “channel”"
+        "field_required": "provide “enabled” or “channel”",
+        "download_failed": "Could not download the update: {reason}",
+        "install_failed": "Could not install the update: {reason}. The current version is kept.",
+        "install_not_supported": "One-click update is only available with the Windows installer.",
+        "hash_mismatch": "The download does not match the published hash. Nothing was installed.",
+        "sync_running": "A sync is running. Wait for it to finish."
       },
       "game_ambiguous": "{cause}",
       "game_unknown": "unknown game",

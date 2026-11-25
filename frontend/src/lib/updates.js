@@ -47,3 +47,39 @@ export function updateSummary(info, t) {
   if (info.ultima) return t('updates.summary.upToDate', { current: info.actual });
   return t('updates.summary.noData', { current: info.actual });
 }
+
+// La actualización con un clic solo se ofrece cuando el backend dice `instalable` (instalador de Windows y Release con
+// instalador y hash publicado); si no, Linux, macOS y Windows sin instalador mantienen el texto manual.
+export function canInstall(info) {
+  return !!(showBadge(info) && info.instalable === true);
+}
+
+// Hub de Windows con instalador (aunque ahora no haya versión nueva): cambia el texto de la tarjeta.
+export function isInstaller(info) {
+  return !!(info && info.instalador === true);
+}
+
+// Fases de la actualización: idle -> confirm -> checking -> downloading -> installing -> restarting -> done | error.
+export const INSTALL_BUSY = ['checking', 'downloading', 'installing', 'restarting'];
+
+// Fase siguiente según el estado que informa `GET /api/updates/install` ({state, error}).
+export function phaseFromStatus(prev, status) {
+  if (!status) return prev;
+  if (status.state === 'error') return 'error';
+  if (['downloading', 'installing', 'restarting'].includes(status.state)) return status.state;
+  return prev; // idle: el servidor aún no ha empezado o se acaba de reiniciar (lo resuelve la espera de reinicio)
+}
+
+// ¿Ya corre la versión nueva? (tras el reinicio el hub responde con `actual` igual a la que se instaló)
+export function reachedVersion(info, target) {
+  return !!(info && target && info.actual === target);
+}
+
+// Clave del catálogo (con {version}) del texto de cada fase.
+export const PHASE_TEXT = {
+  checking: 'updates.install.checking',
+  downloading: 'updates.install.downloading',
+  installing: 'updates.install.installing',
+  restarting: 'updates.install.restarting',
+  done: 'updates.install.done',
+};

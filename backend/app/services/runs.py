@@ -42,6 +42,10 @@ class RunRegistry:
         """¿Hay una ejecución de ese juego sin terminar?"""
         return any(r.game == game and not r.done for r in self._runs.values())
 
+    def any_active(self) -> bool:
+        """¿Hay alguna ejecución sin terminar, de cualquier juego?"""
+        return any(not r.done for r in self._runs.values())
+
     def prune(self):
         for old in [k for k, v in self._runs.items() if v.done][:-KEEP_DONE]:
             self._runs.pop(old, None)

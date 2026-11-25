@@ -157,3 +157,63 @@ test('aplicable false: UpdateBadge y UpdateCheck no pintan nada', { skip }, () =
   assert.equal(r(mod.UpdateCheck, { info: NA, onInfo() {} }), '');
   assert.match(r(mod.UpdateCheck, { info: { ...NEW, aplicable: true }, onInfo() {} }), /Comprobar actualizaciones/);
 });
+
+// ---- actualización con un clic (solo instalador de Windows) ----
+import { canInstall, isInstaller, phaseFromStatus, reachedVersion, INSTALL_BUSY } from '#src/lib/updates.js';
+import { en } from '../../helpers/locales.mjs';
+
+const WIN = { ...NEW, instalador: true, instalable: true };
+
+test('canInstall: solo con versión nueva e `instalable` del backend', () => {
+  assert.equal(canInstall(WIN), true);
+  assert.equal(canInstall(NEW), false); // Linux, macOS o Windows sin instalador: texto manual
+  assert.equal(canInstall({ ...WIN, hay_actualizacion: false }), false);
+  assert.equal(canInstall({ ...WIN, habilitado: false }), false);
+  assert.equal(canInstall(null), false);
+  assert.equal(isInstaller(WIN), true);
+  assert.equal(isInstaller({ ...NEW, instalador: false }), false);
+});
+
+test('phaseFromStatus: sigue el estado del servidor y un idle no retrocede', () => {
+  assert.equal(phaseFromStatus('checking', { state: 'downloading' }), 'downloading');
+  assert.equal(phaseFromStatus('downloading', { state: 'installing' }), 'installing');
+  assert.equal(phaseFromStatus('installing', { state: 'restarting' }), 'restarting');
+  assert.equal(phaseFromStatus('downloading', { state: 'error' }), 'error');
+  assert.equal(phaseFromStatus('downloading', { state: 'idle' }), 'downloading');
+  assert.equal(phaseFromStatus('checking', null), 'checking');
+  assert.ok(INSTALL_BUSY.includes('restarting') && !INSTALL_BUSY.includes('confirm'));
+});
+
+test('reachedVersion: tras el reinicio corre la versión instalada', () => {
+  assert.equal(reachedVersion({ actual: '0.5.0' }, '0.5.0'), true);
+  assert.equal(reachedVersion({ actual: '0.4.2' }, '0.5.0'), false);
+  assert.equal(reachedVersion(null, '0.5.0'), false);
+});
+
+test('UpdateDialog con instalador: botón «Actualizar ahora» y nota de Windows (sin el texto manual)', { skip }, () => {
+  const h = r(mod.UpdateDialog, { info: WIN, onClose() {} });
+  assert.match(h, /Actualizar ahora/);
+  assert.match(h, /tus datos y ajustes se conservan/);
+  assert.ok(!/recompila la web/.test(h));
+});
+
+test('UpdateDialog sin instalador: sigue el texto manual y no hay botón', { skip }, () => {
+  const h = r(mod.UpdateDialog, { info: NEW, onClose() {} });
+  assert.match(h, /recompila la web/);
+  assert.ok(!/Actualizar ahora/.test(h));
+});
+
+test('UpdateCheck: texto de Windows y botón solo con instalador', { skip }, () => {
+  const h = r(mod.UpdateCheck, { info: WIN, onInfo() {} });
+  assert.match(h, /Puedes instalarla con un clic/);
+  assert.match(h, /Actualizar ahora/);
+  const n = r(mod.UpdateCheck, { info: NEW, onInfo() {} });
+  assert.match(n, /No instala nada/);
+  assert.ok(!/Actualizar ahora/.test(n));
+});
+
+test('textos aprobados de la actualización en inglés', () => {
+  assert.equal(en.updates.install.button, 'Update now');
+  assert.equal(en.updates.install.confirmYes, 'Yes, update');
+  assert.match(en.err.main.updates.hash_mismatch, /Nothing was installed/);
+});

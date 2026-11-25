@@ -7,6 +7,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ...core import updates
 from ...core.errors import error_body, error_response
+from ...services import selfupdate
 from ...services.context import AppContext
 from ..deps import body_json, get_ctx, internal_router
 
@@ -16,10 +17,35 @@ api_log = logging.getLogger(
 router = internal_router()
 
 
+def _with_install(ctx: AppContext, state: dict) -> dict:
+    """`instalador`: es el hub de Windows instalado; `instalable`: la actualización con un clic está disponible (instalador de Windows + Release con instalador y hash)."""
+    state["instalador"] = selfupdate.supported()  # este hub se actualiza con el instalador de Windows
+    state["instalable"] = bool(
+        state.get("hay_actualizacion") and selfupdate.supported() and ctx.checker.latest_installer()
+    )
+    return state
+
+
 @router.get("/api/updates")
 def get_updates(refresh: bool = False, ctx: AppContext = Depends(get_ctx)):
     api_log.debug("updates: refresh=%s", refresh)
-    return ctx.checker.state(refresh=refresh)
+    return _with_install(ctx, ctx.checker.state(refresh=refresh))
+
+
+@router.post("/api/updates/install")
+def post_install(ctx: AppContext = Depends(get_ctx)):
+    """Descarga, verifica y lanza el instalador de la última versión. No lee nada del cuerpo: el servidor usa solo lo
+    que él mismo comprobó en GitHub."""
+    try:
+        return ctx.updater.start()
+    except selfupdate.UpdateError as e:
+        api_log.debug("updates instalar: %s (%s)", e.code, e.status)
+        return error_response(e.status, e.code, **e.params)
+
+
+@router.get("/api/updates/install")
+def get_install(ctx: AppContext = Depends(get_ctx)):
+    return ctx.updater.status()
 
 
 @router.put("/api/updates")
@@ -44,4 +70,4 @@ async def put_updates(request: Request, ctx: AppContext = Depends(get_ctx)):
         checker.set_enabled(body["enabled"])
     if "channel" in body:
         checker.set_channel(body["channel"])
-    return await run_in_threadpool(checker.state)
+    return _with_install(ctx, await run_in_threadpool(checker.state))

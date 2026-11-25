@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { updatesApplicable, updateSummary, channelOf, CHANNEL_OPTIONS, CHANNEL_HELP } from '#src/lib/updates.js';
+import UpdateDialog from '#src/components/updates/UpdateDialog.jsx';
+import { updatesApplicable, updateSummary, channelOf, canInstall, isInstaller, CHANNEL_OPTIONS, CHANNEL_HELP } from '#src/lib/updates.js';
 import { errText, useI18n } from '#src/hooks/useI18n.js';
 import { ui } from '#src/lib/errors.js';
 import { Alert, Button, Select, Switch } from '#src/components/ui/index.js';
@@ -9,6 +10,7 @@ import { putUpdates, refreshUpdates } from '#src/lib/api/updates.js';
 export default function UpdateCheck({ info, onInfo }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
   const [msg, setMsg] = useState(null); // error de la API o mensaje {code} (se traduce al pintar)
   if (info && !updatesApplicable(info)) return null; // Docker sin forzar: ni tarjeta ni selector de canal
   const enabled = info ? info.habilitado !== false : true;
@@ -38,7 +40,7 @@ export default function UpdateCheck({ info, onInfo }) {
   return (
     <section className="card" aria-labelledby="updates-title">
       <h3 id="updates-title">{t('updates.check.title')}</h3>
-      <p className="muted">{t('updates.check.text')}</p>
+      <p className="muted">{t(isInstaller(info) ? 'updates.check.textWindows' : 'updates.check.text')}</p>
       <Switch
         checked={enabled}
         disabled={busy}
@@ -68,10 +70,16 @@ export default function UpdateCheck({ info, onInfo }) {
         <Button variant="ghost" onClick={refresh} disabled={busy || !enabled}>
           {t('updates.check.now')}
         </Button>
+        {canInstall(info) && (
+          <Button variant="primary" onClick={() => setShowDialog(true)}>
+            {t('updates.install.button')}
+          </Button>
+        )}
       </div>
       <div role="status" aria-live="polite">
         {msg && <Alert variant="error">{errText(msg)}</Alert>}
       </div>
+      {showDialog && canInstall(info) && <UpdateDialog info={info} onClose={() => setShowDialog(false)} />}
     </section>
   );
 }
