@@ -27,8 +27,10 @@ while [ $# -gt 0 ]; do
   esac
 done
 OUT="${OUT:-out}"
-case "$MANIFEST" in ""|none|/*) ;; *) MANIFEST="$START/$MANIFEST" ;; esac
+case "$MANIFEST" in ""|none|/*|[A-Za-z]:[\\/]*) ;; *) MANIFEST="$START/$MANIFEST" ;; esac
 NAME="Checkpoint"
+# En Windows (Git Bash) no hay python3: setup-python solo deja python.exe.
+PY=python3; command -v python3 >/dev/null 2>&1 || PY=python
 CORE="${CHECKPOINT_CORE_SRC:-../checkpoint-core/src/checkpoint_core}"
 # Un solo paso (compila y empaqueta): «pnpm run zip» o «npm run zip».
 [ -f dist/index.js ] || { echo "Falta dist/index.js: ejecuta antes «pnpm i && pnpm run build» (o «npm i && npm run build»), o todo junto con «pnpm run zip»." >&2; exit 1; }
@@ -44,7 +46,7 @@ else
 [ -n "$MANIFEST" ] || { echo "Falta el manifiesto de rutas de guardado: pasa --save-manifest <save_manifest.json> o define SAVE_MANIFEST (se genera con scripts/gen_save_manifest.py; no se commitea)." >&2; exit 1; }
 [ -f "$MANIFEST" ] || { echo "No existe el manifiesto $MANIFEST." >&2; exit 1; }
 # Comprobación mínima: JSON v=1 con juegos y con «src» «ludusavi-manifest@<commit>» (el commit de Ludusavi con el que se generó)
-python3 - "$MANIFEST" <<'PY' || { echo "El manifiesto $MANIFEST no es válido (se espera el JSON de gen_save_manifest.py: v=1, games y src con el commit de Ludusavi)." >&2; exit 1; }
+"$PY" - "$MANIFEST" <<'PY' || { echo "El manifiesto $MANIFEST no es válido (se espera el JSON de gen_save_manifest.py: v=1, games y src con el commit de Ludusavi)." >&2; exit 1; }
 import json, re, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 assert d.get("v") == 1 and isinstance(d.get("games"), list) and d["games"]
@@ -65,7 +67,7 @@ find "$STAGE/$NAME" -name __pycache__ -type d -prune -exec rm -rf {} +
 cp main.py plugin.json package.json LICENSE README.md "$STAGE/$NAME/"
 ZIP="$(cd "$OUT" && pwd)/$NAME.zip"
 rm -f "$ZIP"
-(cd "$STAGE" && python3 -c "
+(cd "$STAGE" && "$PY" -c "
 import os, sys, zipfile
 with zipfile.ZipFile(sys.argv[1], 'w', zipfile.ZIP_DEFLATED) as z:
     for root, _, files in os.walk(sys.argv[2]):
