@@ -21,6 +21,7 @@ def test_removed_variables_are_ignored(tmp_path):
         "from app.sync import scheduler\nfrom app.core import settings, updates\n"
         "print(settings.CONFIG_PATH, settings.DATA_DIR, settings.SSH_TIMEOUT)\n"
         "print(scheduler.default_settings())\n"
+        "updates.installed_version = lambda: '1.0.0'  # el defecto con una pre-release instalada es beta\n"
         "print(updates.REPO, updates.UpdateChecker().channel())",
         CHECKPOINT_HOME_DIR=str(tmp_path),
         CHECKPOINT_CONFIG="/otra/c.yaml",

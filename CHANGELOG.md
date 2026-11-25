@@ -2,6 +2,16 @@
 
 ## Sin publicar
 
+## 2.5.0-rc.2 (2026-11-25)
+
+### Novedades
+
+- Icono propio de Checkpoint en el `.exe`, el instalador, «Aplicaciones instaladas», los accesos directos y la bandeja de Windows.
+
+### Cambios
+
+- Modo sin login: el aviso pasa de banner global a una tarjeta en Ajustes > General.
+
 ### Correcciones
 
 - Icono de bandeja de Windows: el menú ya no se queda en «Checkpoint no responde» ni con «Abrir Checkpoint» en gris aunque el hub funcione. La bandeja arranca antes que el servidor y comprobaba el puerto una sola vez; ahora un hilo vigila el hub (cada segundo hasta que responde, luego cada pocos segundos) y refresca el menú cuando cambia, también si el hub cae después.
