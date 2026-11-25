@@ -23,6 +23,21 @@ def env(suffix, default=None, environ=None):
     return default if v in (None, "") else v
 
 
+LOCAL_HOSTS = ("127.0.0.1", "::1", "localhost")
+NO_LOGIN_USER = "local"  # usuario interno del modo sin login (avatar y keys de dispositivo cuelgan de él)
+# Solo `cli.serve` lo activa, en el propio proceso y con un host local: no sale del entorno, para que una variable
+# suelta (p. ej. en Docker) nunca abra el hub sin login.
+NO_LOGIN_ALLOWED = False
+
+
+def is_local_host(host) -> bool:
+    """Host de escucha local (127.0.0.1, ::1 o localhost, con o sin corchetes): el único donde se permite no tener login."""
+    h = (host or "").strip().lower()
+    if h.startswith("[") and h.endswith("]"):
+        h = h[1:-1]
+    return h in LOCAL_HOSTS
+
+
 def native_home(environ=None) -> Path:
     """Carpeta base de Checkpoint en modo nativo (sin Docker). CHECKPOINT_HOME_DIR la fija a mano; por defecto
     ~/.local/share/checkpoint (Linux, respeta XDG_DATA_HOME), ~/Library/Application Support/checkpoint (macOS)

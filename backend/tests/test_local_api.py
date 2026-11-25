@@ -354,7 +354,8 @@ def test_cli_serve_exige_credenciales(monkeypatch, capsys):
 
     for k in ("CHECKPOINT_USER", "CHECKPOINT_PASSWORD"):
         monkeypatch.delenv(k, raising=False)
-    assert cli.main(["serve"]) == 2
+    # Host local: arranca sin login (ver test_no_login.py); con host expuesto se niega.
+    assert cli.main(["serve", "--host", "0.0.0.0"]) == 2
     assert "CHECKPOINT_USER" in capsys.readouterr().err
 
 

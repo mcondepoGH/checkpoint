@@ -19,8 +19,21 @@ class Auth:
     """Usuario y contraseña en claro (del entorno). La contraseña se hashea con bcrypt en
     memoria al construir; el claro no se guarda ni se escribe a disco ni se loguea."""
 
-    def __init__(self, user: str, password: str, session_hours: float = None, clock=time.time, rounds: int = 12):
-        if not user or not password:
+    def __init__(
+        self,
+        user: str,
+        password: str,
+        session_hours: float = None,
+        clock=time.time,
+        rounds: int = 12,
+        no_login: bool = False,
+    ):
+        # `no_login`: sin usuario ni contraseña (solo lo pide `from_env` con el host local); `valid` da por buena
+        # cualquier petición y el login no comprueba nada.
+        self.no_login = no_login
+        if no_login:
+            user, password = settings.NO_LOGIN_USER, ""
+        elif not user or not password:
             raise RuntimeError("Faltan CHECKPOINT_USER / CHECKPOINT_PASSWORD")
         self.user = user
         self.pw_hash = bcrypt.hashpw(password.encode()[:72], bcrypt.gensalt(rounds))
@@ -39,9 +52,13 @@ class Auth:
         self._dummy = bcrypt.hashpw(b"x", bcrypt.gensalt(rounds=4))
 
     @classmethod
-    def from_env(cls, env=None, **kw) -> "Auth":
+    def from_env(cls, env=None, allow_no_login=None, **kw) -> "Auth":
+        """Con credenciales, login normal. Sin ellas solo si `allow_no_login` (por defecto `settings.NO_LOGIN_ALLOWED`,
+        que activa `serve` con un host local); si no, `RuntimeError`."""
         env = os.environ if env is None else env
-        return cls(settings.env("USER", "", env), settings.env("PASSWORD", "", env), **kw)
+        allow = settings.NO_LOGIN_ALLOWED if allow_no_login is None else allow_no_login
+        user, password = settings.env("USER", "", env), settings.env("PASSWORD", "", env)
+        return cls(user, password, no_login=allow and not (user and password), **kw)
 
     def wait_time(self, ip: str, bucket: Optional[Dict[str, Tuple[int, float]]] = None) -> int:
         bucket = self.fails if bucket is None else bucket
@@ -81,6 +98,8 @@ class Auth:
 
     def login(self, ip: str, user: str, password: str) -> Optional[str]:
         """Devuelve token o None. Lanza PermissionError(segundos) si está bloqueada la IP."""
+        if self.no_login:
+            return secrets.token_urlsafe(32)
         w = self.wait_time(ip)
         if w > 0:
             raise PermissionError(w)
@@ -99,6 +118,8 @@ class Auth:
         return None
 
     def valid(self, token: Optional[str]) -> bool:
+        if self.no_login:
+            return True
         if not token:
             return False
         with self.lock:

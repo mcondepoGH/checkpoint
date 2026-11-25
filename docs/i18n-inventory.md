@@ -416,7 +416,7 @@ Comprobaciones automáticas (`frontend/test/locales.test.mjs`, `render-locales.t
 
 ### `backend/app/cli.py` (11)
 
-- L17: faltan CHECKPOINT_USER y CHECKPOINT_PASSWORD (variables de entorno)
+- L21: no se puede arrancar sin usuario ni contraseña en {}: solo se permite en 127.0.0.1. Define CHECKPOINT_USER y CHECKPOINT_PASSWORD o arranca con --host 127.0.0.1
 - L25: ) en http://
 - L25: Checkpoint ({}, {}) en http://{}:{}
 - L39: resuelve un conflicto: gana el más reciente, el hub o el save de un dispositivo

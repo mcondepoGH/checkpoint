@@ -4,6 +4,7 @@
 
 ### Novedades
 
+- Modo sin login para el hub nativo: con `serve` y un host local (`127.0.0.1`, `::1` o `localhost`, el de por defecto) `CHECKPOINT_USER` y `CHECKPOINT_PASSWORD` pasan a ser opcionales; sin ellos el hub no pide login y solo se abre desde ese equipo. Con otro host y sin credenciales, `serve` se niega a arrancar. Docker sigue exigiéndolas. `GET /api/session` añade `noLogin` (compatible: `PROTOCOL` no cambia). El aviso en la interfaz llega en una subtarea posterior.
 - `GET /api/games` con key de dispositivo (`ckd_`) añade `process`: el proceso del juego configurado en el hub (cadena, o `null` si no tiene), para que un cliente sin SSH sepa qué vigilar. Con key de usuario no se expone. Campo nuevo compatible: `PROTOCOL` y `MIN_PLUGIN_PROTOCOL` no cambian.
 
 ### Cambios

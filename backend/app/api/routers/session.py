@@ -54,7 +54,8 @@ async def logout(request: Request, ctx: AppContext = Depends(get_ctx)):
 
 @router.get("/api/session")
 async def session(request: Request, ctx: AppContext = Depends(get_ctx)):
-    return {"authenticated": ctx.auth.valid(request.cookies.get(COOKIE))}
+    # `noLogin`: el hub corre sin usuario ni contraseña (solo en local); el frontend lo usa para avisar y ocultar «Salir».
+    return {"authenticated": ctx.auth.valid(request.cookies.get(COOKIE)), "noLogin": ctx.auth.no_login}
 
 
 @router.get("/api/public")

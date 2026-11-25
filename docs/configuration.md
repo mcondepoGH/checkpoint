@@ -8,8 +8,8 @@ Variables (todas con prefijo `CHECKPOINT_`, salvo `TZ`). El `docker-compose.yml`
 
 | Variable | Por defecto | Descripción |
 |---|---|---|
-| `CHECKPOINT_USER` | (obligatoria) | Usuario de acceso a la web |
-| `CHECKPOINT_PASSWORD` | (obligatoria) | Contraseña, en claro en el `.env` |
+| `CHECKPOINT_USER` | (obligatoria) | Usuario de acceso a la web. Solo con `serve` y host local (`127.0.0.1`, `::1`, `localhost`) puede faltar junto a la contraseña: el hub arranca sin login y solo se abre desde ese equipo; con otro host y sin credenciales, `serve` se niega a arrancar |
+| `CHECKPOINT_PASSWORD` | (obligatoria) | Contraseña, en claro en el `.env` (ver `CHECKPOINT_USER` para el modo sin login) |
 | `CHECKPOINT_PORT` | `8088` | Solo con `serve` (sin Docker): puerto de escucha. En Docker la web escucha siempre en el 8088 del contenedor; para cambiar el puerto del equipo edita `ports:` en el compose |
 | `CHECKPOINT_HOST` | `127.0.0.1` | Solo con `serve` (sin Docker): dirección de escucha |
 | `CHECKPOINT_HOME_DIR` | según el sistema | Solo sin Docker: carpeta base de `config/`, `data/` y `keys/` (ver más abajo) |

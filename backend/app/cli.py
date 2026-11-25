@@ -13,11 +13,18 @@ from .sync.engine import SyncAbort, list_versions, resolve_game, run_sync, valid
 
 
 def serve(host=None, port=None) -> int:
-    """Arranca la app con uvicorn. Exige CHECKPOINT_USER y CHECKPOINT_PASSWORD (como en Docker)."""
-    if not settings.env("USER") or not settings.env("PASSWORD"):
-        print("faltan CHECKPOINT_USER y CHECKPOINT_PASSWORD (variables de entorno)", file=sys.stderr)
-        return 2
+    """Arranca la app con uvicorn. Exige CHECKPOINT_USER y CHECKPOINT_PASSWORD (como en Docker), salvo con un host
+    local (127.0.0.1, ::1, localhost): ahí arranca sin login."""
     host = host or settings.env("HOST", "127.0.0.1")
+    if not settings.env("USER") or not settings.env("PASSWORD"):
+        if not settings.is_local_host(host):
+            print(
+                f"no se puede arrancar sin usuario ni contraseña en {host}: solo se permite en 127.0.0.1. "
+                "Define CHECKPOINT_USER y CHECKPOINT_PASSWORD o arranca con --host 127.0.0.1",
+                file=sys.stderr,
+            )
+            return 2
+        settings.NO_LOGIN_ALLOWED = True
     port = port if port is not None else int(settings.env("PORT", "8088"))
     if not 1 <= port <= 65535:
         print("puerto fuera de rango", file=sys.stderr)
