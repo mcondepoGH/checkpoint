@@ -336,7 +336,9 @@ def test_sin_venv_avisa_con_el_paquete_de_la_distro(sb):
 def test_busca_python312_si_python3_es_viejo(sb, tmp_path):
     bindir = tmp_path / "pybin"
     bindir.mkdir()
-    for name, ok in (("python3", "1"), ("python3.12", "0")):
+    # El instalador prueba python3, python3.14, python3.13 y python3.12 en ese orden: se falsean todos para que un
+    # Python real del sistema o del runner (p. ej. /usr/bin/python3.14) no gane a python3.12.
+    for name, ok in (("python3", "1"), ("python3.14", "1"), ("python3.13", "1"), ("python3.12", "0")):
         p = bindir / name
         p.write_text(f'#!/usr/bin/env bash\ncase "$2" in *version_info*) exit {ok} ;; esac\nexit 0\n', encoding="utf-8")
         p.chmod(0o755)
