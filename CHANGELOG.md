@@ -2,6 +2,12 @@
 
 ## Sin publicar
 
+## 2.5.0-rc.5 (2026-11-25)
+
+### Cambios
+
+- Versión de prueba para comprobar la actualización con un clic desde el hub (sin cambios funcionales).
+
 ## 2.5.0-rc.4 (2026-11-25)
 
 ### Correcciones
