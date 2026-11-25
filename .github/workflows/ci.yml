@@ -97,6 +97,26 @@ jobs:
         shell: pwsh
         run: ./packaging/windows/smoke.ps1
 
+  linux-package:
+    # Paquete nativo de Linux (packaging/linux): construye el tarball (frontend, plugin de Deck) y hace el smoke test:
+    # venv + pip install, arranque sin login en un puerto libre, /api/session, la web y /api/deck/plugin.
+    # Como windows-installer: no corre en cada push a una rama, sí en pull requests, en main, a mano y en la semanal.
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Construir el tarball
+        run: bash packaging/linux/build.sh
+      - name: Smoke test (extraer, instalar dependencias, arrancar sin login y consultar)
+        run: bash packaging/linux/smoke.sh
+
   client:
     # Cliente de Linux (checkpoint-client/). Lleva dentro checkpoint-core (package-dir), así que `-e` instala los dos.
     # Las pruebas de integración con el hub real se omiten solas (el job no instala las dependencias del backend).

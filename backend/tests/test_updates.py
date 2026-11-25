@@ -10,6 +10,12 @@ from app.main import create_app
 from test_api import PW, login
 
 
+@pytest.fixture(autouse=True)
+def _plataforma_windows(monkeypatch):
+    """Los tests de esta pieza asumen el asset de Windows (el de Linux tiene sus propios tests al final)."""
+    monkeypatch.setattr(updates, "platform_name", lambda: "windows")
+
+
 def rel(tag, **kw):
     return {
         "tag_name": tag,
@@ -671,3 +677,41 @@ def test_pick_installer_rc():
     ]
     assert updates.pick_installer(assets, "2.5.0-rc.2") == {"name": n, "url": b + n, "sha256_url": b + n + ".sha256"}
     assert updates.pick_installer(assets[:1], "2.5.0-rc.2") is None
+
+
+# ---- asset del instalador según la plataforma del hub ----
+def _assets(name, base="https://github.com/o/r/releases/download/v1.2.3/", sha=True):
+    out = [{"name": name, "browser_download_url": base + name}]
+    if sha:
+        out.append({"name": name + ".sha256", "browser_download_url": base + name + ".sha256"})
+    return out
+
+
+def test_pick_installer_linux_elige_el_tarball_con_su_hash():
+    name = "checkpoint-1.2.3-linux.tar.gz"
+    got = updates.pick_installer(_assets(name), "1.2.3", platform="linux")
+    assert got["name"] == name and got["url"].endswith(name) and got["sha256_url"].endswith(name + ".sha256")
+
+
+def test_pick_installer_linux_sin_sha256_no_ofrece_nada():
+    assert (
+        updates.pick_installer(_assets("checkpoint-1.2.3-linux.tar.gz", sha=False), "1.2.3", platform="linux") is None
+    )
+
+
+def test_pick_installer_cada_plataforma_ignora_el_asset_de_la_otra():
+    win, lin = "Checkpoint-Setup-1.2.3.exe", "checkpoint-1.2.3-linux.tar.gz"
+    both = _assets(win) + _assets(lin)
+    assert updates.pick_installer(both, "1.2.3", platform="windows")["name"] == win
+    assert updates.pick_installer(both, "1.2.3", platform="linux")["name"] == lin
+    assert updates.pick_installer(_assets(win), "1.2.3", platform="linux") is None
+    assert updates.pick_installer(_assets(lin), "1.2.3", platform="windows") is None
+
+
+def test_pick_installer_macos_no_tiene_instalador():
+    assert updates.pick_installer(_assets("checkpoint-1.2.3-linux.tar.gz"), "1.2.3", platform="macos") is None
+
+
+def test_pick_installer_usa_la_plataforma_del_hub_por_defecto(monkeypatch):
+    monkeypatch.setattr(updates, "platform_name", lambda: "linux")
+    assert updates.pick_installer(_assets("checkpoint-1.2.3-linux.tar.gz"), "1.2.3")["name"].endswith("-linux.tar.gz")

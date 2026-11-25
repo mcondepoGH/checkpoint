@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from . import runtime, settings
+from .runtime import platform_name
 
 log = logging.getLogger("checkpoint.updates")
 REPO = "mcondepoGH/checkpoint"
@@ -124,6 +125,10 @@ def fetch_releases(repo: str) -> list:
 INSTALLER_NAME = (
     "Checkpoint-Setup-{version}.exe"  # instalador de Windows adjunto a la Release; su hash: <nombre>.sha256
 )
+LINUX_PACKAGE_NAME = (
+    "checkpoint-{version}-linux.tar.gz"  # paquete nativo de Linux (packaging/linux/build.sh); su hash: <nombre>.sha256
+)
+INSTALLER_NAMES = {"windows": INSTALLER_NAME, "linux": LINUX_PACKAGE_NAME}  # macOS no tiene actualización con un clic
 
 
 def _github_download(url) -> Optional[str]:
@@ -134,10 +139,13 @@ def _github_download(url) -> Optional[str]:
     return url if m else None
 
 
-def pick_installer(assets, version) -> Optional[dict]:
-    """El instalador de Windows de esa versión y la URL de su hash, o None si falta alguno de los dos (sin hash
-    publicado no se ofrece la actualización con un clic)."""
-    name = INSTALLER_NAME.format(version=version)
+def pick_installer(assets, version, platform: Optional[str] = None) -> Optional[dict]:
+    """El instalador (Windows) o paquete (Linux) de esa versión para la plataforma del hub y la URL de su hash, o None
+    si falta alguno de los dos (sin hash publicado no se ofrece la actualización con un clic)."""
+    template = INSTALLER_NAMES.get(platform or platform_name())
+    if not template:
+        return None
+    name = template.format(version=version)
     urls = {}
     for a in assets if isinstance(assets, list) else []:
         if isinstance(a, dict) and a.get("name") in (name, name + ".sha256"):
@@ -286,7 +294,7 @@ class UpdateChecker:
         self._write(CACHE_FILE, self._cache)
 
     def latest_installer(self) -> Optional[dict]:
-        """Instalador de Windows de la última versión conocida (caché), o None. No hace red."""
+        """Instalador (Windows) o paquete (Linux) de la última versión conocida (caché), o None. No hace red."""
         with self._lock:
             if self._cache is None:
                 self._cache = self._read(CACHE_FILE) or {}

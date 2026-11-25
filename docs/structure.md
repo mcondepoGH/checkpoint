@@ -182,6 +182,15 @@ Empaqueta el hub en modo nativo para Windows. No es parte de la imagen de Docker
 - `build.ps1` y `smoke.ps1`: construcción completa y smoke test (los usan el job `windows-installer` de `ci.yml` y el job `windows` de `release.yml`); `requirements.txt`: PyInstaller, pystray y Pillow.
 - Backend: `services/autostart.py` (Tarea Programada, `GET`/`PUT /api/autostart`) y `services/selfupdate.py` (actualización con un clic, `POST`/`GET /api/updates/install`; solo con el hub congelado en Windows). El asset de la Release es `Checkpoint-Setup-<versión>.exe` más su `.sha256`; `core/updates.py` solo lo ofrece si están los dos.
 
+## Paquete de Linux (`packaging/linux/`)
+
+Empaqueta el hub en modo nativo para Linux (servicio de usuario de systemd, sin root). No es parte de la imagen de Docker ni cambia el código del hub.
+
+- `build.sh`: construye `dist/checkpoint-<versión>-linux.tar.gz` y su `.sha256` (carpeta raíz `checkpoint-<versión>/` con `install.sh`, `VERSION`, `backend/{app,requirements.txt,static}` y `checkpoint-deck/out/Checkpoint.zip`). Reproducible; con `--tag` comprueba `VERSION`.
+- `install.sh`: instala (`--no-login`, `--user`/`--password-file`, `--host`, `--port`, `--no-start`, `--dry-run`, `--enable-linger`), actualiza (`--upgrade`, con vuelta a la versión anterior si el reinicio falla) y desinstala (`--uninstall`, `--purge`). Código en `~/.local/share/checkpoint-app/<versión>/` con el enlace `current`, entorno en `~/.config/checkpoint/checkpoint.env` y unidad `~/.config/systemd/user/checkpoint.service`. Variables: [`configuration.md`](configuration.md#instalación-nativa-en-linux-installsh).
+- `smoke.sh`: smoke test sin systemd real (lo usan el job `linux-package` de `ci.yml` y el job `linux` de `release.yml`).
+- Backend: `services/selfupdate.py` (actualización con un clic: descarga, verifica el SHA-256, extrae con seguridad y lanza `install.sh --upgrade` desacoplado; solo con una instalación hecha por `install.sh`). Publica `espera_reinicio` (s) en `GET /api/updates`: 120 en Windows, 300 en Linux.
+
 ## Cliente de Linux (`checkpoint-client/`)
 
 Paquete Python `checkpoint_client` (CLI `checkpoint-client`, Python 3.12, dependencias `psutil` y `keyring`) que sincroniza sin SSH con el hub, como el plugin de la Deck pero para Linux de escritorio. Es independiente del hub (no lo importa ni lo ejecuta; el Dockerfile no lo copia y `.dockerignore` lo excluye) y tiene versión propia semver en su `pyproject.toml`, que no depende del tag del hub. Su `README.md` explica el uso; aquí solo el empaquetado y la CI.

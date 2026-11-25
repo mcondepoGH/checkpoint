@@ -20,12 +20,27 @@ Variables (todas con prefijo `CHECKPOINT_`, salvo `TZ`). El `docker-compose.yml`
 | `CHECKPOINT_TRASH_TTL_DAYS` | `30` | Días que se conserva en la papelera (`data/trash/`) lo que se mueve desde «Datos sin dispositivo asignado» antes de que el mantenimiento programado lo borre del todo. Entre `1` y `3650`; fuera de rango o no numérico, el arranque falla con un error claro |
 | `CHECKPOINT_HOOK_STAGING_MAX_MB` | `2048` | Tope (MiB) del staging de cada juego (todos sus dispositivos) en la subida de saves por la API; al superarlo, `413` `err.hook.staging_full`. Entre `1` y `1048576`; fuera de rango o no numérico, el arranque falla con un error claro |
 | `CHECKPOINT_HOOK_MAX_FILE_MB` | `512` | Tamaño máximo por fichero (MiB) en la subida de saves de los dispositivos `http` por la API (ver [`api.md`](api.md#hooks)). Entre `1` y `16384` (16 GiB); fuera de rango o no numérico, el arranque falla con un error claro |
-| `CHECKPOINT_RUNTIME` | automático | `docker` o `native`: fuerza el modo (la imagen lo fija a `docker`) |
+| `CHECKPOINT_RUNTIME` | automático | `docker` o `native`: fuerza el modo (la imagen lo fija a `docker`; la unidad de systemd de `install.sh` lo fija a `native`, porque en contenedores `/.dockerenv` haría creer al hub que corre en Docker) |
 | `CHECKPOINT_LANG` | `es` | Idioma por defecto de la interfaz: `es` o `en` (también `en-US`, `EN`…). Opcional; sin marcar es español. Un valor no soportado se ignora (español) y se avisa en el log de arranque. Ver [Idioma](#idioma) |
 | `CHECKPOINT_LOG_LEVEL` | `info` | Nivel de log de la app: `info` o `debug` (también `warning`, `error`). Con `debug` salen las trazas detalladas por petición. Un valor no válido se ignora (`info`) y se avisa en el log de arranque. Se aplica al reiniciar |
 | `TZ` | `UTC` | Zona horaria de los registros y la sincronización automática (p. ej. `Europe/London`); solo Docker, se añade a `environment:` |
 
 Si la contraseña lleva `$`, ponla entre comillas simples.
+
+## Instalación nativa en Linux (`install.sh`)
+
+La unidad `~/.config/systemd/user/checkpoint.service` que crea `install.sh` fija `Environment=CHECKPOINT_RUNTIME=native` y lee las credenciales de `~/.config/checkpoint/checkpoint.env` (0600). Variables de `install.sh` (para instalaciones a medida o pruebas; `SYSTEMCTL`, `LOGINCTL` y `PYTHON` son solo para pruebas):
+
+| Variable | Por defecto | Descripción |
+|---|---|---|
+| `CHECKPOINT_INSTALL_PREFIX` | `~/.local/share/checkpoint-app` | Carpeta del código (una subcarpeta por versión y el enlace `current`) |
+| `CHECKPOINT_MIN_PYTHON` | `3.12` | Versión mínima de Python que acepta el instalador |
+| `CHECKPOINT_INSTALL_WAIT` | `20` | Segundos esperando a que el hub responda tras arrancar; `0` no espera |
+| `SYSTEMCTL` | `systemctl` | Orden que se usa en lugar de `systemctl` (pruebas) |
+| `LOGINCTL` | `loginctl` | Orden que se usa en lugar de `loginctl` (pruebas) |
+| `PYTHON` | el del sistema | Intérprete con el que se crea el venv (pruebas) |
+
+`CHECKPOINT_USER` y `CHECKPOINT_PASSWORD` también valen como alternativa a `--user`/`--password-file`. Se respetan `HOME`, `XDG_DATA_HOME` y `XDG_CONFIG_HOME`.
 
 ## Carpetas y `config.yaml`
 

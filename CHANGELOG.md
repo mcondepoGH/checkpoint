@@ -2,6 +2,10 @@
 
 ## Sin publicar
 
+### Novedades
+
+- Actualización con un clic en la instalación nativa de Linux: con una versión nueva y el tarball `checkpoint-<versión>-linux.tar.gz` (con su `.sha256`) en la Release, «Actualizar ahora» descarga el paquete, comprueba su SHA-256, lo extrae con seguridad (sin rutas absolutas ni `..`, sin enlaces ni ficheros especiales, con tope de tamaño) en `<datos>/update/<versión>/` y lanza `install.sh --upgrade` desacoplado del hub (`systemd-run --user` si existe, o una sesión nueva), que conserva datos y credenciales, cambia el enlace `current` y reinicia la unidad (`systemctl --user restart checkpoint`; vuelve a la versión anterior si el reinicio falla). Solo con una instalación hecha por `install.sh` (carpeta con `.instalado`, enlace `current` y `systemctl`); Docker, repositorio clonado y macOS siguen con la actualización manual. El registro de `install.sh` queda en `<datos>/update/upgrade-<versión>.log`. La espera del reinicio en la interfaz depende de la plataforma: 120 s en Windows y 300 s en Linux (se instalan las dependencias antes de reiniciar); el backend la publica como `espera_reinicio` (s) en `GET /api/updates` y, si falta, la interfaz usa 120 s. Textos de `err.main.updates.install_not_supported` y `updates.install.timeout` ajustados a las dos plataformas.
+
 ### Cambios
 
 - Desarrollo: agentes de proyecto `Explore` (Haiku, solo lectura) e `implementer` (Sonnet) en `.claude/agents/` y sección «Modelos por tarea» en `CLAUDE.md`. No afectan al producto: `.claude` queda fuera del contexto de Docker.
@@ -9,6 +13,10 @@
 ### Correcciones
 
 - Tests del cierre automático deterministas: el vigilante usa un reloj y un `sleep` falsos que solo avanzan cuando el test lo pide, así que «proceso no visto» ya no salta por una máquina cargada (`test_second_opened_replaces_watch_single_checkpoint`, `test_checkpoint_error_is_logged_without_message`), y `test_closed_run_game_exception_marks_run_done_and_watcher_survives` espera ya al run del cierre y no solo al de `opened`. Sin cambios en el código de producción.
+- Paquete de Linux (tarball `checkpoint-<versión>-linux.tar.gz` con su `.sha256`) construido en CI y comprobado con un smoke test; aún sin publicar en la Release.
+- Documentación de la instalación y actualización nativas en Linux: instalación por tarball en el README (verificación, opciones de `install.sh`, rutas, actualización con un clic y con `--upgrade`, `enable-linger`, vuelta atrás manual, `--uninstall` y `--purge`), el ejemplo manual de systemd usa `~/.config/checkpoint/checkpoint.env`, Linux con tarball figura «por probar», y nuevas secciones en `docs/` (job `linux` de `release.yml`, `packaging/linux/`, variables de `install.sh`) y la guía `docs/testing-linux.md` para probarlo con systemd real.
+- Paquete de Linux (tarball `checkpoint-<versión>-linux.tar.gz` con su `.sha256`) construido en CI y comprobado con un smoke test. Cada Release incluirá el tarball de Linux y su `.sha256` (job `linux` de `release.yml`: comprueba VERSION contra el tag, construye con el plugin de Deck, pasa el smoke test y sube con `--clobber`; si falla no bloquea el resto de la Release y se puede reintentar).
+- `install.sh` del paquete de Linux: instala y arranca Checkpoint como servicio de usuario de systemd, sin root. Código por versión en `~/.local/share/checkpoint-app/<versión>/` (enlace `current`, con venv propio con el Python del sistema, 3.12 o superior; si falta avisa y no instala nada), entorno en `~/.config/checkpoint/checkpoint.env` (0600) y unidad `checkpoint.service` con `CHECKPOINT_RUNTIME=native`. Credenciales: pregunta usuario y contraseña (8 caracteres como mínimo y 72 bytes como máximo; Intro vacío genera una segura y la muestra una vez), `--user` con `--password-file`, `CHECKPOINT_USER` y `CHECKPOINT_PASSWORD`, o `--no-login` (solo 127.0.0.1); la contraseña nunca va en la línea de comandos. Opciones `--host`, `--port`, `--no-start`, `--enable-linger` (si no, solo avisa) y `--dry-run`. `--upgrade` conserva el `.env`, cambia el enlace, reinicia el servicio y vuelve a la versión anterior si no arranca; `--uninstall` quita el código y la unidad sin tocar datos ni credenciales (`--purge` los borra tras pedir escribir BORRAR).
 
 ## 2.5.1 (2026-11-25)
 

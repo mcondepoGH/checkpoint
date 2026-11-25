@@ -613,7 +613,7 @@
       "downloading": "Descargando {version}…",
       "installing": "Instalando…",
       "restarting": "Reiniciando… Esta página se recargará sola.",
-      "timeout": "No se pudo completar la actualización. Cierra Checkpoint y ejecuta manualmente el instalador descargado.",
+      "timeout": "No se pudo completar la actualización. Cierra Checkpoint e instala manualmente la versión descargada.",
       "done": "Actualizado a la versión {version}.",
       "windowsNote": "Se actualiza desde aquí; tus datos y ajustes se conservan."
     },
@@ -735,7 +735,7 @@
         "field_required": "indica «enabled» o «channel»",
         "download_failed": "No se pudo descargar la actualización: {reason}",
         "install_failed": "No se pudo instalar la actualización: {reason}. Se mantiene la versión actual.",
-        "install_not_supported": "La actualización con un clic solo está disponible con el instalador de Windows.",
+        "install_not_supported": "La actualización con un clic solo está disponible con el instalador de Windows o con la instalación nativa de Linux.",
         "hash_mismatch": "La descarga no coincide con el hash publicado. No se ha instalado nada.",
         "sync_running": "Hay una sincronización en curso. Espera a que termine."
       },

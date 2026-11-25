@@ -49,13 +49,15 @@ export function updateSummary(info, t) {
   return t('updates.summary.noData', { current: info.actual });
 }
 
-// La actualización con un clic solo se ofrece cuando el backend dice `instalable` (instalador de Windows y Release con
-// instalador y hash publicado); si no, Linux, macOS y Windows sin instalador mantienen el texto manual.
+// La actualización con un clic solo se ofrece cuando el backend dice `instalable` (instalador de Windows o instalación
+// nativa de Linux, y Release con el asset de esa plataforma y su hash publicado); el backend decide, el cliente no mira
+// la plataforma. Si no (Docker, repo clonado, macOS, Windows sin instalador), se mantiene el texto manual.
 export function canInstall(info) {
   return !!(showBadge(info) && info.instalable === true);
 }
 
-// Hub de Windows con instalador (aunque ahora no haya versión nueva): cambia el texto de la tarjeta.
+// Hub con actualización con un clic (instalador de Windows o instalación nativa de Linux), aunque ahora no haya versión
+// nueva: cambia el texto de la tarjeta.
 export function isInstaller(info) {
   return !!(info && info.instalador === true);
 }
@@ -63,9 +65,15 @@ export function isInstaller(info) {
 // Fases de la actualización: idle -> confirm -> checking -> downloading -> installing -> restarting -> done | error.
 export const INSTALL_BUSY = ['checking', 'downloading', 'installing', 'restarting'];
 
-// Tiempo máximo esperando a que el hub vuelva con la versión nueva (si el instalador falla sin cerrar el hub, no vuelve nunca).
+// Tiempo máximo esperando a que el hub vuelva con la versión nueva (si el instalador falla sin cerrar el hub, no vuelve
+// nunca). Por defecto 120 s (Windows); el backend publica `espera_reinicio` (s) en GET /api/updates y en Linux son 300 s
+// porque install.sh crea el venv e instala las dependencias (pip) antes de reiniciar la unidad.
 export const RESTART_TIMEOUT_MS = 120000;
-export const restartTimedOut = (startedMs, nowMs) => nowMs - startedMs >= RESTART_TIMEOUT_MS;
+export const restartWaitMs = (info) => {
+  const s = info && info.espera_reinicio;
+  return typeof s === 'number' && Number.isFinite(s) && s > 0 ? s * 1000 : RESTART_TIMEOUT_MS;
+};
+export const restartTimedOut = (startedMs, nowMs, waitMs = RESTART_TIMEOUT_MS) => nowMs - startedMs >= waitMs;
 
 // Fase siguiente según el estado que informa `GET /api/updates/install` ({state, error}).
 export function phaseFromStatus(prev, status) {

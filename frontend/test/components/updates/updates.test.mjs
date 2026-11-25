@@ -14,6 +14,7 @@ import {
   CHANNEL_OPTIONS,
   RESTART_TIMEOUT_MS,
   restartTimedOut,
+  restartWaitMs,
 } from '#src/lib/updates.js';
 
 import { createI18n } from '#src/lib/i18n.js';
@@ -183,7 +184,7 @@ test('aplicable false: UpdateBadge y UpdateCheck no pintan nada', { skip }, () =
   assert.match(r(mod.UpdateCheck, { info: { ...NEW, aplicable: true }, onInfo() {} }), /Comprobar actualizaciones/);
 });
 
-// ---- actualización con un clic (solo instalador de Windows) ----
+// ---- actualización con un clic (instalador de Windows o instalación nativa de Linux) ----
 import { canInstall, isInstaller, phaseFromStatus, reachedVersion, INSTALL_BUSY } from '#src/lib/updates.js';
 
 const WIN = { ...NEW, instalador: true, instalable: true };
@@ -196,6 +197,35 @@ test('canInstall: solo con versión nueva e `instalable` del backend', () => {
   assert.equal(canInstall(null), false);
   assert.equal(isInstaller(WIN), true);
   assert.equal(isInstaller({ ...NEW, instalador: false }), false);
+});
+
+test('canInstall: lo decide el backend, sin mirar la plataforma (Linux nativo igual que Windows)', () => {
+  const linux = { ...NEW, plataforma: 'linux', instalador: true, instalable: true };
+  assert.equal(canInstall(linux), true);
+  assert.equal(canInstall({ ...linux, instalable: false }), false); // Docker o repo clonado: texto manual
+  assert.equal(canInstall({ ...linux, instalable: 'true' }), false); // solo `true` estricto
+  assert.equal(canInstall({ ...linux, instalador: false }), true); // `instalable` manda, no `instalador`
+});
+
+test('textos de la actualización con un clic: Windows o instalación nativa de Linux, en es y en', () => {
+  const get = (o, k) => k.split('.').reduce((a, p) => a?.[p], o);
+  assert.equal(
+    get(es, 'err.main.updates.install_not_supported'),
+    'La actualización con un clic solo está disponible con el instalador de Windows o con la instalación nativa de Linux.',
+  );
+  assert.equal(
+    get(en, 'err.main.updates.install_not_supported'),
+    'One-click update is only available with the Windows installer or the native Linux install.',
+  );
+  assert.equal(
+    get(es, 'updates.install.timeout'),
+    'No se pudo completar la actualización. Cierra Checkpoint e instala manualmente la versión descargada.',
+  );
+  assert.equal(
+    get(en, 'updates.install.timeout'),
+    'The update could not be completed. Close Checkpoint and install the downloaded version manually.',
+  );
+  assert.ok(get(es, 'updates.dialog.manual') && get(en, 'updates.dialog.manual')); // el texto manual se conserva
 });
 
 test('phaseFromStatus: sigue el estado del servidor y un idle no retrocede', () => {
@@ -242,20 +272,33 @@ test('textos aprobados de la actualización en inglés', () => {
   assert.match(en.err.main.updates.hash_mismatch, /Nothing was installed/);
 });
 
-test('restartTimedOut: la espera del reinicio acaba a los 120 s', () => {
+test('restartTimedOut: por defecto la espera del reinicio acaba a los 120 s', () => {
   assert.equal(RESTART_TIMEOUT_MS, 120000);
   assert.equal(restartTimedOut(1000, 1000 + RESTART_TIMEOUT_MS - 1), false);
   assert.equal(restartTimedOut(1000, 1000 + RESTART_TIMEOUT_MS), true);
 });
 
+test('restartTimedOut y restartWaitMs respetan `espera_reinicio` del backend (300 s en Linux)', () => {
+  assert.equal(restartWaitMs({ espera_reinicio: 300 }), 300000);
+  assert.equal(restartWaitMs({ espera_reinicio: 120 }), 120000);
+  assert.equal(restartWaitMs({}), 120000); // backend antiguo: sin campo
+  assert.equal(restartWaitMs(null), 120000);
+  for (const bad of [0, -5, '300', NaN, null]) assert.equal(restartWaitMs({ espera_reinicio: bad }), 120000);
+  const ms = restartWaitMs({ espera_reinicio: 300 });
+  assert.equal(restartTimedOut(0, 200000, ms), false);
+  assert.equal(restartTimedOut(0, 299999, ms), false);
+  assert.equal(restartTimedOut(0, 300000, ms), true);
+  assert.equal(restartTimedOut(0, 120000), true);
+});
+
 test('updates.install.timeout: texto aprobado en es y en', () => {
   assert.equal(
     es.updates.install.timeout,
-    'No se pudo completar la actualización. Cierra Checkpoint y ejecuta manualmente el instalador descargado.',
+    'No se pudo completar la actualización. Cierra Checkpoint e instala manualmente la versión descargada.',
   );
   assert.equal(
     en.updates.install.timeout,
-    'The update could not be completed. Close Checkpoint and run the downloaded installer manually.',
+    'The update could not be completed. Close Checkpoint and install the downloaded version manually.',
   );
 });
 

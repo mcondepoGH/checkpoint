@@ -61,9 +61,60 @@ Abre `http://IP-DEL-SERVIDOR:8088`. Si la contraseña lleva `$`, ponla entre com
 
 ## Instalación sin Docker
 
-Modo «nativo»: es la única forma de usar el dispositivo **Este equipo**.
+Modo «nativo»: es la única forma de usar el dispositivo **Este equipo**. En Linux hay dos caminos: el paquete (tarball) de la Release, recomendado, o instalar desde el repositorio con Node.
 
-Requisitos: Python 3.12, Node.js (solo para compilar la web) y, para dispositivos remotos, `rsync` y el cliente OpenSSH (`ssh`, `ssh-keygen`, `ssh-keyscan`) en el `PATH`.
+### Linux: instalación por tarball (recomendada)
+
+Cada Release adjunta `checkpoint-<versión>-linux.tar.gz` y su `checkpoint-<versión>-linux.tar.gz.sha256`: la web ya compilada y el plugin de Steam Deck incluidos, sin Node. `install.sh` lo instala **por usuario, sin root**, como servicio de usuario de systemd.
+
+Requisitos: Python 3.12 o superior con `python3-venv` (en Debian/Ubuntu: `sudo apt install python3-venv`), systemd con sesión de usuario y, para dispositivos remotos, `rsync` y el cliente OpenSSH (`ssh`).
+
+```bash
+# Descarga el .tar.gz y el .sha256 de la Release en la misma carpeta y verifica
+sha256sum -c checkpoint-<versión>-linux.tar.gz.sha256
+tar xzf checkpoint-<versión>-linux.tar.gz && cd checkpoint-<versión>
+./install.sh                    # pregunta usuario y contraseña (Intro vacío: genera una y la muestra una vez)
+```
+
+Abre `http://127.0.0.1:8088`. Opciones de `install.sh` (`./install.sh --help`):
+
+| Opción | Efecto |
+|---|---|
+| `--no-login` | Sin usuario ni contraseña: el hub solo acepta `127.0.0.1` |
+| `--user USUARIO --password-file FICHERO` | Sin terminal: la contraseña es la primera línea del fichero (nunca va en la línea de comandos) |
+| `--host HOST` / `--port PUERTO` | Dirección y puerto de escucha (por defecto `127.0.0.1:8088`; otro host exige credenciales) |
+| `--no-start` | Instala los ficheros y la unidad, pero no la habilita ni la arranca |
+| `--dry-run` | Muestra lo que haría sin cambiar nada |
+| `--enable-linger` | Ejecuta `loginctl enable-linger` para que arranque sin iniciar sesión |
+
+Dónde queda cada cosa:
+
+| Qué | Dónde |
+|---|---|
+| Código (una carpeta por versión, con su venv) | `~/.local/share/checkpoint-app/<versión>/`; el enlace `~/.local/share/checkpoint-app/current` apunta a la activa |
+| Datos (`config/`, `data/`, `keys/`) | `~/.local/share/checkpoint` |
+| Entorno (usuario, contraseña, host, puerto), 0600 | `~/.config/checkpoint/checkpoint.env` |
+| Unidad de systemd de usuario | `~/.config/systemd/user/checkpoint.service` |
+
+Se respetan `XDG_DATA_HOME` y `XDG_CONFIG_HOME`. Estado y logs: `systemctl --user status checkpoint` y `journalctl --user -u checkpoint`. Por defecto systemd detiene los servicios de usuario al cerrar la última sesión; para que Checkpoint arranque con el equipo y siga sin sesión abierta usa `./install.sh --enable-linger` o `loginctl enable-linger "$USER"`.
+
+**Actualizar.** Con una versión nueva y su tarball en la Release, el botón «Actualizar ahora» del hub (un clic) descarga el paquete, comprueba su SHA-256 y ejecuta `install.sh --upgrade` desacoplado del hub, que reinicia la unidad. A mano: descarga y verifica el tarball nuevo, extráelo y ejecuta `./install.sh --upgrade` (conserva datos y credenciales; no pregunta nada). Se conservan la versión activa y la anterior; el registro de la actualización con un clic queda en `~/.local/share/checkpoint/update/upgrade-<versión>.log`. Si el reinicio falla, `install.sh` vuelve solo a la versión anterior.
+
+**Volver atrás a mano.** Repunta `current` a la versión anterior y reinicia:
+
+```bash
+cd ~/.local/share/checkpoint-app && ls                       # versiones conservadas
+ln -sfn <versión-anterior> current.tmp && mv -T current.tmp current
+systemctl --user restart checkpoint
+```
+
+**Desinstalar.** `./install.sh --uninstall` (desde cualquier tarball) para el servicio y quita unidad y código, pero **conserva datos y credenciales**. `./install.sh --uninstall --purge` borra además `~/.local/share/checkpoint` y `~/.config/checkpoint` (config, claves SSH, datos y credenciales) y exige un terminal y escribir `BORRAR`.
+
+Guía para probarlo paso a paso: [`docs/testing-linux.md`](docs/testing-linux.md). Variables de `install.sh`: [`docs/configuration.md`](docs/configuration.md#instalación-nativa-en-linux-installsh).
+
+### Instalación manual desde el repositorio (con Node)
+
+Alternativa para desarrollar o si no hay tarball: requisitos Python 3.12, Node.js (solo para compilar la web) y, para dispositivos remotos, `rsync` y el cliente OpenSSH (`ssh`, `ssh-keygen`, `ssh-keyscan`) en el `PATH`.
 
 ```bash
 git clone https://github.com/mcondepoGH/checkpoint.git && cd checkpoint
@@ -87,9 +138,9 @@ cd backend && python -m app.cli serve               # http://127.0.0.1:8088
 Docker o nativo se decide por `CHECKPOINT_RUNTIME` (la imagen lo fija a `docker`) o, si no está, por la existencia de `/.dockerenv` o `/run/.containerenv`.
 
 <details>
-<summary>Arranque al iniciar sesión en Linux (unidad de usuario de systemd)</summary>
+<summary>Arranque al iniciar sesión en Linux con la instalación manual (unidad de usuario de systemd)</summary>
 
-`~/.config/systemd/user/checkpoint.service` (ajusta las rutas):
+Solo para esta vía manual (con el tarball, `install.sh` ya crea la unidad y el entorno en `~/.config/checkpoint/checkpoint.env`). `~/.config/systemd/user/checkpoint.service` (ajusta las rutas):
 
 ```ini
 [Unit]
@@ -97,7 +148,7 @@ Description=Checkpoint
 
 [Service]
 WorkingDirectory=/home/usuario/Checkpoint/backend
-EnvironmentFile=/home/usuario/.config/checkpoint.env     # CHECKPOINT_USER=... y CHECKPOINT_PASSWORD=...
+EnvironmentFile=/home/usuario/.config/checkpoint/checkpoint.env   # CHECKPOINT_USER=... y CHECKPOINT_PASSWORD=...
 ExecStart=/home/usuario/Checkpoint/.venv/bin/python -m app.cli serve
 Restart=on-failure
 
@@ -106,7 +157,7 @@ WantedBy=default.target
 ```
 
 ```bash
-chmod 600 ~/.config/checkpoint.env && systemctl --user enable --now checkpoint
+mkdir -p ~/.config/checkpoint && chmod 600 ~/.config/checkpoint/checkpoint.env && systemctl --user enable --now checkpoint
 ```
 
 </details>
@@ -119,7 +170,8 @@ En Docker la casilla no aparece y un `config.yaml` con `local: true` se rechaza 
 
 ### Plataformas probadas
 
-- **Linux**: probado (suite automática, incluido el motor con «Este equipo» sobre el sistema de ficheros real, y un arranque real con `serve`).
+- **Linux (desde el repositorio)**: probado (suite automática, incluido el motor con «Este equipo» sobre el sistema de ficheros real, y un arranque real con `serve`).
+- **Linux (tarball + systemd de usuario)**: por probar. En CI se construye el tarball y un smoke test instala con `install.sh` (sin systemd) y arranca el hub, pero la instalación con systemd real, `enable-linger` y la actualización con un clic aún no se han probado a mano ([guía de prueba](docs/testing-linux.md)).
 - **Windows nativo**: el motor de sincronización (bloqueos, transporte «Este equipo», detección de procesos, huellas y conflictos) está verificado en CI en un runner de Windows (`windows-latest`, Python 3.12). El instalador `.exe` se construye y pasa un smoke test (instalación silenciosa y consulta al puerto 8088) en CI; la instalación con el asistente, el icono de bandeja, el icono propio y la actualización con un clic están probados a mano en un Windows real; la Tarea Programada de «Arrancar al iniciar sesión» sigue sin verificar a mano. En Windows como anfitrión no hay `rsync` de serie, así que los dispositivos remotos no están soportados; «Este equipo» sí está pensado para funcionar.
 - **macOS**: experimental, no verificado; el código lo contempla pero solo se probó con simulaciones.
 - El acceso SSH a dispositivos remotos no se prueba contra un servidor SSH real (las pruebas lo simulan).

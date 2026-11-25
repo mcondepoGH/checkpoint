@@ -613,7 +613,7 @@
       "downloading": "Downloading {version}…",
       "installing": "Installing…",
       "restarting": "Restarting… This page will reload by itself.",
-      "timeout": "The update could not be completed. Close Checkpoint and run the downloaded installer manually.",
+      "timeout": "The update could not be completed. Close Checkpoint and install the downloaded version manually.",
       "done": "Updated to version {version}.",
       "windowsNote": "It updates from here; your data and settings are kept."
     },
@@ -735,7 +735,7 @@
         "field_required": "provide “enabled” or “channel”",
         "download_failed": "Could not download the update: {reason}",
         "install_failed": "Could not install the update: {reason}. The current version is kept.",
-        "install_not_supported": "One-click update is only available with the Windows installer.",
+        "install_not_supported": "One-click update is only available with the Windows installer or the native Linux install.",
         "hash_mismatch": "The download does not match the published hash. Nothing was installed.",
         "sync_running": "A sync is running. Wait for it to finish."
       },

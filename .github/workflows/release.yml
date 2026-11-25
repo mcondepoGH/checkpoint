@@ -213,3 +213,65 @@ jobs:
           $name = "Checkpoint-Setup-$version.exe"
           gh release view $env:TAG --json tagName | Out-Null
           gh release upload $env:TAG "packaging/windows/Output/$name" "packaging/windows/Output/$name.sha256" --clobber
+
+  # Paquete nativo de Linux (packaging/linux), adjunto a la Release que acaba de crear `release`: el tarball
+  # checkpoint-<versión>-linux.tar.gz y su hash (<nombre>.sha256) para la actualización con un clic. Verifica que VERSION
+  # coincide con el tag, construye (con el plugin de Deck), pasa el smoke test (install.sh --no-login --no-start y arranque
+  # del hub) y solo entonces sube. Las pre-releases (-rc) también lo llevan. Ningún job depende de este: si falla, la
+  # Release sigue publicada y se puede reintentar (`gh release upload --clobber`). Como el .exe, los assets llegan DESPUÉS
+  # de publicarse la Release: en esa ventana un hub que consulte la Release no ve instalador.
+  linux:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write   # subir los assets a la Release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      - name: Comprobar que VERSION coincide con el tag
+        id: v
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          file="$(tr -d '[:space:]' < VERSION)"
+          if [ "$file" != "$version" ]; then
+            echo "::error::VERSION ($file) no coincide con el tag $TAG (esperado $version). Actualiza VERSION, haz commit y vuelve a crear el tag."
+            exit 1
+          fi
+          if ! grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$' <<<"$version"; then
+            echo "::error::El tag $TAG no tiene formato vX.Y.Z[-sufijo]."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Construir el tarball (con el plugin de Deck)
+        env:
+          TAG: ${{ github.ref_name }}
+        run: bash packaging/linux/build.sh --tag "$TAG"
+
+      - name: Smoke test (instalar con install.sh y arrancar el hub)
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: bash packaging/linux/smoke.sh "dist/checkpoint-$VERSION-linux.tar.gz"
+
+      - name: Subir el tarball y su hash a la Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --json tagName > /dev/null
+          gh release upload "$TAG" "dist/checkpoint-$VERSION-linux.tar.gz" "dist/checkpoint-$VERSION-linux.tar.gz.sha256" --clobber

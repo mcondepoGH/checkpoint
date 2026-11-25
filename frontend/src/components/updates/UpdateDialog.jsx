@@ -6,11 +6,11 @@ import useUpdateInstall from '#src/hooks/useUpdateInstall.js';
 import { Alert, Button } from '#src/components/ui/index.js';
 
 // Detalle de la versión nueva. Las notas se pintan como texto (React escapa todo): nunca como HTML.
-// Con el instalador de Windows (`instalable`) ofrece «Actualizar ahora»: confirmación y progreso en el propio diálogo.
+// Con la actualización con un clic (`instalable`: instalador de Windows o instalación nativa de Linux) ofrece «Actualizar ahora»: confirmación y progreso en el propio diálogo.
 export default function UpdateDialog({ info, onClose }) {
   const { t } = useI18n();
   const install = canInstall(info);
-  const { phase, error, ask, cancel, start } = useUpdateInstall(info.ultima);
+  const { phase, error, ask, cancel, start } = useUpdateInstall(info.ultima, info);
   const busy = INSTALL_BUSY.includes(phase) || phase === 'done';
   const url = safeUrl(info.url);
   const pre = isPrerelease(info);

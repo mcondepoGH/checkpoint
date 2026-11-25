@@ -20,6 +20,9 @@ router = internal_router()
 def _with_install(ctx: AppContext, state: dict) -> dict:
     """`instalador`: es el hub de Windows instalado; `instalable`: la actualización con un clic está disponible (instalador de Windows + Release con instalador y hash)."""
     state["instalador"] = selfupdate.supported()  # este hub se actualiza con el instalador de Windows
+    state["espera_reinicio"] = (
+        selfupdate.ui_restart_wait()
+    )  # s que la interfaz espera al reinicio (120 Windows, 300 Linux)
     state["instalable"] = bool(
         state.get("hay_actualizacion") and selfupdate.supported() and ctx.checker.latest_installer()
     )
