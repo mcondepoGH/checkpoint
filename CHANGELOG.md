@@ -2,6 +2,10 @@
 
 ## Sin publicar
 
+### Cambios
+
+- Desarrollo: agentes de proyecto `Explore` (Haiku, solo lectura) e `implementer` (Sonnet) en `.claude/agents/` y sección «Modelos por tarea» en `CLAUDE.md`. No afectan al producto: `.claude` queda fuera del contexto de Docker.
+
 ## 2.5.1 (2026-11-25)
 
 ### Correcciones
