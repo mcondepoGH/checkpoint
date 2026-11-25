@@ -2,6 +2,10 @@
 
 ## Sin publicar
 
+### Correcciones
+
+- Ajustes > General: tras un fallo al comprobar actualizaciones, la tarjeta «Comprobar actualizaciones» ya no dice «Estás al día»: muestra «No se pudo comprobar si hay actualizaciones.» (si hay una actualización conocida, sigue ofreciéndola). El detalle del fallo no se muestra en la interfaz.
+
 ## 2.5.0 (2026-11-25)
 
 Consolida las seis versiones preliminares 2.5.0-rc.1 a rc.6.

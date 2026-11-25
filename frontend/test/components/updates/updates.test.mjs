@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { es } from '../../helpers/locales.mjs';
+import { es, en } from '../../helpers/locales.mjs';
 import {
   updatesApplicable,
   showBadge,
@@ -19,6 +19,7 @@ import {
 import { createI18n } from '#src/lib/i18n.js';
 import { bundle } from '../../helpers/bundle.mjs';
 const t = createI18n({ catalogs: { es }, storage: null, languages: ['es'] }).t;
+const tEn = createI18n({ catalogs: { en }, storage: null, languages: ['en'] }).t;
 
 const NEW = {
   actual: '0.4.2',
@@ -184,7 +185,6 @@ test('aplicable false: UpdateBadge y UpdateCheck no pintan nada', { skip }, () =
 
 // ---- actualización con un clic (solo instalador de Windows) ----
 import { canInstall, isInstaller, phaseFromStatus, reachedVersion, INSTALL_BUSY } from '#src/lib/updates.js';
-import { en } from '../../helpers/locales.mjs';
 
 const WIN = { ...NEW, instalador: true, instalable: true };
 
@@ -257,4 +257,21 @@ test('updates.install.timeout: texto aprobado en es y en', () => {
     en.updates.install.timeout,
     'The update could not be completed. Close Checkpoint and run the downloaded installer manually.',
   );
+});
+
+test('updateSummary: un fallo de la última comprobación no dice «al día»', () => {
+  const FAIL = { ...NEW, hay_actualizacion: false, error: 'no se pudo comprobar', error_detalle: 'timeout' };
+  assert.equal(updateSummary(FAIL, t), 'No se pudo comprobar si hay actualizaciones.');
+  assert.equal(updateSummary(FAIL, tEn), 'Could not check for updates.');
+  assert.ok(!/timeout/.test(updateSummary(FAIL, t)));
+  // sin datos previos de la última versión también es un fallo, no «sin datos»
+  assert.equal(updateSummary({ actual: '0.4.2', error: 'no se pudo comprobar' }, t), 'No se pudo comprobar si hay actualizaciones.');
+  // con una actualización conocida se sigue ofreciendo
+  assert.match(updateSummary({ ...NEW, error: 'no se pudo comprobar' }, t), /0\.5\.0/);
+  // sin fallo, igual que antes
+  assert.match(updateSummary({ ...NEW, hay_actualizacion: false, error: null }, t), /al día/i);
+  // el ajuste desactivado manda sobre el fallo
+  assert.match(updateSummary({ ...NEW, habilitado: false, error: 'x' }, t), /desactivada/i);
+  assert.equal(es.updates.summary.failed, 'No se pudo comprobar si hay actualizaciones.');
+  assert.equal(en.updates.summary.failed, 'Could not check for updates.');
 });

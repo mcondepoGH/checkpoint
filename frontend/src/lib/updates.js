@@ -44,6 +44,7 @@ export function updateSummary(info, t) {
   if (info.habilitado === false) return t('updates.summary.disabled');
   if (info.hay_actualizacion)
     return t(isPrerelease(info) ? 'updates.summary.newerPre' : 'updates.summary.newer', { latest: info.ultima, current: info.actual });
+  if (info.error) return t('updates.summary.failed'); // fallo de la última comprobación: no es «al día» (el detalle queda en API/log)
   if (info.ultima) return t('updates.summary.upToDate', { current: info.actual });
   return t('updates.summary.noData', { current: info.actual });
 }

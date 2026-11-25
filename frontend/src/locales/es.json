@@ -635,7 +635,8 @@
       "newer": "Hay una versión nueva: {latest} (instalada: {current}).",
       "newerPre": "Hay una versión nueva preliminar: {latest} (instalada: {current}).",
       "upToDate": "Estás al día (versión {current}).",
-      "noData": "Versión instalada: {current}. Aún no hay datos de la última versión."
+      "noData": "Versión instalada: {current}. Aún no hay datos de la última versión.",
+      "failed": "No se pudo comprobar si hay actualizaciones."
     }
   },
   "keyhelp": {
