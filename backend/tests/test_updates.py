@@ -115,6 +115,77 @@ def test_failure_not_retried_immediately(tmp_path, env):
     assert len(calls) == 2
 
 
+def test_error_detalle_ssl(env, caplog):
+    import ssl
+    import urllib.error
+
+    make, t, calls = env
+    exc = urllib.error.URLError(ssl.SSLCertVerificationError("CERTIFICATE_VERIFY_FAILED: unable to get local issuer"))
+    with caplog.at_level("WARNING", logger="checkpoint.updates"):
+        s = make(exc=exc).state()
+    assert s["error"] == "no se pudo comprobar"
+    assert s["error_detalle"].startswith("URLError: ")
+    assert "CERTIFICATE_VERIFY_FAILED" in s["error_detalle"]
+    recs = [r for r in caplog.records if r.name == "checkpoint.updates"]
+    assert len(recs) == 1 and recs[0].levelname == "WARNING"
+    assert "CERTIFICATE_VERIFY_FAILED" in recs[0].getMessage()
+
+
+def test_error_detalle_rate_limited(env):
+    import email.message
+    import urllib.error
+
+    make, t, calls = env
+    h = email.message.Message()
+    h["X-RateLimit-Remaining"] = "0"
+    exc = urllib.error.HTTPError("https://api.github.com/x", 403, "rate limit exceeded", h, None)
+    c = make(exc=exc)
+    s = c.state()
+    assert s["error_detalle"] == "HTTP 403 (rate limit)"
+    assert c._cache["rate_limited"] is True
+    # 403 sin cabecera de límite: no es rate limit
+    t[0] += updates.RETRY_AFTER + 1
+    c2 = make(exc=urllib.error.HTTPError("https://x", 403, "Forbidden", email.message.Message(), None))
+    s2 = c2.state()
+    assert s2["error_detalle"].startswith("HTTP 403") and "rate limit" not in s2["error_detalle"]
+    assert c2._cache["rate_limited"] is False
+
+
+def test_error_detalle_truncated(env):
+    make, t, calls = env
+    s = make(exc=OSError("x" * 1000)).state()
+    assert len(s["error_detalle"]) <= 300
+
+
+def test_error_detalle_cleared_on_success(env):
+    make, t, calls = env
+    c = make(exc=OSError("sin red"))
+    assert c.state()["error_detalle"] == "OSError: sin red"
+    t[0] += updates.RETRY_AFTER + 1
+    c._fetch = lambda repo: [rel("v0.5.0")]
+    s = c.state()
+    assert s["error"] is None and s["error_detalle"] is None
+    assert "error_detalle" not in c._cache
+
+
+def test_error_detalle_old_cache_without_field(env):
+    make, t, calls = env
+    c = make([rel("v0.5.0")])
+    c.state()
+    cache = json.loads((settings.DATA_DIR / updates.CACHE_FILE).read_text(encoding="utf-8"))
+    cache["ok"] = False
+    cache.pop("error_detalle", None)
+    (settings.DATA_DIR / updates.CACHE_FILE).write_text(json.dumps(cache), encoding="utf-8")
+    s = make([rel("v0.5.0")]).state()
+    assert s["error"] == "no se pudo comprobar" and s["error_detalle"] is None
+
+
+def test_error_detalle_not_applicable(env, monkeypatch):
+    make, t, calls = env
+    monkeypatch.setattr(updates, "applicable", lambda: False)
+    assert make([]).state()["error_detalle"] is None
+
+
 def test_disabled_makes_no_request(env):
     make, _, calls = env
     c = make([rel("v0.5.0")])

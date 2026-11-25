@@ -5,6 +5,7 @@
 ### Correcciones
 
 - «Comprobar ahora»: el límite de un minuto solo cuenta los refrescos manuales anteriores. Antes lo activaban también la comprobación automática o el cambio de canal, y un solo clic podía dar «Acabas de comprobarlo» sin comprobar nada; además, si la última comprobación había fallado, el refresco manual quedaba bloqueado. El aviso del límite ahora se muestra como información neutra, no en rojo.
+- Comprobación de actualizaciones: cuando falla, el motivo real (clase de excepción y mensaje, o código HTTP y si es el límite de GitHub) se guarda en la caché, se devuelve como `error_detalle` en `GET /api/updates` y se registra como aviso en `checkpoint.log`. Antes el fallo se tragaba y solo se veía «no se pudo comprobar».
 
 ## 2.5.0-rc.3 (2026-11-25)
 

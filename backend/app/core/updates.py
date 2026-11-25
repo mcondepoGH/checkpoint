@@ -8,6 +8,7 @@ Nunca descarga ni instala nada. Un fallo de red no es un error para el usuario: 
 conocido y se reintenta más tarde. Con la comprobación desactivada no se hace ninguna petición."""
 
 import json
+import logging
 import os
 import re
 import threading
@@ -20,12 +21,14 @@ from typing import Callable, Optional
 
 from . import runtime, settings
 
+log = logging.getLogger("checkpoint.updates")
 REPO = "mcondepoGH/checkpoint"
 CACHE_TTL = 6 * 3600  # s de validez de una comprobación correcta
 UNKNOWN = "desconocida"
 TIMEOUT = 5  # s por petición
 MIN_REFRESH = 60  # s mínimos entre comprobaciones forzadas
 RETRY_AFTER = 900  # s antes de reintentar tras un fallo
+DETAIL_MAX = 300  # caracteres de la causa de un fallo que se guardan y se exponen
 NOTES_MAX = 6000  # caracteres de notas que se devuelven
 MAX_BODY = 1_000_000  # bytes máximos de respuesta
 SETTINGS_FILE = "updates.json"
@@ -173,6 +176,15 @@ def pick_latest(releases, channel: str = DEFAULT_CHANNEL) -> Optional[dict]:
     }
 
 
+def describe_error(e: BaseException):
+    """(causa corta, límite_de_GitHub) de un fallo al comprobar. Sin secretos: la petición no lleva token."""
+    if isinstance(e, urllib.error.HTTPError):
+        remaining = e.headers.get("X-RateLimit-Remaining") if e.headers is not None else None
+        limited = e.code in (403, 429) and str(remaining).strip() == "0"
+        return f"HTTP {e.code}" + (" (rate limit)" if limited else ""), limited
+    return f"{type(e).__name__}: {e}"[:DETAIL_MAX], False
+
+
 def applicable() -> bool:
     """Solo en instalación nativa: en Docker la versión la fija la imagen."""
     return not runtime.running_in_docker()
@@ -255,8 +267,14 @@ class UpdateChecker:
                 "ok": True,
                 "latest": latest,
             }
-        except Exception:  # red caída, límite de GitHub, JSON roto...: silencioso, se conserva lo anterior
+        except (
+            Exception
+        ) as e:  # red caída, límite de GitHub, JSON roto...: no es error para el usuario; se conserva lo anterior
+            detail, limited = describe_error(e)
+            log.warning("comprobación de actualizaciones fallida (%s, canal %s): %s", repo, channel, detail)
             self._cache = {
+                "error_detalle": detail,
+                "rate_limited": limited,
                 "repo": repo,
                 "channel": channel,
                 "attempt_at": now,
@@ -293,6 +311,7 @@ class UpdateChecker:
                 "url": None,
                 "comprobado_en": None,
                 "error": None,
+                "error_detalle": None,
                 "habilitado": False,
                 "repo": REPO,
                 "canal": DEFAULT_CHANNEL,
@@ -307,6 +326,7 @@ class UpdateChecker:
             "url": None,
             "comprobado_en": None,
             "error": None,
+            "error_detalle": None,
             "habilitado": self.enabled(),
             "repo": REPO,
             "canal": self.channel(),
@@ -339,6 +359,8 @@ class UpdateChecker:
         base["prerelease"] = bool(latest.get("prerelease"))
         base["comprobado_en"] = _iso(c.get("checked_at"))
         base["error"] = None if c.get("ok", True) else "no se pudo comprobar"
+        d = c.get("error_detalle")
+        base["error_detalle"] = d[:DETAIL_MAX] if not c.get("ok", True) and isinstance(d, str) else None
         a, u = parse_semver(actual), parse_semver(base["ultima"])
         base["hay_actualizacion"] = bool(a and u and u > a)
         return base
