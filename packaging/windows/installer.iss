@@ -1,4 +1,4 @@
-; Inno Setup 6: instalador del hub de Checkpoint para Windows (modo nativo, sin Docker).
+﻿; Inno Setup 6: instalador del hub de Checkpoint para Windows (modo nativo, sin Docker).
 ; Compilar (desde la raíz del repositorio, tras PyInstaller):
 ;   iscc /DAppVersion=2.5.0 packaging\windows\installer.iss
 ; Entrada: packaging\windows\dist\checkpoint\ (checkpoint.spec). Salida: packaging\windows\Output\Checkpoint-Setup-<versión>.exe
@@ -93,6 +93,9 @@ Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN Checkpoint /F"; Flags: 
 Filename: "{sys}\taskkill.exe"; Parameters: "/IM checkpoint.exe /F"; Flags: runhidden; RunOnceId: "KillHub"
 
 [Code]
+const
+  PwAlphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
 var
   AccessPage: TWizardPage;
   UserEdit: TNewEdit;
@@ -130,13 +133,11 @@ var
   rc: Integer;
   lines: TArrayOfString;
   i: Integer;
-const
-  alphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 begin
   Result := '';
   tmp := ExpandConstant('{tmp}\pw.txt');
-  cmd := '/C powershell.exe -NoProfile -Command "-join ((1..24) | ForEach-Object { ''' + alphabet +
-         '''[[System.Security.Cryptography.RandomNumberGenerator]::GetInt32(' + IntToStr(Length(alphabet)) + ')] })" > "' + tmp + '"';
+  cmd := '/C powershell.exe -NoProfile -Command "-join ((1..24) | ForEach-Object { ''' + PwAlphabet +
+         '''[[System.Security.Cryptography.RandomNumberGenerator]::GetInt32(' + IntToStr(Length(PwAlphabet)) + ')] })" > "' + tmp + '"';
   if Exec(ExpandConstant('{cmd}'), cmd, '', SW_HIDE, ewWaitUntilTerminated, rc) and (rc = 0) then
     if LoadStringsFromFile(tmp, lines) and (GetArrayLength(lines) > 0) then
       Result := Trim(lines[0]);
@@ -145,7 +146,7 @@ begin
   begin
     Result := '';
     for i := 1 to 24 do
-      Result := Result + alphabet[Random(Length(alphabet)) + 1];
+      Result := Result + Copy(PwAlphabet, Random(Length(PwAlphabet)) + 1, 1);
   end;
 end;
 
@@ -158,21 +159,24 @@ begin
   Pass2Edit.Text := pw;
   GenLabel.Caption := CustomMessage('Generated');
   { La contraseña se muestra en claro un momento para poder copiarla. }
-  PassEdit.PasswordChar := #0;
+  PassEdit.Password := False;
 end;
 
 procedure InitializeWizard;
 var
   y: Integer;
+  Lbl: TNewStaticText;
 begin
   AccessPage := CreateCustomPage(wpWelcome, CustomMessage('AccessTitle'), CustomMessage('AccessText'));
   y := 0;
-  with TNewStaticText.Create(AccessPage) do begin Parent := AccessPage.Surface; Caption := CustomMessage('User'); Top := y; Left := 0; end;
+  Lbl := TNewStaticText.Create(AccessPage);
+  Lbl.Parent := AccessPage.Surface; Lbl.Caption := CustomMessage('User'); Lbl.Top := y; Lbl.Left := 0;
   UserEdit := TNewEdit.Create(AccessPage);
   UserEdit.Parent := AccessPage.Surface;
   UserEdit.Top := y + ScaleY(16); UserEdit.Width := AccessPage.SurfaceWidth div 2; UserEdit.Text := 'checkpoint';
   y := y + ScaleY(48);
-  with TNewStaticText.Create(AccessPage) do begin Parent := AccessPage.Surface; Caption := CustomMessage('Password'); Top := y; Left := 0; end;
+  Lbl := TNewStaticText.Create(AccessPage);
+  Lbl.Parent := AccessPage.Surface; Lbl.Caption := CustomMessage('Password'); Lbl.Top := y; Lbl.Left := 0;
   PassEdit := TPasswordEdit.Create(AccessPage);
   PassEdit.Parent := AccessPage.Surface;
   PassEdit.Top := y + ScaleY(16); PassEdit.Width := AccessPage.SurfaceWidth div 2;
@@ -184,7 +188,8 @@ begin
   GenButton.Width := ScaleX(140); GenButton.Height := ScaleY(23);
   GenButton.OnClick := @GenerateClick;
   y := y + ScaleY(48);
-  with TNewStaticText.Create(AccessPage) do begin Parent := AccessPage.Surface; Caption := CustomMessage('Repeat'); Top := y; Left := 0; end;
+  Lbl := TNewStaticText.Create(AccessPage);
+  Lbl.Parent := AccessPage.Surface; Lbl.Caption := CustomMessage('Repeat'); Lbl.Top := y; Lbl.Left := 0;
   Pass2Edit := TPasswordEdit.Create(AccessPage);
   Pass2Edit.Parent := AccessPage.Surface;
   Pass2Edit.Top := y + ScaleY(16); Pass2Edit.Width := AccessPage.SurfaceWidth div 2;
