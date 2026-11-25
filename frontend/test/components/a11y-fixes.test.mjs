@@ -108,6 +108,20 @@ test('Modal: el fondo es presentation y recoge el teclado; el diálogo no lleva 
   assert.equal(closed, 2);
 });
 
+test('Modal: con DOM se monta en un portal a document.body (no dentro de la tarjeta que lo abre)', { skip }, () => {
+  const src = readSrc('components/ui/Modal.jsx');
+  assert.match(src, /createPortal\(\s*view\s*,\s*document\.body\s*\)/);
+  // renderToStaticMarkup no admite portales: si lo usa con document definido, lanza; sin document va en línea.
+  const prev = globalThis.document;
+  globalThis.document = { body: {} };
+  try {
+    assert.throws(() => render(m.React.createElement(m.Modal, { title: 'T', onClose() {} }, 'x')), /[Pp]ortal|error #200/);
+  } finally {
+    if (prev === undefined) delete globalThis.document;
+    else globalThis.document = prev;
+  }
+});
+
 test('Modal: Tab atrapa el foco desde el fondo (último -> primero, Mayús+Tab primero -> último)', { skip }, () => {
   const { seen } = render(m.React.createElement(m.Modal, { title: 'T', onClose() {} }, 'x'));
   const back = seen.find((s) => s.props.className === 'modal');

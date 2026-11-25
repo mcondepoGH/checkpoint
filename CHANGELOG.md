@@ -2,6 +2,10 @@
 
 ## Sin publicar
 
+### Correcciones
+
+- Diálogos (p. ej. «Nueva versión disponible» en Ajustes generales): se muestran como modal centrado sobre toda la página. Antes se pintaban dentro de la tarjeta que los abría y un ancestro con `transform` o desenfoque los recortaba (sin ver «Actualizar ahora» ni «Cerrar»); ahora se montan en `<body>` y los botones de acción quedan siempre visibles mientras el cuerpo hace scroll.
+
 ## 2.5.0-rc.5 (2026-11-25)
 
 ### Cambios

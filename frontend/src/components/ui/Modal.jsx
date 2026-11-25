@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 // Diálogo accesible: role=dialog, foco dentro, Escape cierra y el foco vuelve a quien lo abrió.
 export default function Modal({ title, onClose, children, wide }) {
@@ -30,7 +31,7 @@ export default function Modal({ title, onClose, children, wide }) {
       first.focus();
     }
   };
-  return (
+  const view = (
     // El fondo es role=presentation (sin semántica): recibe el clic que cierra y el teclado (Escape/Tab) que burbujea desde el diálogo.
     <div
       className="modal"
@@ -53,4 +54,7 @@ export default function Modal({ title, onClose, children, wide }) {
       </div>
     </div>
   );
+  // En un portal a <body>: un ancestro con transform (p. ej. .card:hover), filter o backdrop-filter convierte
+  // position: fixed en relativo a él y el diálogo quedaba recortado dentro de la tarjeta. Sin DOM (render a cadena) va en línea.
+  return typeof document === 'undefined' ? view : createPortal(view, document.body);
 }

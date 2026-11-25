@@ -178,6 +178,13 @@ label {
     overflow: auto;
     box-shadow: 0 0 40px -6px var(--glow);
   }
+  // Botones de acción siempre visibles: el cuerpo del diálogo hace scroll y el pie queda fijo abajo.
+  .dialog > .row.end {
+    position: sticky;
+    bottom: 0;
+    padding-block: 0.5rem 0;
+    background: var(--surface);
+  }
 }
 
 .log {
