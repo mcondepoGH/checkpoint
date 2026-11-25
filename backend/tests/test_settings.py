@@ -62,3 +62,14 @@ def test_hook_max_file_out_of_range_or_not_a_number_is_clear_error():
     for v in ("0", "0.5", "16385", "-3", "abc", "nan", "inf"):
         r = _run("from app.core import settings", CHECKPOINT_HOOK_MAX_FILE_MB=v)
         assert r.returncode != 0 and "CHECKPOINT_HOOK_MAX_FILE_MB" in r.stderr, v
+
+
+def test_deck_zip_empaquetado_con_pyinstaller(monkeypatch):
+    """Con el hub congelado (instalador de Windows) el zip va en deck/ junto a app/, como en Docker."""
+    from app.core import settings
+
+    monkeypatch.setenv("CHECKPOINT_RUNTIME", "native")
+    monkeypatch.setattr(settings.sys, "frozen", True, raising=False)
+    p = settings._deck_zip_default()
+    assert p.parts[-2:] == ("deck", "Checkpoint.zip")
+    assert p.parent.parent == Path(settings.__file__).resolve().parents[2]

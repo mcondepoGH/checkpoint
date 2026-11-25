@@ -239,7 +239,9 @@ def test_key_does_not_open_other_routes(logged):
         ("get", "/api/session"),
     ]:
         r = getattr(anon, m)(p, headers=h)
-        assert r.status_code == 401 or (p == "/api/session" and r.json() == {"authenticated": False, "noLogin": False}), (
+        assert r.status_code == 401 or (
+            p == "/api/session" and r.json() == {"authenticated": False, "noLogin": False}
+        ), (
             m,
             p,
             r.status_code,

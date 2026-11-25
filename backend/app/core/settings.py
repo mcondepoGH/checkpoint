@@ -2,6 +2,7 @@
 COOKIE_SECURE, TRUST_PROXY, RUNTIME, LANG, LOG_LEVEL y HOOK_POLL/HOOK_SETTLE/HOOK_FIRST_SEEN (vigilante de cierre), HOOK_MAX_FILE_MB (tamaño máximo por fichero de la subida HTTP), HOOK_STAGING_TTL_H y HOOK_STAGING_MAX_MB (purga y tope del staging). El resto de rutas y valores se derivan de ellas o son constantes."""
 
 import os
+import sys
 from pathlib import Path
 
 from .runtime import platform_name, running_in_docker
@@ -92,6 +93,8 @@ def _deck_zip_default() -> Path:
     `pnpm run zip` en checkpoint-deck/out/ del repositorio (si no existe, la descarga responde 404)."""
     if running_in_docker():
         return Path("/app/deck/Checkpoint.zip")
+    if getattr(sys, "frozen", False):  # instalador de Windows (PyInstaller): deck/ junto a static/ y app/
+        return Path(__file__).resolve().parents[2] / "deck" / "Checkpoint.zip"
     return Path(__file__).resolve().parents[3] / "checkpoint-deck" / "out" / "Checkpoint.zip"
 
 
