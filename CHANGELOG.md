@@ -2,6 +2,8 @@
 
 ## Sin publicar
 
+## 2.5.0-rc.1 (2026-11-25)
+
 ### Novedades
 
 - Modo sin login para el hub nativo: con `serve` y un host local (`127.0.0.1`, `::1` o `localhost`, el de por defecto) `CHECKPOINT_USER` y `CHECKPOINT_PASSWORD` pasan a ser opcionales; sin ellos el hub no pide login y solo se abre desde ese equipo. Con otro host y sin credenciales, `serve` se niega a arrancar. Docker sigue exigiéndolas. `GET /api/session` añade `noLogin` (compatible: `PROTOCOL` no cambia). La interfaz muestra un aviso fijo («Checkpoint no tiene usuario ni contraseña…») y oculta «Salir» en ese modo.
