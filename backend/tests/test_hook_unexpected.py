@@ -18,9 +18,10 @@ def ctx(c):
     return c.app.state.ctx
 
 
-def all_runs_done(c):
+def all_runs_done(c, n=1):
+    """Hay al menos `n` runs y todos terminaron (`n` evita dar por buena una espera con solo el run de `opened`)."""
     runs = list(ctx(c).runs._runs.values())
-    return bool(runs) and all(r.done for r in runs)
+    return len(runs) >= n and all(r.done for r in runs)
 
 
 def boom_runner(*a, **k):
@@ -114,7 +115,7 @@ def test_closed_run_game_exception_marks_run_done_and_watcher_survives(cl, sim, 
     real = ctx(cl).scheduler.run_game
     monkeypatch.setattr(ctx(cl).scheduler, "run_game", boom_run_game)
     cl.proc.running = False
-    assert wait_for(lambda: all_runs_done(cl))
+    assert wait_for(lambda: all_runs_done(cl, 2))  # el run de `opened` + el del cierre
     assert wait_for(lambda: cl.app.state.watcher.tasks == {})
     assert thread_errors == []
     monkeypatch.setattr(ctx(cl).scheduler, "run_game", real)  # el vigilante sigue vivo: otra apertura se arma
@@ -125,8 +126,8 @@ def test_closed_run_game_exception_saves_history(cl, sim, monkeypatch, thread_er
     seen_running(cl)
     monkeypatch.setattr(ctx(cl).scheduler, "run_game", boom_run_game)
     cl.proc.running = False
-    assert wait_for(lambda: all_runs_done(cl))
-    assert wait_for(lambda: hist("hook_closed"), secs=1)
+    assert wait_for(lambda: all_runs_done(cl, 2))
+    assert wait_for(lambda: hist("hook_closed"))
     assert thread_errors == []
 
 

@@ -1,8 +1,7 @@
 """Historial del cierre automático, extremo a extremo (HTTP real + vigilante real) con reloj y esperas del vigilante
-simulados: `sleep` solo avanza un reloj falso, así que los umbrales (2 min sin ver el proceso, 10 s de asentamiento)
-se cumplen al instante y no dependen del tiempo real. Las esperas de los tests son sondeos acotados de una condición."""
+simulados (`Sim` de test_hook_close): el reloj solo corre si el test lo activa y `sleep` lo avanza, así que los
+umbrales (2 min sin ver el proceso) se cumplen al instante y no dependen del tiempo real. Las esperas de los tests son sondeos acotados de una condición."""
 
-import asyncio
 import threading
 
 import pytest
@@ -17,30 +16,12 @@ from test_hook_opened import PW
 SENSITIVE = "token=SECRETO-12345 /home/usuario/privado"
 
 
-class Sim:
-    """Reloj falso del vigilante: `sleep(s)` suma `s` al reloj y cede el control un instante."""
-
-    def __init__(self):
-        self.t = 0.0
-
-    def clock(self):
-        return self.t
-
-    async def sleep(self, s):
-        self.t += s
-        await asyncio.sleep(0.002)
-
-
 @pytest.fixture
 def sim(cl, monkeypatch):
     monkeypatch.setattr(settings, "HOOK_POLL", 15.0)
     monkeypatch.setattr(settings, "HOOK_SETTLE", 10.0)
     monkeypatch.setattr(settings, "HOOK_FIRST_SEEN", 120.0)
-    s = Sim()
-    w = cl.app.state.watcher
-    w.clock, w.sleep = s.clock, s.sleep
-    cl.sim = s
-    return s
+    return cl.sim  # reloj falso ya instalado por `mk`; solo corre si el test lo activa (`ticking`)
 
 
 def session(c):
@@ -68,6 +49,7 @@ def only_closed():
 # ---- a. nunca visto ----
 def test_never_seen_one_entry_and_hook_status_last(cl, sim):
     hopen(cl)
+    sim.ticking = True
     assert wait_for(lambda: watches(cl).json() == [])
     e = only_closed()
     assert sim.t == 120.0  # 8 sondeos de 15 s simulados, ni uno más
@@ -214,6 +196,7 @@ def test_history_write_failure_never_breaks_watcher_nor_leaks(cl, sim, monkeypat
     real = history.append
     monkeypatch.setattr(history, "append", boom)
     hopen(cl)
+    sim.ticking = True
     assert wait_for(lambda: watches(cl).json() == [])  # el descarte ocurre aunque el historial falle
     assert cl.app.state.watcher.tasks == {}
     assert wait_for(lambda: any("no se pudo guardar en el historial" in r.getMessage() for r in caplog.records))

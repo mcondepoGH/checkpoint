@@ -6,6 +6,10 @@
 
 - Desarrollo: agentes de proyecto `Explore` (Haiku, solo lectura) e `implementer` (Sonnet) en `.claude/agents/` y sección «Modelos por tarea» en `CLAUDE.md`. No afectan al producto: `.claude` queda fuera del contexto de Docker.
 
+### Correcciones
+
+- Tests del cierre automático deterministas: el vigilante usa un reloj y un `sleep` falsos que solo avanzan cuando el test lo pide, así que «proceso no visto» ya no salta por una máquina cargada (`test_second_opened_replaces_watch_single_checkpoint`, `test_checkpoint_error_is_logged_without_message`), y `test_closed_run_game_exception_marks_run_done_and_watcher_survives` espera ya al run del cierre y no solo al de `opened`. Sin cambios en el código de producción.
+
 ## 2.5.1 (2026-11-25)
 
 ### Correcciones

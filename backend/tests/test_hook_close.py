@@ -1,6 +1,7 @@
 """Cierre automático: `opened` arma el vigilante (proceso real del dispositivo vía transport falso) y el checkpoint
 de cierre queda en el historial con trigger `hook_closed`. Servidor con lifespan (`with TestClient`), tiempos mínimos."""
 
+import asyncio
 import time
 
 import pytest
@@ -23,6 +24,23 @@ class Proc:
     down = False  # el dispositivo remoto no responde para la sync
     reopen = False  # tras la primera lectura «cerrado» (la del vigilante), el proceso vuelve a verse: la sync aborta
     reads = 0
+
+
+class Sim:
+    """Reloj y `sleep` falsos del vigilante. El reloj solo avanza cuando el test lo pide (`ticking = True`): hasta
+    entonces `sleep` solo cede el control, así que «proceso no visto en N s» no depende de cuánto tarde el test (ni
+    la máquina cargada) en marcar el proceso como abierto. Con `ticking`, `sleep(s)` suma `s` al reloj."""
+
+    def __init__(self):
+        self.t, self.ticking = 0.0, False
+
+    def clock(self):
+        return self.t
+
+    async def sleep(self, s):
+        if self.ticking:
+            self.t += s
+        await asyncio.sleep(0.002)
 
 
 @pytest.fixture
@@ -70,7 +88,8 @@ def mk(tmp_path, monkeypatch):
 
     def make():
         c = TestClient(create_app(Auth("admin", PW, 1, rounds=4)))
-        c.env, c.proc = e, p
+        c.env, c.proc, c.sim = e, p, Sim()
+        c.app.state.watcher.clock, c.app.state.watcher.sleep = c.sim.clock, c.sim.sleep
         return c
 
     def login(c):
@@ -100,8 +119,9 @@ def watches(c):
 
 
 def wait_for(cond, secs=5):
-    end = time.time() + secs
-    while time.time() < end:
+    """Sondeo acotado de una condición (el límite solo corta un cuelgue; reloj monotónico, inmune a saltos de hora)."""
+    end = time.monotonic() + secs
+    while time.monotonic() < end:
         if cond():
             return True
         time.sleep(0.02)
@@ -144,9 +164,9 @@ def test_errors_do_not_arm(cl):
     assert watches(cl).json() == []
 
 
-@pytest.mark.slow
 def test_never_seen_is_discarded(cl):
     hopen(cl)
+    cl.sim.ticking = True  # el reloj falso corre: los sondeos sin ver el proceso agotan `HOOK_FIRST_SEEN`
     assert wait_for(lambda: watches(cl).json() == [])
     h = hist("hook_closed")  # el descarte queda en el historial como omitido, con código estable
     assert len(h) == 1 and h[0]["result"] == "skipped" and h[0]["code"] == "err.hook.never_seen"
@@ -304,13 +324,13 @@ def test_checkpoint_error_is_logged_without_message(cl):
     assert set(e["params"]) == {"error"} and "secreto-xyz" not in str(e)
 
 
-@pytest.mark.slow
 def test_history_failure_never_breaks_watcher(cl, monkeypatch):
     def boom(*a, **k):
         raise OSError("disco lleno")
 
     monkeypatch.setattr(history, "append", boom)
     hopen(cl)
+    cl.sim.ticking = True
     assert wait_for(lambda: watches(cl).json() == [])  # el descarte ocurre aunque el historial falle
 
 
