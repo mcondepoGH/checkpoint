@@ -2,68 +2,34 @@
 
 ## Sin publicar
 
-## 2.5.0-rc.6 (2026-11-25)
+## 2.5.0 (2026-11-25)
 
-### Correcciones
-
-- Diálogos (p. ej. «Nueva versión disponible» en Ajustes generales): se muestran como modal centrado sobre toda la página. Antes se pintaban dentro de la tarjeta que los abría y un ancestro con `transform` o desenfoque los recortaba (sin ver «Actualizar ahora» ni «Cerrar»); ahora se montan en `<body>` y los botones de acción quedan siempre visibles mientras el cuerpo hace scroll.
-
-## 2.5.0-rc.5 (2026-11-25)
-
-### Cambios
-
-- Versión de prueba para comprobar la actualización con un clic desde el hub (sin cambios funcionales).
-
-## 2.5.0-rc.4 (2026-11-25)
-
-### Correcciones
-
-- «Comprobar ahora»: el límite de un minuto solo cuenta los refrescos manuales anteriores. Antes lo activaban también la comprobación automática o el cambio de canal, y un solo clic podía dar «Acabas de comprobarlo» sin comprobar nada; además, si la última comprobación había fallado, el refresco manual quedaba bloqueado. El aviso del límite ahora se muestra como información neutra, no en rojo.
-- Comprobación de actualizaciones: cuando falla, el motivo real (clase de excepción y mensaje, o código HTTP y si es el límite de GitHub) se guarda en la caché, se devuelve como `error_detalle` en `GET /api/updates` y se registra como aviso en `checkpoint.log`. Antes el fallo se tragaba y solo se veía «no se pudo comprobar».
-
-## 2.5.0-rc.3 (2026-11-25)
-
-### Cambios
-
-- Aviso de actualización de la cabecera: una única píldora compacta (30 px, icono y texto dentro, acento cian) con un punto pulsante en la esquina, ámbar si la versión es preliminar (sustituye a la etiqueta «Preliminar» aparte; el texto sigue en el `title` y el `aria-label`). El pulso respeta `prefers-reduced-motion`.
-
-### Correcciones
-
-- Versiones: sin juegos configurados ya no aparece arriba a la derecha un desplegable vacío; el selector de juego solo se muestra si hay juegos. Además, si el juego elegido desaparece de la lista (p. ej. se borra), la pestaña pasa al primero disponible en vez de quedarse con un valor no válido.
-- Icono de bandeja de Windows: el cuadro «¿Detener Checkpoint?» ya deja pulsar Sí/No. Se mostraba dentro del callback del menú de pystray y bloqueaba su bucle de mensajes; ahora se abre en un hilo aparte, en primer plano y siempre visible.
-
-## 2.5.0-rc.2 (2026-11-25)
+Consolida las seis versiones preliminares 2.5.0-rc.1 a rc.6.
 
 ### Novedades
 
-- Icono propio de Checkpoint en el `.exe`, el instalador, «Aplicaciones instaladas», los accesos directos y la bandeja de Windows.
-
-### Cambios
-
-- Modo sin login: el aviso pasa de banner global a una tarjeta en Ajustes > General.
-
-### Correcciones
-
-- Icono de bandeja de Windows: el menú ya no se queda en «Checkpoint no responde» ni con «Abrir Checkpoint» en gris aunque el hub funcione. La bandeja arranca antes que el servidor y comprobaba el puerto una sola vez; ahora un hilo vigila el hub (cada segundo hasta que responde, luego cada pocos segundos) y refresca el menú cuando cambia, también si el hub cae después.
-- Actualizaciones: con una pre-release instalada (p. ej. `2.5.0-rc.1`) y sin canal elegido en `updates.json`, el canal por defecto pasa a ser `beta`, de modo que se ofrece la siguiente rc y se puede actualizar con un clic. Una elección guardada (`stable` o `beta`) manda siempre; con una versión estable instalada el defecto sigue siendo `stable`. `GET /api/updates` y el selector de canal muestran el canal efectivo.
-- Ajustes > Lanzadores: editar la URL del hub ya no rompe la sección («Failed to construct 'URL': Invalid URL»). Un valor parcial como `http://:` o `http://[` pasaba el filtro y hacía lanzar a `new URL`; ahora se parsea de forma segura y se muestra «URL no válida» mientras se escribe.
-
-## 2.5.0-rc.1 (2026-11-25)
-
-### Novedades
-
-- Modo sin login para el hub nativo: con `serve` y un host local (`127.0.0.1`, `::1` o `localhost`, el de por defecto) `CHECKPOINT_USER` y `CHECKPOINT_PASSWORD` pasan a ser opcionales; sin ellos el hub no pide login y solo se abre desde ese equipo. Con otro host y sin credenciales, `serve` se niega a arrancar. Docker sigue exigiéndolas. `GET /api/session` añade `noLogin` (compatible: `PROTOCOL` no cambia). La interfaz muestra un aviso fijo («Checkpoint no tiene usuario ni contraseña…») y oculta «Salir» en ese modo.
-- Instalador de Windows (en construcción, aún sin publicar): `packaging/windows/` con `checkpoint.spec` (PyInstaller onedir), `launcher.py` (lee `%APPDATA%\checkpoint\.env`, rechaza el modo sin login fuera de 127.0.0.1, log en `logs/checkpoint.log`) e `installer.iss` (Inno Setup, instalación por usuario, es/en, asistente de credenciales o modo sin login, el desinstalador pregunta si borrar los datos). Sin firma de código.
+- Instalador de Windows: `packaging/windows/` con `checkpoint.spec` (PyInstaller onedir), `launcher.py` (lee `%APPDATA%\checkpoint\.env`, rechaza el modo sin login fuera de 127.0.0.1, log en `logs/checkpoint.log`) e `installer.iss` (Inno Setup, instalación por usuario, es/en, asistente de credenciales o modo sin login, el desinstalador pregunta si borrar los datos). Sin firma de código. Lleva icono propio de Checkpoint en el `.exe`, el instalador, «Aplicaciones instaladas», los accesos directos y la bandeja.
+- Modo sin login para el hub nativo: con `serve` y un host local (`127.0.0.1`, `::1` o `localhost`, el de por defecto) `CHECKPOINT_USER` y `CHECKPOINT_PASSWORD` pasan a ser opcionales; sin ellos el hub no pide login y solo se abre desde ese equipo. Con otro host y sin credenciales, `serve` se niega a arrancar. Docker sigue exigiéndolas. `GET /api/session` añade `noLogin` (compatible: `PROTOCOL` no cambia). La interfaz muestra el aviso («Checkpoint no tiene usuario ni contraseña…») como una tarjeta en Ajustes > General y oculta «Salir» en ese modo.
 - Ajustes > General: tarjeta «Arrancar al iniciar sesión» (solo con el instalador de Windows, desactivada por defecto) que crea o quita una Tarea Programada del usuario (`GET`/`PUT /api/autostart`). No detiene el hub que ya está en marcha.
-- Icono de bandeja del hub de Windows (`packaging/windows/tray.py`, pystray): «Abrir Checkpoint» y «Detener Checkpoint» (con confirmación), y aviso «Checkpoint no responde». Si no puede arrancar, el hub arranca igual. `CHECKPOINT_NO_TRAY=1` lo desactiva. El menú Inicio lleva además el acceso «Detener Checkpoint».
+- Icono de bandeja del hub de Windows (`packaging/windows/tray.py`, pystray): «Abrir Checkpoint» y «Detener Checkpoint» (con confirmación, en un hilo aparte para que Sí/No se puedan pulsar), y aviso «Checkpoint no responde». Un hilo vigila el hub (cada segundo hasta que responde, luego cada pocos segundos) y refresca el menú cuando cambia, también si el hub cae después. Si no puede arrancar, el hub arranca igual. `CHECKPOINT_NO_TRAY=1` lo desactiva. El menú Inicio lleva además el acceso «Detener Checkpoint».
 - Actualización con un clic con el instalador de Windows: «Actualizar ahora» en Ajustes > General y en el diálogo de la versión nueva (confirmación y progreso: descargando, instalando, reiniciando). El servidor descarga el instalador de la Release, comprueba su SHA-256 contra el `.sha256` publicado (si no coincide no instala nada), rechaza si hay una sincronización en curso y lanza el instalador en silencio; datos y `.env` se conservan. `GET /api/updates` añade `instalador` e `instalable`; nuevos `POST`/`GET /api/updates/install`. Linux y macOS mantienen la actualización manual.
 - Cada Release lleva adjunto el instalador de Windows `Checkpoint-Setup-<versión>.exe` y su hash `.exe.sha256` (job `windows` de `release.yml`: comprueba `VERSION` contra el tag, construye, pasa el smoke test y sube). CI: job `windows-installer` (en pull requests, `main`, a mano y semanal) que construye el instalador, lo instala en silencio sin login, consulta el puerto 8088 y lo desinstala; Dependabot vigila `packaging/windows`.
 - `GET /api/games` con key de dispositivo (`ckd_`) añade `process`: el proceso del juego configurado en el hub (cadena, o `null` si no tiene), para que un cliente sin SSH sepa qué vigilar. Con key de usuario no se expone. Campo nuevo compatible: `PROTOCOL` y `MIN_PLUGIN_PROTOCOL` no cambian.
 
 ### Cambios
 
+- Aviso de actualización de la cabecera: una única píldora compacta (30 px, icono y texto dentro, acento cian) con un punto pulsante en la esquina, ámbar si la versión es preliminar (sustituye a la etiqueta «Preliminar» aparte; el texto sigue en el `title` y el `aria-label`). El pulso respeta `prefers-reduced-motion`.
 - Cada Release lleva adjunto el wheel del cliente de Linux (job `client` de `release.yml`, versión propia del cliente). CI: jobs nuevos `client` (Python 3.12) y `core` (Python 3.8 y 3.12); `audit.yml` audita las dependencias del cliente y Dependabot vigila `checkpoint-client` y `checkpoint-core`.
 - CI: el job `core` con Python 3.8 corre en `ubuntu-22.04` (en `ubuntu-latest` ya no existe 3.8 en setup-python y el job fallaba); Python 3.12 sigue en `ubuntu-latest`.
+
+### Correcciones
+
+- Actualizaciones: con una pre-release instalada (p. ej. `2.5.0-rc.1`) y sin canal elegido en `updates.json`, el canal por defecto pasa a ser `beta`, de modo que se ofrece la siguiente rc y se puede actualizar con un clic. Una elección guardada (`stable` o `beta`) manda siempre; con una versión estable instalada el defecto sigue siendo `stable`. `GET /api/updates` y el selector de canal muestran el canal efectivo.
+- «Comprobar ahora»: el límite de un minuto solo cuenta los refrescos manuales anteriores. Antes lo activaban también la comprobación automática o el cambio de canal, y un solo clic podía dar «Acabas de comprobarlo» sin comprobar nada; además, si la última comprobación había fallado, el refresco manual quedaba bloqueado. El aviso del límite ahora se muestra como información neutra, no en rojo.
+- Comprobación de actualizaciones: cuando falla, el motivo real (clase de excepción y mensaje, o código HTTP y si es el límite de GitHub) se guarda en la caché, se devuelve como `error_detalle` en `GET /api/updates` y se registra como aviso en `checkpoint.log`. Antes el fallo se tragaba y solo se veía «no se pudo comprobar».
+- Diálogos (p. ej. «Nueva versión disponible» en Ajustes generales): se muestran como modal centrado sobre toda la página. Antes se pintaban dentro de la tarjeta que los abría y un ancestro con `transform` o desenfoque los recortaba (sin ver «Actualizar ahora» ni «Cerrar»); ahora se montan en `<body>` y los botones de acción quedan siempre visibles mientras el cuerpo hace scroll.
+- Versiones: sin juegos configurados ya no aparece arriba a la derecha un desplegable vacío; el selector de juego solo se muestra si hay juegos. Además, si el juego elegido desaparece de la lista (p. ej. se borra), la pestaña pasa al primero disponible en vez de quedarse con un valor no válido.
+- Ajustes > Lanzadores: editar la URL del hub ya no rompe la sección («Failed to construct 'URL': Invalid URL»). Un valor parcial como `http://:` o `http://[` pasaba el filtro y hacía lanzar a `new URL`; ahora se parsea de forma segura y se muestra «URL no válida» mientras se escribe.
 
 ## 2.4.1 (2026-11-24)
 
