@@ -1,4 +1,4 @@
 # Dependencias solo del empaquetado de Windows (se instalan además de backend/requirements.txt en el job `windows`).
-pyinstaller==6.16.0
+pyinstaller==6.22.3
 pystray==0.19.5
 pillow==13.0.0
