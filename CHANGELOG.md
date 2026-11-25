@@ -9,6 +9,7 @@
 ### Correcciones
 
 - Versiones: sin juegos configurados ya no aparece arriba a la derecha un desplegable vacío; el selector de juego solo se muestra si hay juegos. Además, si el juego elegido desaparece de la lista (p. ej. se borra), la pestaña pasa al primero disponible en vez de quedarse con un valor no válido.
+- Icono de bandeja de Windows: el cuadro «¿Detener Checkpoint?» ya deja pulsar Sí/No. Se mostraba dentro del callback del menú de pystray y bloqueaba su bucle de mensajes; ahora se abre en un hilo aparte, en primer plano y siempre visible.
 
 ## 2.5.0-rc.2 (2026-11-25)
 

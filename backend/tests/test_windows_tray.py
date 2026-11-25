@@ -67,10 +67,56 @@ def test_detener_pide_confirmacion(tray):
         stop=lambda: stopped.append(1),
     )
     c.stop()
+    _join_stop_threads()
     assert asked == ["¿Detener Checkpoint? Las sincronizaciones en curso se interrumpirán."] and stopped == []
     c.confirm = lambda m: True
     c.stop()
+    _join_stop_threads()
     assert stopped == [1]
+
+
+def _join_stop_threads():
+    import threading
+
+    for t in threading.enumerate():
+        if t.name == "checkpoint-tray-stop":
+            t.join(timeout=5)
+
+
+def test_detener_no_bloquea_al_llamador(tray):
+    import threading
+
+    gate, asked, stopped = threading.Event(), threading.Event(), []
+
+    def confirm(m):
+        asked.set()
+        gate.wait(timeout=5)
+        return True
+
+    c = tray.TrayController("http://x", "es", probe=lambda u: True, confirm=confirm, stop=lambda: stopped.append(1))
+    c.stop()  # vuelve de inmediato aunque el cuadro siga abierto (no bloquea el bucle de mensajes del menú)
+    assert asked.wait(timeout=5) and stopped == []
+    gate.set()
+    _join_stop_threads()
+    assert stopped == [1]
+
+
+def test_confirm_box_flags_y_propietario(tray, monkeypatch):
+    import ctypes
+    import types
+
+    calls = []
+
+    def box(owner, msg, title, flags):
+        calls.append((owner, msg, title, flags))
+        return 6
+
+    fake = types.SimpleNamespace(user32=types.SimpleNamespace(MessageBoxW=box))
+    monkeypatch.setattr(ctypes, "windll", fake, raising=False)
+    assert tray._confirm_box("hola") is True
+    assert calls == [(None, "hola", "Checkpoint", 0x24 | 0x00010000 | 0x00040000)]
+    fake.user32.MessageBoxW = lambda *a: 7  # IDNO
+    assert tray._confirm_box("hola") is False
 
 
 def test_start_no_hace_nada_fuera_de_windows_y_nunca_lanza(tray, monkeypatch):

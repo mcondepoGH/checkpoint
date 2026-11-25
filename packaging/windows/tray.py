@@ -62,9 +62,9 @@ def port_open(url) -> bool:
 def _confirm_box(message: str) -> bool:
     import ctypes
 
-    return (
-        ctypes.windll.user32.MessageBoxW(None, message, "Checkpoint", 0x24) == 6
-    )  # Sí/No + pregunta -> IDYES
+    # Sí/No + pregunta (0x24) | MB_SETFOREGROUND (0x10000) | MB_TOPMOST (0x40000) -> IDYES (6)
+    flags = 0x24 | 0x00010000 | 0x00040000
+    return ctypes.windll.user32.MessageBoxW(None, message, "Checkpoint", flags) == 6
 
 
 def _hard_stop() -> None:
@@ -103,8 +103,13 @@ class TrayController:
         self.opener(self.url)
 
     def stop(self) -> None:
-        if self.confirm(self.t["confirm"]):
-            self._stop()
+        """No bloquea: el cuadro modal en el callback del menú de pystray congelaba su bucle de mensajes (no dejaba pulsar Sí/No)."""
+
+        def ask() -> None:
+            if self.confirm(self.t["confirm"]):
+                self._stop()
+
+        threading.Thread(target=ask, name="checkpoint-tray-stop", daemon=True).start()
 
 
 def icon_candidates():
