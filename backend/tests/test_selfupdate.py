@@ -740,8 +740,10 @@ def test_e2e_tarball_real_de_build_sh_se_extrae_y_install_sh_upgrade_dry_run_lo_
         {"name": name + ".sha256", "browser_download_url": base_url + name + ".sha256"},
     ]
     files = {base_url + name: tar, base_url + name + ".sha256": (out / (name + ".sha256")).read_bytes()}
+    checker = updates.UpdateChecker(fetch=lambda repo: [r])
+    checker.set_channel("beta")  # VERSION puede ser una preliminar (X.Y.Z-rc.N): en el canal estable no se ofrecería
     up = selfupdate.SelfUpdater(
-        updates.UpdateChecker(fetch=lambda repo: [r]),
+        checker,
         busy=lambda: False,
         opener=FakeOpener(files),
         popen=run_dry,
