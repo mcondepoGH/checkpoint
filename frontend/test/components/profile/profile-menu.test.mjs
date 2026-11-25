@@ -161,3 +161,16 @@ test('Esc devuelve el foco al botón y fuera cierra (contrato en el código)', (
   assert.match(src, /aria-haspopup="dialog"/);
   assert.match(src, /pop\.current\?\.focus\(\)/);
 });
+
+test('Sin login (`noLogin`): el menú no ofrece «Salir»; con login sí', { skip }, () => {
+  assert.match(menu(), /Salir/);
+  assert.ok(!/Salir/.test(menu({ noLogin: true })));
+  assert.ok(!/Salir/.test(menu({ noLogin: true }, 'en')) && !/Sign out|Log out/i.test(menu({ noLogin: true }, 'en')));
+});
+
+test('App pinta el aviso de sin login con la clave app.noLogin y solo con noLogin', () => {
+  const src = read('App.jsx');
+  assert.match(src, /noLogin && \(\s*<Alert as="p" variant="warn" role="alert">\s*\{t\('app\.noLogin'\)\}/);
+  assert.match(src, /setNoLogin\(s\.noLogin === true\)/);
+  assert.match(src, /noLogin=\{noLogin\}/);
+});

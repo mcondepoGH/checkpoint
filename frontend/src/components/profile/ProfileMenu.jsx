@@ -13,6 +13,7 @@ import { deletePhoto, putPhoto } from '#src/lib/api/profile.js';
 // Perfil en la cabecera: botón circular con la foto (o la silueta) y un popover anclado debajo, por grupos con separador y rótulo:
 // identidad (foto), actualización (solo móvil), Preferencias (idioma, tema), Integración (API key plegable y enlace a la documentación de la API) y Cuenta (salir). Con una actualización disponible, en móvil (<480 px, por CSS) el aviso sale de la cabecera: el avatar lleva un punto
 // (con texto accesible) y el menú una entrada «Actualizar a vX.Y.Z» que abre el mismo diálogo (`onUpdate`). No modal: Esc cierra y devuelve el foco al botón; pulsar fuera o sacar el foco del popover (Tab) lo cierra.
+// Sin login (`noLogin`) no hay sesión que cerrar: se oculta «Salir».
 // `open` inicial solo se usa para renderizar el popup en pruebas.
 export default function ProfileMenu({
   profile,
@@ -20,6 +21,7 @@ export default function ProfileMenu({
   effectiveTheme,
   onCycleTheme,
   onLogout,
+  noLogin = false,
   onPhoto,
   updates = null,
   onUpdate,
@@ -179,15 +181,17 @@ export default function ProfileMenu({
               <span className="profile-row-label">{t('profile.apidocs')}</span>
             </a>
           </div>
-          <div className="profile-group" role="group" aria-labelledby={`${popId}-acct`}>
-            <h3 id={`${popId}-acct`} className="profile-group-title">
-              {t('profile.group.account')}
-            </h3>
-            <Button variant="ghost" className="profile-row" onClick={onLogout}>
-              <Icon name="logout" />
-              <span className="profile-row-label">{t('app.logout')}</span>
-            </Button>
-          </div>
+          {!noLogin && (
+            <div className="profile-group" role="group" aria-labelledby={`${popId}-acct`}>
+              <h3 id={`${popId}-acct`} className="profile-group-title">
+                {t('profile.group.account')}
+              </h3>
+              <Button variant="ghost" className="profile-row" onClick={onLogout}>
+                <Icon name="logout" />
+                <span className="profile-row-label">{t('app.logout')}</span>
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>

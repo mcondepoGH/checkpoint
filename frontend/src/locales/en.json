@@ -54,6 +54,7 @@
       "light": "light",
       "dark": "dark"
     },
+    "noLogin": "Checkpoint has no username or password: it can only be opened from this computer (127.0.0.1).",
     "logout": "Log out"
   },
   "login": {

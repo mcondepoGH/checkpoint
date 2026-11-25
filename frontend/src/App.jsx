@@ -28,6 +28,7 @@ export default function App() {
     document.documentElement.lang = locale;
   }, [locale]); // lector de pantalla y traductor del navegador
   const [authed, setAuthed] = useState(null);
+  const [noLogin, setNoLogin] = useState(false); // hub sin usuario ni contraseña (solo 127.0.0.1): aviso fijo y sin «Salir»
   const [tab, setTab] = useState('sync');
   const [loaded, setLoaded] = useState({ version: '', config: { devices: {}, games: {} }, error: null });
   const [latest, setLatest] = useState(null); // última versión de config.yaml anunciada por el servidor (SSE)
@@ -63,6 +64,7 @@ export default function App() {
       .then(async (s) => {
         await pub;
         setAuthed(s.authenticated);
+        setNoLogin(s.noLogin === true);
         if (s.authenticated) loadConfig(true);
       })
       .catch(async () => {
@@ -148,6 +150,11 @@ export default function App() {
 
   return (
     <div className="app">
+      {noLogin && (
+        <Alert as="p" variant="warn" role="alert">
+          {t('app.noLogin')}
+        </Alert>
+      )}
       <header className="topbar">
         <strong className="brand">
           <AppIcon className="brand-logo" />
@@ -182,6 +189,7 @@ export default function App() {
           onUpdate={() => setShowUpdate(true)}
           onCycleTheme={cycleTheme}
           onLogout={logout}
+          noLogin={noLogin}
           onPhoto={(photo) => setProfile((p) => ({ ...p, photo }))}
         />
       </header>
