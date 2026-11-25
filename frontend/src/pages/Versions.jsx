@@ -26,7 +26,9 @@ export function OrphansNotice({ count, onGoSettings }) {
 export default function Versions({ config, onGoSettings }) {
   const { t } = useI18n();
   const games = Object.keys(config.games);
-  const [game, setGame] = useState(games[0] || '');
+  const [picked, setGame] = useState(games[0] || '');
+  // Juego efectivo: si el elegido ya no existe (p. ej. se borró), cae al primero de la lista (o '' sin juegos).
+  const game = games.includes(picked) ? picked : games[0] || '';
   const [list, setList] = useState([]);
   const [msg, setMsg] = useState(null); // {error?, body}: `body` es un error o respuesta con {code, params} (se traduce al pintar)
   const [limit, setLimit] = useState(null);
@@ -88,18 +90,20 @@ export default function Versions({ config, onGoSettings }) {
     <section className={list.length === 0 && !limit?.current ? 'fill' : undefined}>
       <div className="row between versions-head">
         <h2>{t('versions.title')}</h2>
-        <Select
-          aria-label={t('versions.gameAria')}
-          value={game}
-          onChange={(e) => {
-            setGame(e.target.value);
-            setMsg(null);
-          }}
-          options={games.map((g) => ({
-            value: g,
-            label: labelOf(config.games, g) + (config.games[g].enabled === false ? ` ${t('versions.disabledSuffix')}` : ''),
-          }))}
-        />
+        {games.length > 0 && (
+          <Select
+            aria-label={t('versions.gameAria')}
+            value={game}
+            onChange={(e) => {
+              setGame(e.target.value);
+              setMsg(null);
+            }}
+            options={games.map((g) => ({
+              value: g,
+              label: labelOf(config.games, g) + (config.games[g].enabled === false ? ` ${t('versions.disabledSuffix')}` : ''),
+            }))}
+          />
+        )}
       </div>
       {limit && game && (
         <p className="muted versions-limit">
