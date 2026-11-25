@@ -13,7 +13,9 @@ ROOT = os.path.abspath(SPECPATH + "/../..")
 STATIC = os.path.join(ROOT, "frontend", "dist")
 DECK_ZIP = os.path.join(ROOT, "checkpoint-deck", "out", "Checkpoint.zip")
 VERSION = os.path.join(ROOT, "VERSION")
-for required in (os.path.join(STATIC, "index.html"), DECK_ZIP, VERSION):
+# Icono de Checkpoint (regenerable con make_icon.py): es el del .exe y el que la bandeja carga del bundle (assets/).
+ICON = os.path.join(SPECPATH, "assets", "checkpoint.ico")
+for required in (os.path.join(STATIC, "index.html"), DECK_ZIP, VERSION, ICON):
     if not os.path.isfile(required):
         sys.exit(f"checkpoint.spec: falta {required}")
 
@@ -47,7 +49,7 @@ a = Analysis(
     pathex=[os.path.join(ROOT, "backend"), SPECPATH],
     binaries=[],
     # Mismo diseño que /app en Docker: static/ y VERSION junto a app/, y el zip del plugin en deck/.
-    datas=[(STATIC, "static"), (DECK_ZIP, "deck"), (VERSION, ".")],
+    datas=[(STATIC, "static"), (DECK_ZIP, "deck"), (VERSION, "."), (ICON, "assets")],
     hiddenimports=hidden,
     excludes=["pytest", "tkinter"],
 )
@@ -59,6 +61,6 @@ exe = EXE(
     exclude_binaries=True,
     name="checkpoint",
     console=False,  # sin ventana de consola; el log va a %APPDATA%\checkpoint\logs (launcher.py)
-    icon=os.path.join(SPECPATH, "checkpoint.ico") if os.path.isfile(os.path.join(SPECPATH, "checkpoint.ico")) else None,
+    icon=ICON,
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="checkpoint")

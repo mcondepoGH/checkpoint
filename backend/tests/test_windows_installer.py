@@ -131,3 +131,40 @@ def test_smoke_vuelca_log_y_salida_y_falla_rapido_si_el_hub_muere():
 def test_cli_serve_importa_app_estaticamente():
     cli = (Path(__file__).resolve().parents[1] / "app/cli.py").read_text(encoding="utf-8")
     assert "from .main import app_factory" in cli and '"app.main:app_factory"' not in cli.split("def serve")[1]
+
+
+# --- Icono propio: .ico multitamaño versionado, usado por el .exe, el instalador, los accesos y «Aplicaciones instaladas» ---
+PKG = Path(__file__).resolve().parents[2] / "packaging" / "windows"
+SPEC = (PKG / "checkpoint.spec").read_text(encoding="utf-8")
+
+
+def test_ico_versionado_con_todos_los_tamanos():
+    data = (PKG / "assets" / "checkpoint.ico").read_bytes()
+    assert data[:4] == b"\x00\x00\x01\x00"  # cabecera ICO
+    count = int.from_bytes(data[4:6], "little")
+    sizes = {(data[6 + 16 * i] or 256) for i in range(count)}  # ancho 0 = 256
+    assert sizes == {16, 24, 32, 48, 64, 128, 256}
+
+
+def test_make_icon_es_reproducible_y_apunta_al_logo_del_repo():
+    src = (PKG / "make_icon.py").read_text(encoding="utf-8")
+    assert "icon-512.png" in src and "assets" in src and "checkpoint.ico" in src
+    assert (PKG.parents[1] / "frontend" / "public" / "icon-512.png").is_file()
+
+
+def test_spec_usa_el_ico_obligatorio_en_el_exe_y_lo_empaqueta_para_la_bandeja():
+    assert re.search(r'ICON\s*=\s*os\.path\.join\(SPECPATH,\s*"assets",\s*"checkpoint\.ico"\)', SPEC)
+    assert "icon=ICON," in SPEC
+    assert "else None" not in SPEC  # ya no hay icono opcional: sin .ico el build falla
+    assert re.search(r'\(ICON,\s*"assets"\)', SPEC)
+    assert re.search(r"for required in \(.*VERSION, ICON\):", SPEC)
+
+
+def test_instalador_y_accesos_usan_el_icono_de_checkpoint():
+    setup = _section("Setup")
+    assert re.search(r"^SetupIconFile=assets\\checkpoint\.ico$", setup, re.M)
+    assert re.search(r"^UninstallDisplayIcon=\{app\}\\checkpoint\.exe$", setup, re.M)
+    icons = _section("Icons")
+    lines = [ln for ln in icons.splitlines() if ln.startswith("Name:")]
+    assert lines and all("IconFilename:" in ln for ln in lines)
+    assert all(re.search(r'IconFilename: "\{app\}\\checkpoint\.exe"', ln) for ln in lines)

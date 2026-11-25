@@ -2,6 +2,10 @@
 
 ## Sin publicar
 
+### Correcciones
+
+- Icono de bandeja de Windows: el menú ya no se queda en «Checkpoint no responde» ni con «Abrir Checkpoint» en gris aunque el hub funcione. La bandeja arranca antes que el servidor y comprobaba el puerto una sola vez; ahora un hilo vigila el hub (cada segundo hasta que responde, luego cada pocos segundos) y refresca el menú cuando cambia, también si el hub cae después.
+
 ## 2.5.0-rc.1 (2026-11-25)
 
 ### Novedades

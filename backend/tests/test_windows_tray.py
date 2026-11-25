@@ -80,3 +80,103 @@ def test_start_no_hace_nada_fuera_de_windows_y_nunca_lanza(tray, monkeypatch):
     assert tray.start("http://x", {"CHECKPOINT_NO_TRAY": "1"}) is False
     # En «Windows» simulado, sin pystray instalado: falla en silencio (el hub arranca igual).
     assert tray.start("http://x", {}) is False
+
+
+def test_icon_path_prefiere_el_bundle_y_cae_al_directorio_del_modulo(tray, tmp_path, monkeypatch):
+    (tmp_path / "assets").mkdir()
+    ico = tmp_path / "assets" / "checkpoint.ico"
+    ico.write_bytes(b"x")
+    monkeypatch.setattr(tray.sys, "_MEIPASS", str(tmp_path), raising=False)
+    assert tray.icon_path() == str(ico)
+    monkeypatch.delattr(tray.sys, "_MEIPASS")
+    assert tray.icon_path().endswith("checkpoint.ico")  # el del repositorio, junto a tray.py
+    assert Path(tray.icon_path()).parent == TRAY.parent / "assets"
+
+
+def test_icon_path_none_si_no_hay_recurso(tray, monkeypatch):
+    monkeypatch.setattr(tray, "icon_candidates", lambda: ["/no/existe/checkpoint.ico"])
+    assert tray.icon_path() is None
+
+
+def test_image_carga_el_icono_real_de_checkpoint(tray):
+    pytest.importorskip("PIL")
+    img = tray._image()
+    assert img.size == (64, 64) and img.mode == "RGBA"
+    # el logo real tiene la esquina transparente (cuadrado redondeado) y no es el círculo azul dibujado: el centro es oscuro/violeta
+    assert img.getpixel((0, 0))[3] == 0
+    assert img.getpixel((32, 6)) != (37, 99, 235, 255)
+
+
+def test_image_cae_al_dibujo_si_el_recurso_falla(tray, tmp_path, monkeypatch):
+    pytest.importorskip("PIL")
+    bad = tmp_path / "checkpoint.ico"
+    bad.write_bytes(b"no es un ico")
+    monkeypatch.setattr(tray, "icon_candidates", lambda: [str(bad)])
+    img = tray._image()
+    assert img.size == (64, 64) and img.getpixel((32, 10)) == (37, 99, 235, 255)  # círculo de respaldo
+    monkeypatch.setattr(tray, "icon_candidates", lambda: [])
+    assert tray._image().getpixel((32, 10)) == (37, 99, 235, 255)
+
+
+def _watch(tray, states, known=False, **kw):
+    import threading
+
+    stop, calls, seq = threading.Event(), [], iter(states)
+
+    def probe(url):
+        try:
+            return next(seq)
+        except StopIteration:
+            stop.set()
+            return states[-1]
+
+    class Icon:
+        def update_menu(self):
+            calls.append(1)
+
+    c = tray.TrayController("http://127.0.0.1:8088", "es", probe=probe)
+    tray.watch(Icon(), c, stop, fast=0, slow=0, known=known, **kw)
+    return calls
+
+
+def test_watch_actualiza_menu_solo_al_cambiar(tray):
+    assert len(_watch(tray, [False, False, True])) == 1
+    assert len(_watch(tray, [True, True, True])) == 1  # primera lectura arriba, menú construido con «abajo»
+    assert len(_watch(tray, [False, False, False])) == 0
+
+
+def test_watch_detecta_caida_posterior(tray):
+    assert len(_watch(tray, [False, True, True, False, False, True])) == 3
+
+
+def test_watch_tolera_errores_del_probe_y_del_icono(tray):
+    import threading
+
+    stop, n = threading.Event(), {"i": 0}
+
+    def probe(url):
+        n["i"] += 1
+        if n["i"] == 1:
+            raise OSError("x")
+        if n["i"] > 3:
+            stop.set()
+        return True
+
+    class Icon:
+        def update_menu(self):
+            raise RuntimeError("y")
+
+    tray.watch(Icon(), tray.TrayController("http://h:1", "es", probe=probe), stop, fast=0, slow=0)
+    assert n["i"] > 3
+
+
+def test_watch_termina_con_stop_activado(tray):
+    import threading
+
+    stop = threading.Event()
+    stop.set()
+    c = tray.TrayController("http://h:1", "es", probe=lambda u: pytest.fail("no debe sondear"))
+    t = threading.Thread(target=tray.watch, args=(object(), c, stop), kwargs={"fast": 5, "slow": 5})
+    t.start()
+    t.join(2)
+    assert not t.is_alive()

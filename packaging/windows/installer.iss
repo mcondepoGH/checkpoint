@@ -32,6 +32,9 @@ WizardStyle=modern
 CloseApplications=force
 RestartApplications=no
 UninstallDisplayName=Checkpoint
+; Icono propio: del asistente (SetupIconFile), de «Aplicaciones instaladas» (UninstallDisplayIcon, el .exe lleva el mismo .ico) y de los accesos.
+SetupIconFile=assets\checkpoint.ico
+UninstallDisplayIcon={app}\checkpoint.exe
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
@@ -84,8 +87,8 @@ english.DeleteData=Also delete your data (configuration and save versions) from 
 Source: "dist\checkpoint\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
-Name: "{group}\Checkpoint"; Filename: "{app}\checkpoint.exe"; Parameters: "--open"
-Name: "{group}\Detener Checkpoint"; Filename: "{sys}\taskkill.exe"; Parameters: "/IM checkpoint.exe /F"; Flags: runminimized
+Name: "{group}\Checkpoint"; Filename: "{app}\checkpoint.exe"; Parameters: "--open"; IconFilename: "{app}\checkpoint.exe"
+Name: "{group}\Detener Checkpoint"; Filename: "{sys}\taskkill.exe"; Parameters: "/IM checkpoint.exe /F"; IconFilename: "{app}\checkpoint.exe"; Flags: runminimized
 
 [Run]
 Filename: "{app}\checkpoint.exe"; Parameters: "--open"; Description: "{cm:OpenNow}"; Flags: nowait postinstall skipifsilent
