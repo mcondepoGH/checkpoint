@@ -5,6 +5,7 @@
 ### Correcciones
 
 - Icono de bandeja de Windows: el menú ya no se queda en «Checkpoint no responde» ni con «Abrir Checkpoint» en gris aunque el hub funcione. La bandeja arranca antes que el servidor y comprobaba el puerto una sola vez; ahora un hilo vigila el hub (cada segundo hasta que responde, luego cada pocos segundos) y refresca el menú cuando cambia, también si el hub cae después.
+- Actualizaciones: con una pre-release instalada (p. ej. `2.5.0-rc.1`) y sin canal elegido en `updates.json`, el canal por defecto pasa a ser `beta`, de modo que se ofrece la siguiente rc y se puede actualizar con un clic. Una elección guardada (`stable` o `beta`) manda siempre; con una versión estable instalada el defecto sigue siendo `stable`. `GET /api/updates` y el selector de canal muestran el canal efectivo.
 
 ## 2.5.0-rc.1 (2026-11-25)
 

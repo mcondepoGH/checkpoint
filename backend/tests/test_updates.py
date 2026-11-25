@@ -480,3 +480,64 @@ def test_endpoints_native_has_aplicable(api):
     login(api)
     assert api.get("/api/updates").json()["aplicable"] is True
     assert api.put("/api/updates", json={"channel": "beta"}).status_code == 200
+
+
+# ---- canal implícito: una prerelease instalada sigue el canal beta salvo elección guardada ----
+def _rc(monkeypatch, installed="2.5.0-rc.1"):
+    monkeypatch.setattr(updates, "installed_version", lambda: installed)
+
+
+def test_prerelease_instalada_sin_ajuste_usa_beta(env, monkeypatch):
+    make, _, _ = env
+    _rc(monkeypatch)
+    assert not (settings.DATA_DIR / updates.SETTINGS_FILE).exists()
+    s = make([rel("v2.5.0-rc.2", prerelease=True)]).state()
+    assert s["canal"] == "beta" and s["ultima"] == "2.5.0-rc.2" and s["hay_actualizacion"] is True
+
+
+def test_prerelease_instalada_con_stable_explicito_sigue_stable(env, monkeypatch):
+    make, _, _ = env
+    _rc(monkeypatch)
+    c = make([rel("v2.5.0-rc.2", prerelease=True)])
+    c.set_channel("stable")
+    s = c.state()
+    assert s["canal"] == "stable" and s["ultima"] is None and s["hay_actualizacion"] is False
+
+
+def test_prerelease_instalada_con_beta_explicito_es_beta(env, monkeypatch):
+    make, _, _ = env
+    _rc(monkeypatch)
+    c = make([rel("v2.5.0-rc.2", prerelease=True)])
+    c.set_channel("beta")
+    assert c.state()["canal"] == "beta"
+
+
+def test_estable_instalada_sin_ajuste_usa_stable(env, monkeypatch):
+    make, _, _ = env
+    _rc(monkeypatch, "2.4.1")
+    s = make([rel("v2.5.0-rc.1", prerelease=True), rel("v2.4.1")]).state()
+    assert s["canal"] == "stable" and s["ultima"] == "2.4.1"
+
+
+def test_version_desconocida_sin_ajuste_usa_stable(env, monkeypatch):
+    make, _, _ = env
+    _rc(monkeypatch, "desconocida")
+    assert make([rel("v2.5.0")]).channel() == "stable"
+
+
+def test_prerelease_instalada_se_ofrece_la_estable(env, monkeypatch):
+    make, _, _ = env
+    _rc(monkeypatch)
+    s = make([rel("v2.5.0"), rel("v2.5.0-rc.2", prerelease=True)]).state()
+    assert s["ultima"] == "2.5.0" and s["hay_actualizacion"] is True
+
+
+def test_pick_installer_rc():
+    n = "Checkpoint-Setup-2.5.0-rc.2.exe"
+    b = "https://github.com/o/r/releases/download/v2.5.0-rc.2/"
+    assets = [
+        {"name": n, "browser_download_url": b + n},
+        {"name": n + ".sha256", "browser_download_url": b + n + ".sha256"},
+    ]
+    assert updates.pick_installer(assets, "2.5.0-rc.2") == {"name": n, "url": b + n, "sha256_url": b + n + ".sha256"}
+    assert updates.pick_installer(assets[:1], "2.5.0-rc.2") is None

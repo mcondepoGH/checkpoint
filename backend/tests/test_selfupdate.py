@@ -305,3 +305,21 @@ def test_instalar_es_solo_con_sesion_y_sin_parametros_del_cliente(api, monkeypat
             break
         time.sleep(0.01)
     assert seen == [BASE + NAME]
+
+
+def test_start_con_prerelease_rc_llega_a_downloading_y_lanza(tmp_path, monkeypatch):
+    name = "Checkpoint-Setup-2.5.0-rc.2.exe"
+    base = "https://github.com/o/r/releases/download/v2.5.0-rc.2/"
+    assets = [
+        {"name": name, "browser_download_url": base + name, "size": len(BODY)},
+        {"name": name + ".sha256", "browser_download_url": base + name + ".sha256", "size": 90},
+    ]
+    rc = release(assets=False, tag="v2.5.0-rc.2", prerelease=True)
+    rc["assets"] = assets
+    files = {base + name: BODY, base + name + ".sha256": f"{HASH}  {name}\n".encode()}
+    up = make_updater(tmp_path, monkeypatch, files=files, rels=[rc])
+    monkeypatch.setattr(updates, "installed_version", lambda: "2.5.0-rc.1")
+    up.start()
+    st = wait(up)
+    assert st["state"] == "restarting"
+    assert st["version"] == "2.5.0-rc.2" and up.launched and up.launched[0][0].endswith(name)

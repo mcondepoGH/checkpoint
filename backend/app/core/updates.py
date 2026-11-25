@@ -212,8 +212,13 @@ class UpdateChecker:
         return v if isinstance(v, bool) else True
 
     def channel(self) -> str:
+        """Elección guardada (stable o beta) manda siempre. Sin ella: beta si la versión instalada es una
+        pre-release (para poder recibir la siguiente rc), stable en cualquier otro caso."""
         v = self._read(SETTINGS_FILE).get("channel")
-        return v if v in CHANNELS else DEFAULT_CHANNEL
+        if v in CHANNELS:
+            return v
+        k = parse_semver(installed_version())
+        return "beta" if k is not None and k[1] == 0 else DEFAULT_CHANNEL
 
     def _merge_settings(self, **kv):
         cur = self._read(SETTINGS_FILE)
