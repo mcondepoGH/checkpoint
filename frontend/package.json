@@ -14,7 +14,7 @@
     "format": "prettier --write \"src/**/*.{js,jsx,scss}\" \"test/**/*.mjs\" \"scripts/**/*.mjs\" vite.config.js eslint.config.js",
     "format:check": "prettier --check \"src/**/*.{js,jsx,scss}\" \"test/**/*.mjs\" \"scripts/**/*.mjs\" vite.config.js eslint.config.js"
   },
-  "dependencies": { "react": "18.3.1", "react-dom": "18.3.1", "swagger-ui-dist": "5.34.1" },
+  "dependencies": { "react": "18.3.1", "react-dom": "18.3.1", "swagger-ui-dist": "5.35.1" },
   "devDependencies": {
     "@eslint/js": "9.39.5",
     "@vitejs/plugin-react": "6.3.0",
@@ -25,8 +25,8 @@
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.14.0",
-    "prettier": "3.10.0",
-    "sass": "1.108.1",
-    "vite": "8.3.7"
+    "prettier": "3.10.1",
+    "sass": "1.108.2",
+    "vite": "8.3.8"
   }
 }
