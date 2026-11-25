@@ -584,6 +584,12 @@
     },
     "noDetail": "No per-game detail."
   },
+  "autostart": {
+    "title": "Start at sign-in",
+    "text": "Creates a Windows Scheduled Task that starts Checkpoint when you sign in on this computer. It runs as your user.",
+    "savedOn": "Enabled: Checkpoint will start at sign-in.",
+    "savedOff": "Disabled. This does not stop the Checkpoint that is already running."
+  },
   "updates": {
     "badge": "New version available: {version}",
     "badgePre": "New pre-release version available: {version}",
@@ -702,6 +708,11 @@
       "ssh_key_missing": "SSH key not generated yet",
       "config_file_invalid": "invalid config.yaml: {cause}",
       "settings_invalid": "invalid settings",
+      "autostart": {
+        "create_failed": "Could not create the Scheduled Task: {reason}",
+        "remove_failed": "Could not remove the Scheduled Task: {reason}",
+        "not_supported": "Starting at sign-in is only available on Windows."
+      },
       "updates_not_applicable": "Update checking does not apply in Docker (the image sets the version)",
       "updates": {
         "enabled_bool": "must be true or false",

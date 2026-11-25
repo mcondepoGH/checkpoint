@@ -28,6 +28,7 @@ from .api.routers import (
     spa,
     steam,
     sync,
+    system,
     versions,
 )
 from .api.routers import scheduler as scheduler_router
@@ -88,6 +89,7 @@ def create_app(auth: Optional[Auth] = None) -> FastAPI:
         devices.router,
         scheduler_router.router,
         updates_router.router,
+        system.router,
         sync.router,
         versions.router,
         orphans.router,

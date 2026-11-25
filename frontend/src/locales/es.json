@@ -584,6 +584,12 @@
     },
     "noDetail": "Sin detalle por juego."
   },
+  "autostart": {
+    "title": "Arrancar al iniciar sesión",
+    "text": "Crea una Tarea Programada de Windows que arranca Checkpoint cuando inicias sesión en este equipo. Se ejecuta con tu usuario.",
+    "savedOn": "Activado: Checkpoint arrancará al iniciar sesión.",
+    "savedOff": "Desactivado. No detiene el Checkpoint que ya está en marcha."
+  },
   "updates": {
     "badge": "Nueva versión disponible: {version}",
     "badgePre": "Nueva versión preliminar disponible: {version}",
@@ -702,6 +708,11 @@
       "ssh_key_missing": "clave SSH aún no generada",
       "config_file_invalid": "config.yaml inválido: {cause}",
       "settings_invalid": "ajustes no válidos",
+      "autostart": {
+        "create_failed": "No se pudo crear la Tarea Programada: {reason}",
+        "remove_failed": "No se pudo quitar la Tarea Programada: {reason}",
+        "not_supported": "El arranque al iniciar sesión solo está disponible en Windows."
+      },
       "updates_not_applicable": "La comprobación de actualizaciones no se aplica en Docker (la versión la fija la imagen)",
       "updates": {
         "enabled_bool": "debe ser verdadero o falso",
