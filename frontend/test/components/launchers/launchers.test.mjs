@@ -1,7 +1,16 @@
 // Comandos de lanzador (funciones puras): sin navegador ni React.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LAUNCHERS, commandsFor, hookUrl, normalizeHubUrl, ago, loadHubUrl, saveHubUrl } from '#src/components/launchers/launchers.js';
+import {
+  LAUNCHERS,
+  commandsFor,
+  hookUrl,
+  normalizeHubUrl,
+  safeUrl,
+  ago,
+  loadHubUrl,
+  saveHubUrl,
+} from '#src/components/launchers/launchers.js';
 import { nextTabIndex } from '#src/lib/tabs.js';
 
 const KEY = 'ck_AbC123xyz';
@@ -67,6 +76,18 @@ test('URL del hub: se normaliza y se rechaza lo peligroso', () => {
   for (const bad of ['', 'ftp://h', 'h:8088', 'http://h" ; rm -rf ~ #', 'http://h$(x)', 'http://h`x`', 'http://h x', 'http://h\\x'])
     assert.equal(normalizeHubUrl(bad), null, bad);
   assert.equal(commandsFor('steam', { ...base, url: 'http://h" ; x' }), null);
+});
+
+test('URL del hub: valores parciales al escribir no lanzan (safeUrl / normalizeHubUrl)', () => {
+  for (const v of ['', 'h', 'http:', 'http://', 'http://127', '   ', 'ftp://x', 'http://:', 'http://[', 'http://:80', null, undefined]) {
+    assert.doesNotThrow(() => safeUrl(v), String(v));
+    assert.doesNotThrow(() => normalizeHubUrl(v), String(v));
+  }
+  for (const v of ['http://:', 'http://[', 'http://:80', 'http://', '', 'ftp://x']) assert.equal(normalizeHubUrl(v), null, v);
+  assert.equal(safeUrl('http://'), null);
+  assert.equal(safeUrl('http://h:8088').hostname, 'h');
+  assert.equal(normalizeHubUrl('http://127'), 'http://127');
+  assert.equal(normalizeHubUrl('http://127.0.0.1:8088/'), 'http://127.0.0.1:8088');
 });
 
 test('ago: hace cuánto, en el idioma pedido', () => {

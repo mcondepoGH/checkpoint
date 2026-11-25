@@ -49,6 +49,17 @@ const block = (initial, o = {}, lang = 'es') =>
   );
 const WITH = { loaded: true, key: KEY };
 
+test('LauncherBlock: URL del hub parcial no rompe el render y marca el error', () => {
+  for (const hub of ['', 'h', 'http:', 'http://', 'http://:', 'http://[', 'ftp://x', '  ']) {
+    let h;
+    assert.doesNotThrow(() => (h = R('LauncherBlock', { games: [game()], active: true, initial: WITH, defaultHub: hub })), hub);
+    assert.ok(has(h, 'URL no válida'), hub);
+  }
+  assert.ok(
+    !has(R('LauncherBlock', { games: [game()], active: true, initial: WITH, defaultHub: 'http://127.0.0.1:8088' }), 'URL no válida'),
+  );
+});
+
 test('Tabs: roles, aria-selected/controls y roving tabindex', { skip }, () => {
   const h = R(
     'Tabs',

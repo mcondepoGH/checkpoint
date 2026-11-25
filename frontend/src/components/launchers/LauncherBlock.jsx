@@ -4,7 +4,7 @@ import { getApiKey } from '#src/lib/api/profile.js';
 import { hookStatus } from '#src/lib/api/sync.js';
 import { isInsecure } from '#src/lib/apikey.js';
 import { RESULT_TEXT, resultText } from '#src/lib/format.js';
-import { LAUNCHERS, ago, commandsFor, loadHubUrl, normalizeHubUrl, saveHubUrl } from './launchers.js';
+import { LAUNCHERS, ago, commandsFor, loadHubUrl, normalizeHubUrl, safeUrl, saveHubUrl } from './launchers.js';
 import { errText, rich, useI18n } from '#src/hooks/useI18n.js';
 import Field from '#src/components/ui/Field.jsx';
 import Icon from '#src/components/ui/Icon.jsx';
@@ -54,7 +54,7 @@ export default function LauncherBlock({ games, active, initial = null, api = rea
     if (n) saveHubUrl(storage(), n);
   };
   const url = normalizeHubUrl(hubUrl);
-  const insecure = url ? isInsecure(new URL(url)) : false;
+  const insecure = url ? isInsecure(safeUrl(url)) : false;
   const hintId = `${uid}-hint`;
 
   let body;

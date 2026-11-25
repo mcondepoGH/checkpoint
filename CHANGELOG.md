@@ -6,6 +6,7 @@
 
 - Icono de bandeja de Windows: el menú ya no se queda en «Checkpoint no responde» ni con «Abrir Checkpoint» en gris aunque el hub funcione. La bandeja arranca antes que el servidor y comprobaba el puerto una sola vez; ahora un hilo vigila el hub (cada segundo hasta que responde, luego cada pocos segundos) y refresca el menú cuando cambia, también si el hub cae después.
 - Actualizaciones: con una pre-release instalada (p. ej. `2.5.0-rc.1`) y sin canal elegido en `updates.json`, el canal por defecto pasa a ser `beta`, de modo que se ofrece la siguiente rc y se puede actualizar con un clic. Una elección guardada (`stable` o `beta`) manda siempre; con una versión estable instalada el defecto sigue siendo `stable`. `GET /api/updates` y el selector de canal muestran el canal efectivo.
+- Ajustes > Lanzadores: editar la URL del hub ya no rompe la sección («Failed to construct 'URL': Invalid URL»). Un valor parcial como `http://:` o `http://[` pasaba el filtro y hacía lanzar a `new URL`; ahora se parsea de forma segura y se muestra «URL no válida» mientras se escribe.
 
 ## 2.5.0-rc.1 (2026-11-25)
 

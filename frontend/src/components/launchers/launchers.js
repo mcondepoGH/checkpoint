@@ -7,12 +7,21 @@ const STORE = 'checkpoint.hubUrl';
 // encodeURIComponent deja sin codificar ! ' ( ) *; se codifican también para que nada se interprete dentro de comillas.
 const enc = (s) => encodeURIComponent(String(s)).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
 
+// Parseo seguro: devuelve el URL o null (nunca lanza; `new URL` falla con valores parciales como «http://:» o «http://[»).
+export function safeUrl(value) {
+  try {
+    return new URL(String(value ?? ''));
+  } catch {
+    return null;
+  }
+}
+
 // URL base del hub: http(s), sin espacios ni caracteres que el shell interpretaría; sin barras finales. null si no vale.
 export function normalizeHubUrl(raw) {
   const s = String(raw ?? '')
     .trim()
     .replace(/\/+$/, '');
-  return /^https?:\/\/[^\s"'`$\\;&|<>^%]+$/.test(s) ? s : null;
+  return /^https?:\/\/[^\s"'`$\\;&|<>^%]+$/.test(s) && safeUrl(s) ? s : null;
 }
 
 export const hookUrl = ({ url, game, device }) => `${url}/api/hook/${enc(game)}/opened?device=${enc(device)}`;
