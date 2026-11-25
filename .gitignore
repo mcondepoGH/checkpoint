@@ -37,3 +37,8 @@ config/hub.secret
 .coverage
 coverage/
 frontend/coverage/
+
+# Instalador de Windows (salida de PyInstaller e Inno Setup)
+packaging/windows/dist/
+packaging/windows/build/
+packaging/windows/Output/

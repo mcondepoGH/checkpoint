@@ -41,3 +41,25 @@ def test_instalacion_por_usuario_y_parametros_silenciosos():
 
 def test_contrasena_limitada_a_72():
     assert ISS.count("MaxLength := 72") == 2
+
+
+def test_nombre_del_instalador_coincide_entre_iss_build_release_y_selfupdate():
+    """El nombre del asset lo fija installer.iss y lo esperan build.ps1, release.yml y la actualización con un clic."""
+    from app.core import updates
+
+    root = Path(__file__).resolve().parents[2]
+    prefix = updates.INSTALLER_NAME.format(version="{#AppVersion}").replace(".exe", "")
+    assert f"OutputBaseFilename={prefix}" in ISS
+    stem = updates.INSTALLER_NAME.replace("{version}", "$version")
+    assert stem in (root / "packaging/windows/build.ps1").read_text(encoding="utf-8")
+    release = (root / ".github/workflows/release.yml").read_text(encoding="utf-8")
+    assert stem in release and '"packaging/windows/Output/$name.sha256"' in release
+    assert "-Tag $env:TAG" in release  # verifica VERSION contra el tag
+
+
+def test_ci_construye_y_prueba_el_instalador():
+    root = Path(__file__).resolve().parents[2]
+    ci = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "windows-installer:" in ci and "smoke.ps1" in ci
+    smoke = (root / "packaging/windows/smoke.ps1").read_text(encoding="utf-8")
+    assert "127.0.0.1:8088" in smoke and "/NOLOGIN=1" in smoke

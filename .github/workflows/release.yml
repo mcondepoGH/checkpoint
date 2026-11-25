@@ -169,3 +169,47 @@ jobs:
         run: |
           set -euo pipefail
           gh release upload "$TAG" dist/*.whl --clobber
+
+  # Instalador .exe del hub para Windows (packaging/windows), adjunto a la Release que acaba de crear `release`, con su
+  # hash (<nombre>.exe.sha256) para la actualización con un clic. Sin firma de código (SmartScreen avisará).
+  # Verifica que VERSION coincide con el tag, construye, pasa el smoke test (instalación silenciosa y consulta al
+  # puerto 8088) y solo entonces sube. Las pre-releases (-rc) también llevan instalador; no cambia su marca de latest,
+  # que fija el job `release`.
+  windows:
+    needs: release
+    runs-on: windows-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write   # subir los assets a la Release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      - name: Construir el instalador (comprueba VERSION contra el tag)
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: ./packaging/windows/build.ps1 -Tag $env:TAG
+
+      - name: Smoke test (instalar en silencio, consultar 8088, desinstalar)
+        shell: pwsh
+        run: ./packaging/windows/smoke.ps1
+
+      - name: Subir el instalador y su hash a la Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          $name = "Checkpoint-Setup-$version.exe"
+          gh release view $env:TAG --json tagName | Out-Null
+          gh release upload $env:TAG "packaging/windows/Output/$name" "packaging/windows/Output/$name.sha256" --clobber
