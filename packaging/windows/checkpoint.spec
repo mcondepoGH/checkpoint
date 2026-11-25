@@ -18,11 +18,11 @@ for required in (os.path.join(STATIC, "index.html"), DECK_ZIP, VERSION):
         sys.exit(f"checkpoint.spec: falta {required}")
 
 # `uvicorn.run("app.main:app_factory", factory=True)` importa por cadena: PyInstaller no lo ve.
-hidden = collect_submodules("app") + collect_submodules("uvicorn") + ["bcrypt", "cryptography", "yaml", "ruamel.yaml"]
+hidden = collect_submodules("app") + collect_submodules("uvicorn") + ["bcrypt", "cryptography", "yaml", "ruamel.yaml", "tray", "pystray", "pystray._win32", "PIL"]
 
 a = Analysis(
     [os.path.join(SPECPATH, "launcher.py")],
-    pathex=[os.path.join(ROOT, "backend")],
+    pathex=[os.path.join(ROOT, "backend"), SPECPATH],
     binaries=[],
     # Mismo diseño que /app en Docker: static/ y VERSION junto a app/, y el zip del plugin en deck/.
     datas=[(STATIC, "static"), (DECK_ZIP, "deck"), (VERSION, ".")],

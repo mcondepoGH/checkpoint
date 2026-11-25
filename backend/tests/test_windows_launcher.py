@@ -181,3 +181,15 @@ def test_port_open_detecta_un_puerto_escuchando(launcher):
         s.listen(1)
         assert launcher._port_open(f"http://127.0.0.1:{s.getsockname()[1]}") is True
     assert launcher._port_open("http://127.0.0.1:1") is False
+
+
+def test_main_lanza_la_bandeja_con_la_url_y_un_fallo_no_impide_servir(launcher, tmp_path, monkeypatch):
+    monkeypatch.setenv("CHECKPOINT_HOME_DIR", str(tmp_path))
+    urls = []
+    assert launcher.main(["--port", "9"], serve=lambda a: 0, notify=lambda m: None, tray=urls.append) == 0
+    assert urls == ["http://127.0.0.1:9"]
+
+
+def test_tray_por_defecto_no_rompe_el_arranque(launcher, tmp_path, monkeypatch):
+    monkeypatch.setenv("CHECKPOINT_HOME_DIR", str(tmp_path))
+    assert launcher.main([], serve=lambda a: 0, notify=lambda m: None) == 0  # sin `tray` importable: False en silencio

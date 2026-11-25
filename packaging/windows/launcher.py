@@ -1,11 +1,12 @@
 """Punto de entrada del hub empaquetado para Windows (PyInstaller, sin consola).
 
-Hace tres cosas antes de arrancar `app.cli serve`:
+Hace cuatro cosas antes de arrancar `app.cli serve`:
   1. Lee `%APPDATA%\\checkpoint\\.env` (o `CHECKPOINT_HOME_DIR\\.env`), que escribe el instalador con el usuario y la
      contraseña (en claro: documentado). Lo que ya esté en el entorno manda sobre el fichero.
   2. Comprueba el modo sin login: sin credenciales solo se arranca en 127.0.0.1, ::1 o localhost. Si no, avisa con un
      cuadro de mensaje (no hay consola) y sale con código 2.
   3. Sin consola (`sys.stdout`/`sys.stderr` a None), redirige la salida a `<datos>\\logs\\checkpoint.log`.
+  4. Lanza el icono de bandeja (tray.py) y, con --open, abre el navegador cuando el hub responde.
 
 Los textos de este fichero van fuera de i18n y en español (como los del CLI)."""
 
@@ -157,10 +158,22 @@ def _default_serve(argv) -> int:
     return cli.main(argv)
 
 
-def main(argv=None, serve=None, notify=None) -> int:
+def _default_tray(url) -> bool:
+    """Icono de bandeja (tray.py, junto a este fichero en el bundle). Cualquier fallo se ignora: el hub arranca igual."""
+    try:
+        import tray
+
+        return tray.start(url, os.environ)
+    except Exception as e:  # noqa: BLE001
+        print(f"bandeja no disponible: {e}", file=sys.stderr)
+        return False
+
+
+def main(argv=None, serve=None, notify=None, tray=None) -> int:
     argv, open_browser = split_open_flag(list(sys.argv[1:] if argv is None else argv))
     serve = serve or _default_serve
     notify = notify or _notify
+    tray = tray or _default_tray
     load_env(os.environ)
     _ensure_streams(home_dir(os.environ))
     problem = check_mode(os.environ, argv)
@@ -168,8 +181,10 @@ def main(argv=None, serve=None, notify=None) -> int:
         print(problem, file=sys.stderr)
         notify(problem)
         return 2
+    url = url_for(os.environ, argv)
+    tray(url)
     if open_browser:
-        threading.Thread(target=open_when_ready, args=(url_for(os.environ, argv),), daemon=True).start()
+        threading.Thread(target=open_when_ready, args=(url,), daemon=True).start()
     return serve(["serve", *argv])
 
 
