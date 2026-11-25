@@ -20,6 +20,7 @@ Checkpoint sincroniza las partidas guardadas de un juego entre dos dispositivos,
 - [Cómo funciona](#cómo-funciona)
 - [Instalación con Docker](#instalación-con-docker)
 - [Instalación sin Docker](#instalación-sin-docker)
+- [Instalador para Windows](#instalador-para-windows)
 - [Primeros pasos](#primeros-pasos)
 - [Lanzadores](#lanzadores)
 - [Plugin de Steam Deck](#plugin-de-steam-deck)
@@ -119,9 +120,23 @@ En Docker la casilla no aparece y un `config.yaml` con `local: true` se rechaza 
 ### Plataformas probadas
 
 - **Linux**: probado (suite automática, incluido el motor con «Este equipo» sobre el sistema de ficheros real, y un arranque real con `serve`).
-- **Windows nativo**: el motor de sincronización (bloqueos, transporte «Este equipo», detección de procesos, huellas y conflictos) está verificado en CI en un runner de Windows (`windows-latest`, Python 3.12). El resto (API y hub completos, instalación y uso real) sigue sin verificar y es experimental. En Windows como anfitrión no hay `rsync` de serie, así que los dispositivos remotos no están soportados; «Este equipo» sí está pensado para funcionar.
+- **Windows nativo**: el motor de sincronización (bloqueos, transporte «Este equipo», detección de procesos, huellas y conflictos) está verificado en CI en un runner de Windows (`windows-latest`, Python 3.12). El instalador `.exe` se construye y pasa un smoke test (instalación silenciosa y consulta al puerto 8088) en CI; la instalación y el uso reales en un Windows con el asistente, la bandeja, la Tarea Programada y la actualización con un clic siguen sin verificar a mano. En Windows como anfitrión no hay `rsync` de serie, así que los dispositivos remotos no están soportados; «Este equipo» sí está pensado para funcionar.
 - **macOS**: experimental, no verificado; el código lo contempla pero solo se probó con simulaciones.
 - El acceso SSH a dispositivos remotos no se prueba contra un servidor SSH real (las pruebas lo simulan).
+
+## Instalador para Windows
+
+Cada Release adjunta `Checkpoint-Setup-<versión>.exe`: instala el hub en modo nativo, sin Docker y sin pasos manuales (web ya compilada y zip del plugin de Steam Deck incluidos). Se instala por usuario, sin Administrador, en `%LOCALAPPDATA%\Programs\Checkpoint`; los datos van a `%APPDATA%\checkpoint`. Está en español e inglés según el idioma de Windows.
+
+1. **SmartScreen**: el instalador **no está firmado**. Windows puede mostrar «Windows protegió su PC»: pulsa «Más información» y luego «Ejecutar de todos modos».
+2. **Acceso**: el asistente pide usuario y contraseña (con botón para generar una; el hub usa solo los primeros 72 bytes), o permite **arrancar sin usuario ni contraseña**: entonces el hub solo se abre desde el propio equipo (`127.0.0.1`), la web muestra un aviso fijo y no hay «Salir». Con credenciales o sin ellas, el hub escucha en `127.0.0.1`.
+3. **Credenciales en claro**: el instalador las guarda en `%APPDATA%\checkpoint\.env` (`CHECKPOINT_USER` y `CHECKPOINT_PASSWORD`, sin cifrar; el hub las lee al arrancar). Para cambiar de modo, edita ese fichero (borra las dos líneas para ir sin login) o vuelve a ejecutar el instalador. Sin credenciales y con otro host (`CHECKPOINT_HOST`), el hub se niega a arrancar y lo dice en un cuadro de mensaje y en el log.
+4. **Uso**: al terminar, abre `http://127.0.0.1:8088`. En la bandeja del sistema hay un icono con «Abrir Checkpoint» y «Detener Checkpoint» (también en el menú Inicio); `CHECKPOINT_NO_TRAY=1` lo desactiva. El log está en `%APPDATA%\checkpoint\logs\checkpoint.log`.
+5. **Arranque al iniciar sesión**: en Configuración > General, «Arrancar al iniciar sesión» crea (o quita) una Tarea Programada de Windows con tu usuario. Viene desactivada.
+6. **Actualizar**: con el instalador, el botón «Actualizar ahora» (Configuración > General o el diálogo de la versión nueva) descarga el instalador de la Release, comprueba su SHA-256 contra el `.sha256` publicado y lo ejecuta; no lo hace si hay una sincronización en curso. Tus datos y el `.env` se conservan.
+7. **Desinstalar**: desde «Aplicaciones instaladas»; pregunta si borrar también `%APPDATA%\checkpoint` (por defecto se conserva).
+
+Instalación silenciosa: `Checkpoint-Setup-<versión>.exe /VERYSILENT /NOLOGIN=1` (o `/CPUSER=<usuario> /CPPASSWORD=<contraseña>`; sin ninguno conserva el `.env` existente). Limitaciones: los dispositivos remotos por SSH siguen sin soportarse en Windows (falta `rsync`); «Este equipo» y los dispositivos `http` sí.
 
 ## Primeros pasos
 

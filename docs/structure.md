@@ -171,6 +171,17 @@ Pruebas del hub de esta zona (en `backend/tests/`): `test_deck_plugin.py` (desca
 
 Reglas: el secreto de la solicitud viaja solo en `X-Pairing-Secret` y la clave `ckd_` solo en `Authorization: Bearer`; ninguno sale en logs ni en el estado que ve la interfaz; la clave se guarda en `settings.json` (directorio de ajustes de Decky) con 0600. Sincronización manual (con el juego abierto se rechaza con `game_running`; abrir y cerrar los trata `checkpoint_auto`, que al cerrar avisa con `POST /api/hook/{game}/closed` y deja los cierres sin red en una cola en disco): la ruta del save la da el hub (`GET /api/games`, campo `path`) y es dato no confiable; `checkpoint_sync.validate_game_path` y `validate_rel` la validan antes de tocar nada, y una descarga va a `<carpeta>.checkpoint-new`, se verifica y reemplaza la carpeta dejando UNA copia `<carpeta>.checkpoint-backup`. El manifiesto local debe describir la carpeta igual que `fingerprint()` del hub: si cambian las reglas allí, cambian en `checkpoint_manifest.py` y lo vigila el test de equivalencia.
 
+## Instalador de Windows (`packaging/windows/`)
+
+Empaqueta el hub en modo nativo para Windows. No es parte de la imagen de Docker (`.dockerignore` lo excluye) ni importa nada del frontend.
+
+- `checkpoint.spec`: PyInstaller onedir sin consola. Mete `frontend/dist` como `static/`, `checkpoint-deck/out/Checkpoint.zip` como `deck/` y `VERSION` junto a `app/` (el mismo diseño que `/app` en Docker; con el hub congelado `settings.DECK_ZIP` busca `deck/`). Falla si falta alguno.
+- `launcher.py`: punto de entrada. Lee `%APPDATA%\checkpoint\.env`, rechaza el modo sin login con un host no local, redirige la salida a `logs/checkpoint.log`, lanza la bandeja y, con `--open`, abre el navegador.
+- `tray.py`: icono de bandeja (pystray + Pillow) con «Abrir» y «Detener»; si no puede arrancar, el hub arranca igual.
+- `installer.iss`: Inno Setup (por usuario, es/en, asistente de credenciales, desinstalador que pregunta si borrar los datos). Parámetros silenciosos `/NOLOGIN=1`, `/CPUSER`, `/CPPASSWORD`.
+- `build.ps1` y `smoke.ps1`: construcción completa y smoke test (los usan el job `windows-installer` de `ci.yml` y el job `windows` de `release.yml`); `requirements.txt`: PyInstaller, pystray y Pillow.
+- Backend: `services/autostart.py` (Tarea Programada, `GET`/`PUT /api/autostart`) y `services/selfupdate.py` (actualización con un clic, `POST`/`GET /api/updates/install`; solo con el hub congelado en Windows). El asset de la Release es `Checkpoint-Setup-<versión>.exe` más su `.sha256`; `core/updates.py` solo lo ofrece si están los dos.
+
 ## Cliente de Linux (`checkpoint-client/`)
 
 Paquete Python `checkpoint_client` (CLI `checkpoint-client`, Python 3.12, dependencias `psutil` y `keyring`) que sincroniza sin SSH con el hub, como el plugin de la Deck pero para Linux de escritorio. Es independiente del hub (no lo importa ni lo ejecuta; el Dockerfile no lo copia y `.dockerignore` lo excluye) y tiene versión propia semver en su `pyproject.toml`, que no depende del tag del hub. Su `README.md` explica el uso; aquí solo el empaquetado y la CI.
