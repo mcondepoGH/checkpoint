@@ -129,12 +129,71 @@ def test_disabled_makes_no_request(env):
 def test_refresh_rate_limited(env):
     make, t, calls = env
     c = make([rel("v0.5.0")])
-    c.state()
+    assert c.state(refresh=True).get("limitado") is None and len(calls) == 1
     t[0] += 10
-    assert c.state(refresh=True)["limitado"] is True and len(calls) == 1
+    assert c.state(refresh=True)["limitado"] is True and len(calls) == 1  # dos forzados seguidos
     t[0] += updates.MIN_REFRESH
     s = c.state(refresh=True)
     assert len(calls) == 2 and not s.get("limitado")
+
+
+def test_automatic_fetch_does_not_limit_manual_refresh(env):
+    make, t, calls = env
+    c = make([rel("v0.5.0")])
+    c.state()  # automático
+    t[0] += 10
+    s = c.state(refresh=True)
+    assert not s.get("limitado") and len(calls) == 2
+    t[0] += 10
+    assert c.state()["ultima"] == "0.5.0"  # automático dentro de TTL: sin red
+    assert c.state(refresh=True)["limitado"] is True and len(calls) == 2
+
+
+def test_automatic_fetch_keeps_forced_at(env):
+    make, t, calls = env
+    c = make([rel("v0.5.0")])
+    c.state(refresh=True)
+    t[0] += 30
+    c.state(refresh=True)  # limitado, no toca la caché
+    t[0] += updates.CACHE_TTL
+    c.state()  # automático por TTL: no mueve forced_at
+    assert len(calls) == 2
+    assert c.state(refresh=True).get("limitado") is None and len(calls) == 3
+
+
+def test_manual_refresh_not_limited_after_failure(env):
+    make, t, calls = env
+    c = make(exc=OSError("x"))
+    s = c.state(refresh=True)
+    assert s["error"] == "no se pudo comprobar" and not s.get("limitado")
+    t[0] += 5
+    s = c.state(refresh=True)
+    assert not s.get("limitado") and len(calls) == 2
+
+
+def test_channel_change_then_manual_refresh_not_limited(env):
+    make, t, calls = env
+    c = make([rel("v0.5.0")])
+    c.state(refresh=True)
+    t[0] += 5
+    c.set_channel("beta")
+    c.state()  # lo que hace PUT /api/updates: fetch nuevo
+    t[0] += 5
+    s = c.state(refresh=True)
+    assert not s.get("limitado") and len(calls) == 3
+
+
+def test_old_cache_without_forced_at(env):
+    make, t, calls = env
+    c = make([rel("v0.5.0")])
+    c.state()
+    cache = json.loads((settings.DATA_DIR / updates.CACHE_FILE).read_text(encoding="utf-8"))
+    cache.pop("forced_at", None)
+    (settings.DATA_DIR / updates.CACHE_FILE).write_text(json.dumps(cache), encoding="utf-8")
+    c2 = make([rel("v0.5.0")])
+    t[0] += 5
+    s = c2.state(refresh=True)
+    assert not s.get("limitado") and s["ultima"] == "0.5.0" and len(calls) == 2
 
 
 def test_url_and_notes_sanitised(env):

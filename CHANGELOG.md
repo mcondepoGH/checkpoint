@@ -2,6 +2,10 @@
 
 ## Sin publicar
 
+### Correcciones
+
+- «Comprobar ahora»: el límite de un minuto solo cuenta los refrescos manuales anteriores. Antes lo activaban también la comprobación automática o el cambio de canal, y un solo clic podía dar «Acabas de comprobarlo» sin comprobar nada; además, si la última comprobación había fallado, el refresco manual quedaba bloqueado. El aviso del límite ahora se muestra como información neutra, no en rojo.
+
 ## 2.5.0-rc.3 (2026-11-25)
 
 ### Cambios

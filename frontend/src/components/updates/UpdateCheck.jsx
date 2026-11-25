@@ -2,15 +2,23 @@ import React, { useState } from 'react';
 import UpdateDialog from '#src/components/updates/UpdateDialog.jsx';
 import { updatesApplicable, updateSummary, channelOf, canInstall, isInstaller, CHANNEL_OPTIONS, CHANNEL_HELP } from '#src/lib/updates.js';
 import { errText, useI18n } from '#src/hooks/useI18n.js';
-import { ui } from '#src/lib/errors.js';
 import { Alert, Button, Select, Switch } from '#src/components/ui/index.js';
 import { putUpdates, refreshUpdates } from '#src/lib/api/updates.js';
+
+// Aviso bajo los botones: el límite de frecuencia es información neutra (no un fallo); lo demás, error de la API.
+export function CheckNotice({ msg, limited }) {
+  const { t } = useI18n();
+  if (msg) return <Alert variant="error">{errText(msg)}</Alert>;
+  if (limited) return <Alert variant="info">{t('updates.check.limited')}</Alert>;
+  return null;
+}
 
 // Tarjeta de Configuración: activar/desactivar la comprobación de versiones nuevas y forzarla a mano.
 export default function UpdateCheck({ info, onInfo }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [showDialog, setShowDialog] = useState(false);
+  const [limited, setLimited] = useState(false); // refresco manual rechazado por el límite de frecuencia
   const [msg, setMsg] = useState(null); // error de la API o mensaje {code} (se traduce al pintar)
   if (info && !updatesApplicable(info)) return null; // Docker sin forzar: ni tarjeta ni selector de canal
   const enabled = info ? info.habilitado !== false : true;
@@ -19,6 +27,7 @@ export default function UpdateCheck({ info, onInfo }) {
   const act = async (fn) => {
     setBusy(true);
     setMsg(null);
+    setLimited(false);
     try {
       await fn();
     } catch (e) {
@@ -34,7 +43,7 @@ export default function UpdateCheck({ info, onInfo }) {
     act(async () => {
       const r = await refreshUpdates();
       onInfo(r);
-      if (r.limitado) setMsg(ui('updates.check.limited'));
+      setLimited(!!r.limitado);
     });
 
   return (
@@ -77,7 +86,7 @@ export default function UpdateCheck({ info, onInfo }) {
         )}
       </div>
       <div role="status" aria-live="polite">
-        {msg && <Alert variant="error">{errText(msg)}</Alert>}
+        <CheckNotice msg={msg} limited={limited} />
       </div>
       {showDialog && canInstall(info) && <UpdateDialog info={info} onClose={() => setShowDialog(false)} />}
     </section>

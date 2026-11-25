@@ -91,8 +91,8 @@ const { mod, skip } = await bundle(
   import { renderToStaticMarkup } from 'react-dom/server';
   import UpdateBadge from '#src/components/updates/UpdateBadge.jsx';
   import UpdateDialog from '#src/components/updates/UpdateDialog.jsx';
-  import UpdateCheck from '#src/components/updates/UpdateCheck.jsx';
-  export { React, renderToStaticMarkup, UpdateBadge, UpdateDialog, UpdateCheck };`,
+  import UpdateCheck, { CheckNotice } from '#src/components/updates/UpdateCheck.jsx';
+  export { React, renderToStaticMarkup, UpdateBadge, UpdateDialog, UpdateCheck, CheckNotice };`,
   { tag: 'ckpt-upd' },
 );
 const r = (C, props) => mod.renderToStaticMarkup(mod.React.createElement(C, props));
@@ -128,6 +128,15 @@ test('UpdateDialog: versiones, notas escapadas, enlace https y sin botón de act
   assert.match(h, /recompila la web/i);
   const bad = r(mod.UpdateDialog, { info: { ...NEW, url: 'javascript:alert(1)' }, onClose() {} });
   assert.ok(!bad.includes('javascript:'));
+});
+
+test('CheckNotice: «limitado» es info neutra, un error de la API sigue en rojo', { skip }, () => {
+  const lim = r(mod.CheckNotice, { limited: true });
+  assert.match(lim, /alert info/);
+  assert.match(lim, /Acabas de comprobarlo/);
+  assert.ok(!/alert error/.test(lim));
+  assert.equal(r(mod.CheckNotice, {}), '');
+  assert.match(r(mod.CheckNotice, { msg: new Error('x'), limited: true }), /alert error/);
 });
 
 test('UpdateCheck: ajuste activado/desactivado', { skip }, () => {

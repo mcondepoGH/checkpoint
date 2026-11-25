@@ -240,14 +240,17 @@ class UpdateChecker:
     def _same(c, repo, channel) -> bool:
         return bool(c) and c.get("repo") == repo and c.get("channel") == channel
 
-    def _do_fetch(self, repo, channel, now):
+    def _do_fetch(self, repo, channel, now, forced=False):
         old = self._cache if self._same(self._cache, repo, channel) else {}
+        # forced_at solo lo escribe un refresco manual; los fetch automáticos lo conservan.
+        forced_at = now if forced else old.get("forced_at")
         try:
             latest = pick_latest((self._fetch or fetch_releases)(repo), channel)
             self._cache = {
                 "repo": repo,
                 "channel": channel,
                 "attempt_at": now,
+                "forced_at": forced_at,
                 "checked_at": now,
                 "ok": True,
                 "latest": latest,
@@ -257,6 +260,7 @@ class UpdateChecker:
                 "repo": repo,
                 "channel": channel,
                 "attempt_at": now,
+                "forced_at": forced_at,
                 "checked_at": old.get("checked_at"),
                 "ok": False,
                 "latest": old.get("latest"),
@@ -317,12 +321,16 @@ class UpdateChecker:
             c = self._cache
             known = self._same(c, repo, channel) and isinstance(c.get("attempt_at"), (int, float))
             age = now - c["attempt_at"] if known else None
-            if refresh and known and age < MIN_REFRESH:
+            # El límite cuenta solo refrescos manuales (forced_at; cachés viejas sin él no limitan)
+            # y no aplica si el último intento falló: el usuario debe poder reintentar.
+            forced_at = c.get("forced_at") if known else None
+            forced_age = now - forced_at if isinstance(forced_at, (int, float)) else None
+            if refresh and c.get("ok") and forced_age is not None and 0 <= forced_age < MIN_REFRESH:
                 base["limitado"] = True
             else:
                 ttl = CACHE_TTL if c.get("ok") else RETRY_AFTER
                 if refresh or not known or age >= ttl or age < 0:
-                    self._do_fetch(repo, channel, now)
+                    self._do_fetch(repo, channel, now, forced=refresh)
             c = self._cache if self._same(self._cache, repo, channel) else {}
         latest = c.get("latest") or {}
         base["ultima"] = latest.get("version")
