@@ -63,3 +63,25 @@ def test_ci_construye_y_prueba_el_instalador():
     assert "windows-installer:" in ci and "smoke.ps1" in ci
     smoke = (root / "packaging/windows/smoke.ps1").read_text(encoding="utf-8")
     assert "127.0.0.1:8088" in smoke and "/NOLOGIN=1" in smoke
+
+
+def _new_password():
+    m = re.search(r"^function NewPassword: String;\n(.*?)^end;", ISS, re.S | re.M)
+    assert m
+    return m.group(1)
+
+
+def test_generacion_de_contrasena_sin_plan_b_debil():
+    body = _new_password()
+    assert "Random(" not in body and "Randomize" not in body
+    assert "GetInt32" not in body  # no existe en Windows PowerShell 5.1
+    assert "RandomNumberGenerator]::Create()" in body and "GetBytes" in body
+    assert "Result := ''" in body  # fallo o longitud inválida: cadena vacía
+
+
+def test_fallo_de_generacion_avisa_y_exige_minimo():
+    cm = _section("CustomMessages")
+    for lang in ("spanish", "english"):
+        assert f"{lang}.PwGenFailed=" in cm and f"{lang}.PasswordShort=" in cm
+    assert "CustomMessage('PwGenFailed')" in ISS and "CustomMessage('PasswordShort')" in ISS
+    assert "Length(PassEdit.Text) < 8" in ISS

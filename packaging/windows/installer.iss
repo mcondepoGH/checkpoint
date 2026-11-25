@@ -61,6 +61,10 @@ spanish.Generate=Generar contraseña
 english.Generate=Generate password
 spanish.Generated=Contraseña generada: cópiala ahora, no se vuelve a mostrar.
 english.Generated=Password generated: copy it now, it will not be shown again.
+spanish.PwGenFailed=No se pudo generar una contraseña segura. Escríbela tú (mínimo 8 caracteres).
+english.PwGenFailed=Could not generate a secure password. Please type one (minimum 8 characters).
+spanish.PasswordShort=La contraseña debe tener al menos 8 caracteres.
+english.PasswordShort=The password must be at least 8 characters long.
 spanish.NoLogin=Arrancar sin usuario ni contraseña (solo en este equipo)
 english.NoLogin=Start without username or password (this computer only)
 spanish.NoLoginHelp=Solo se podrá abrir desde este equipo (127.0.0.1). Cualquier persona con acceso a este equipo podrá entrar.
@@ -126,28 +130,30 @@ begin
   UpdateAccessControls;
 end;
 
-{ Contraseña aleatoria de 24 caracteres con el generador criptográfico de Windows (PowerShell). Si falla, Random(). }
+{ Contraseña aleatoria de 24 caracteres con el generador criptográfico de Windows (PowerShell 5.1 y 7), sin sesgo de
+  módulo: se descartan los bytes >= al mayor múltiplo de Length(PwAlphabet) por debajo de 256. Si PowerShell falla o
+  devuelve algo inválido devuelve '' (sin plan B débil): el asistente avisa y el usuario escribe la contraseña. }
 function NewPassword: String;
 var
   tmp, cmd: String;
-  rc: Integer;
+  rc, n, lim: Integer;
   lines: TArrayOfString;
-  i: Integer;
 begin
   Result := '';
   tmp := ExpandConstant('{tmp}\pw.txt');
-  cmd := '/C powershell.exe -NoProfile -Command "-join ((1..24) | ForEach-Object { ''' + PwAlphabet +
-         '''[[System.Security.Cryptography.RandomNumberGenerator]::GetInt32(' + IntToStr(Length(PwAlphabet)) + ')] })" > "' + tmp + '"';
+  n := Length(PwAlphabet);
+  lim := 256 - (256 mod n);
+  { Sin % ni comillas dobles dentro de la orden: cmd.exe las interpretaría. }
+  cmd := '/C powershell.exe -NoProfile -Command "$a=''' + PwAlphabet + ''';' +
+         '$r=[System.Security.Cryptography.RandomNumberGenerator]::Create();$b=New-Object byte[] 1;$s='''';' +
+         'while($s.Length -lt 24){$r.GetBytes($b);if($b[0] -lt ' + IntToStr(lim) + '){$s+=$a[$b[0]-' + IntToStr(n) +
+         '*[math]::Floor($b[0]/' + IntToStr(n) + ')]}};$r.Dispose();Write-Output $s" > "' + tmp + '"';
   if Exec(ExpandConstant('{cmd}'), cmd, '', SW_HIDE, ewWaitUntilTerminated, rc) and (rc = 0) then
     if LoadStringsFromFile(tmp, lines) and (GetArrayLength(lines) > 0) then
       Result := Trim(lines[0]);
   DeleteFile(tmp);
   if Length(Result) <> 24 then
-  begin
     Result := '';
-    for i := 1 to 24 do
-      Result := Result + Copy(PwAlphabet, Random(Length(PwAlphabet)) + 1, 1);
-  end;
 end;
 
 procedure GenerateClick(Sender: TObject);
@@ -157,6 +163,13 @@ begin
   pw := NewPassword;
   PassEdit.Text := pw;
   Pass2Edit.Text := pw;
+  if pw = '' then
+  begin
+    GenLabel.Caption := '';
+    PassEdit.Password := True;
+    MsgBox(CustomMessage('PwGenFailed'), mbError, MB_OK);
+    Exit;
+  end;
   GenLabel.Caption := CustomMessage('Generated');
   { La contraseña se muestra en claro un momento para poder copiarla. }
   PassEdit.Password := False;
@@ -225,6 +238,7 @@ begin
     if NoLoginCheck.Checked then Exit;
     if Trim(UserEdit.Text) = '' then begin MsgBox(CustomMessage('NeedUser'), mbError, MB_OK); Result := False; Exit; end;
     if PassEdit.Text = '' then begin MsgBox(CustomMessage('NeedPassword'), mbError, MB_OK); Result := False; Exit; end;
+    if Length(PassEdit.Text) < 8 then begin MsgBox(CustomMessage('PasswordShort'), mbError, MB_OK); Result := False; Exit; end;
     if PassEdit.Text <> Pass2Edit.Text then begin MsgBox(CustomMessage('Mismatch'), mbError, MB_OK); Result := False; Exit; end;
   end;
 end;
