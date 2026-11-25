@@ -31,6 +31,7 @@ export default function Settings({
   onDirty,
   updates,
   onUpdates,
+  noLogin = false,
   firstUse = false,
 }) {
   const { t } = useI18n(); // re-renderiza al cambiar de idioma: errores y mensajes se guardan sin traducir y se traducen al pintar
@@ -179,7 +180,7 @@ export default function Settings({
           dot: id === 'library' && dirty ? t('settings.subtabs.dirty') : undefined,
         }))}
         panels={{
-          general: <General updates={updates} onUpdates={onUpdates} />,
+          general: <General updates={updates} onUpdates={onUpdates} noLogin={noLogin} />,
           library: (
             <ErrorBoundary version={installedVersion(updates)}>
               <Library

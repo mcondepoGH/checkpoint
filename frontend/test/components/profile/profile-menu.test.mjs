@@ -168,9 +168,11 @@ test('Sin login (`noLogin`): el menú no ofrece «Salir»; con login sí', { ski
   assert.ok(!/Salir/.test(menu({ noLogin: true }, 'en')) && !/Sign out|Log out/i.test(menu({ noLogin: true }, 'en')));
 });
 
-test('App pinta el aviso de sin login con la clave app.noLogin y solo con noLogin', () => {
+test('App ya no pinta el aviso de sin login como banner global: lo pasa a Configuración', () => {
   const src = read('App.jsx');
-  assert.match(src, /noLogin && \(\s*<Alert as="p" variant="warn" role="alert">\s*\{t\('app\.noLogin'\)\}/);
+  assert.ok(!/\{t\('app\.noLogin'\)\}/.test(src));
+  assert.ok(!/noLogin && \(/.test(src));
   assert.match(src, /setNoLogin\(s\.noLogin === true\)/);
   assert.match(src, /noLogin=\{noLogin\}/);
+  assert.match(read('pages', 'Settings.jsx'), /<General[^>]*noLogin=\{noLogin\}/);
 });

@@ -28,7 +28,7 @@ export default function App() {
     document.documentElement.lang = locale;
   }, [locale]); // lector de pantalla y traductor del navegador
   const [authed, setAuthed] = useState(null);
-  const [noLogin, setNoLogin] = useState(false); // hub sin usuario ni contraseña (solo 127.0.0.1): aviso fijo y sin «Salir»
+  const [noLogin, setNoLogin] = useState(false); // hub sin usuario ni contraseña (solo 127.0.0.1): aviso en Configuración > General y sin «Salir»
   const [tab, setTab] = useState('sync');
   const [loaded, setLoaded] = useState({ version: '', config: { devices: {}, games: {} }, error: null });
   const [latest, setLatest] = useState(null); // última versión de config.yaml anunciada por el servidor (SSE)
@@ -150,11 +150,6 @@ export default function App() {
 
   return (
     <div className="app">
-      {noLogin && (
-        <Alert as="p" variant="warn" role="alert">
-          {t('app.noLogin')}
-        </Alert>
-      )}
       <header className="topbar">
         <strong className="brand">
           <AppIcon className="brand-logo" />
@@ -214,6 +209,7 @@ export default function App() {
               onReload={() => loadConfig()}
               onDirty={setDirty}
               updates={updates}
+              noLogin={noLogin}
               onUpdates={setUpdates}
               firstUse={firstUse}
             />
