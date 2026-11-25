@@ -11,6 +11,8 @@ import {
   isPrerelease,
   installedVersion,
   CHANNEL_OPTIONS,
+  RESTART_TIMEOUT_MS,
+  restartTimedOut,
 } from '#src/lib/updates.js';
 
 import { createI18n } from '#src/lib/i18n.js';
@@ -216,4 +218,21 @@ test('textos aprobados de la actualización en inglés', () => {
   assert.equal(en.updates.install.button, 'Update now');
   assert.equal(en.updates.install.confirmYes, 'Yes, update');
   assert.match(en.err.main.updates.hash_mismatch, /Nothing was installed/);
+});
+
+test('restartTimedOut: la espera del reinicio acaba a los 120 s', () => {
+  assert.equal(RESTART_TIMEOUT_MS, 120000);
+  assert.equal(restartTimedOut(1000, 1000 + RESTART_TIMEOUT_MS - 1), false);
+  assert.equal(restartTimedOut(1000, 1000 + RESTART_TIMEOUT_MS), true);
+});
+
+test('updates.install.timeout: texto aprobado en es y en', () => {
+  assert.equal(
+    es.updates.install.timeout,
+    'No se pudo completar la actualización. Cierra Checkpoint y ejecuta manualmente el instalador descargado.',
+  );
+  assert.equal(
+    en.updates.install.timeout,
+    'The update could not be completed. Close Checkpoint and run the downloaded installer manually.',
+  );
 });

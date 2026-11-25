@@ -613,6 +613,7 @@
       "downloading": "Downloading {version}…",
       "installing": "Installing…",
       "restarting": "Restarting… This page will reload by itself.",
+      "timeout": "The update could not be completed. Close Checkpoint and run the downloaded installer manually.",
       "done": "Updated to version {version}.",
       "windowsNote": "It updates from here; your data and settings are kept."
     },

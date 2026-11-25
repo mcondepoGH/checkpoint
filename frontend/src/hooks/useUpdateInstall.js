@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ui } from '#src/lib/errors.js';
 import { getInstallStatus, getUpdates, installUpdate } from '#src/lib/api/updates.js';
-import { phaseFromStatus, reachedVersion } from '#src/lib/updates.js';
+import { phaseFromStatus, reachedVersion, restartTimedOut } from '#src/lib/updates.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const reload = () => globalThis.location.reload();
@@ -9,6 +9,7 @@ const reload = () => globalThis.location.reload();
 // Actualización con un clic: arranca la instalación, sigue su progreso y, cuando el hub se reinicia, recarga la página.
 // `phase`: idle | confirm | checking | downloading | installing | restarting | done | error. `error` es {code, params}
 // (o un error de la API) y se traduce al pintar. Un fallo de red durante el reinicio es normal: el hub está parado.
+// Si pasan RESTART_TIMEOUT_MS sin que vuelva con la versión nueva, se muestra el error `updates.install.timeout`.
 export default function useUpdateInstall(target) {
   const [phase, setPhase] = useState('idle');
   const [error, setError] = useState(null);
@@ -28,8 +29,10 @@ export default function useUpdateInstall(target) {
   // Espera a que el hub vuelva (cualquier respuesta HTTP = ya está arriba; un 401 es solo la sesión, perdida al reiniciar).
   const waitRestart = useCallback(async () => {
     setPhase('restarting');
+    const startedMs = Date.now();
     while (alive.current) {
       await sleep(2000);
+      if (restartTimedOut(startedMs, Date.now())) return fail(ui('updates.install.timeout'));
       try {
         const info = await getUpdates();
         if (reachedVersion(info, target)) {

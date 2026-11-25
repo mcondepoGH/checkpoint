@@ -613,6 +613,7 @@
       "downloading": "Descargando {version}…",
       "installing": "Instalando…",
       "restarting": "Reiniciando… Esta página se recargará sola.",
+      "timeout": "No se pudo completar la actualización. Cierra Checkpoint y ejecuta manualmente el instalador descargado.",
       "done": "Actualizado a la versión {version}.",
       "windowsNote": "Se actualiza desde aquí; tus datos y ajustes se conservan."
     },

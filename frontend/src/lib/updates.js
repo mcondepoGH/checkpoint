@@ -62,6 +62,10 @@ export function isInstaller(info) {
 // Fases de la actualización: idle -> confirm -> checking -> downloading -> installing -> restarting -> done | error.
 export const INSTALL_BUSY = ['checking', 'downloading', 'installing', 'restarting'];
 
+// Tiempo máximo esperando a que el hub vuelva con la versión nueva (si el instalador falla sin cerrar el hub, no vuelve nunca).
+export const RESTART_TIMEOUT_MS = 120000;
+export const restartTimedOut = (startedMs, nowMs) => nowMs - startedMs >= RESTART_TIMEOUT_MS;
+
 // Fase siguiente según el estado que informa `GET /api/updates/install` ({state, error}).
 export function phaseFromStatus(prev, status) {
   if (!status) return prev;
