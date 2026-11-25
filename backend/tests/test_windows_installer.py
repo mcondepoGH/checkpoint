@@ -85,3 +85,49 @@ def test_fallo_de_generacion_avisa_y_exige_minimo():
         assert f"{lang}.PwGenFailed=" in cm and f"{lang}.PasswordShort=" in cm
     assert "CustomMessage('PwGenFailed')" in ISS and "CustomMessage('PasswordShort')" in ISS
     assert "Length(PassEdit.Text) < 8" in ISS
+
+
+def _spec():
+    return (Path(__file__).resolve().parents[2] / "packaging/windows/checkpoint.spec").read_text(encoding="utf-8")
+
+
+def test_spec_no_depende_de_collect_submodules_app():
+    """collect_submodules('app') se evalúa al cargar el spec, cuando backend/ aún no está en sys.path: devolvía []
+    y el bundle salía sin el paquete `app`. Se recorren los ficheros de backend/app, sin importar nada."""
+    spec = _spec()
+    assert 'collect_submodules("app")' not in spec and "collect_submodules('app')" not in spec
+    assert '"backend", "app"' in spec and "os.walk" in spec
+    assert "hiddenimports=hidden" in spec
+    for mod in ("fastapi", "starlette", "uvicorn"):
+        assert f'"{mod}"' in spec
+
+
+def test_spec_comprueba_que_el_paquete_app_no_sale_vacio():
+    spec = _spec()
+    assert "app.main" in spec and "sys.exit" in spec
+
+
+def test_modulos_descubiertos_por_el_spec_incluyen_main_y_routers():
+    """Misma lógica que el spec, replicada: si cambia la estructura de backend/app hay que mirar el spec."""
+    import os
+
+    base = Path(__file__).resolve().parents[1]
+    mods = set()
+    for dirpath, _dirs, files in os.walk(base / "app"):
+        rel = Path(dirpath).relative_to(base)
+        for f in files:
+            if f.endswith(".py"):
+                mods.add(".".join(rel.parts if f == "__init__.py" else (*rel.parts, f[:-3])))
+    assert {"app.main", "app.cli", "app.core.settings"} <= mods
+
+
+def test_smoke_vuelca_log_y_salida_y_falla_rapido_si_el_hub_muere():
+    smoke = (Path(__file__).resolve().parents[2] / "packaging/windows/smoke.ps1").read_text(encoding="utf-8")
+    assert "HasExited" in smoke
+    assert "checkpoint.log" in smoke and "stdout" in smoke and "stderr" in smoke
+    assert "finally" in smoke and smoke.index("Show-Diagnostics") < smoke.index("finally")
+
+
+def test_cli_serve_importa_app_estaticamente():
+    cli = (Path(__file__).resolve().parents[1] / "app/cli.py").read_text(encoding="utf-8")
+    assert "from .main import app_factory" in cli and '"app.main:app_factory"' not in cli.split("def serve")[1]

@@ -368,9 +368,10 @@ def test_cli_serve_llama_a_uvicorn(monkeypatch, capsys):
     llamadas = []
     monkeypatch.setattr(uvicorn, "run", lambda *a, **k: llamadas.append((a, k)))
     assert cli.main(["serve"]) == 0
-    assert llamadas == [
-        (("app.main:app_factory",), {"factory": True, "host": "127.0.0.1", "port": 8088, "server_header": False})
-    ]
+    from app.main import app_factory
+
+    # Objeto y no cadena "app.main:app_factory": PyInstaller no ve imports por cadena (el hub congelado no arrancaba).
+    assert llamadas == [((app_factory,), {"factory": True, "host": "127.0.0.1", "port": 8088, "server_header": False})]
     monkeypatch.setenv("CHECKPOINT_HOST", "0.0.0.0")
     monkeypatch.setenv("CHECKPOINT_PORT", "9001")
     cli.main(["serve"])

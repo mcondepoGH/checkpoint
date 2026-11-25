@@ -15,15 +15,51 @@ $p = Start-Process $exe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORE
 $p.WaitForExit()
 if ($p.ExitCode -ne 0) { if (Test-Path "$dir.log") { Get-Content "$dir.log" -Tail 40 }; throw "El instalador salió con código $($p.ExitCode)" }
 
+# Vuelca TODO lo que ayuda a diagnosticar un fallo: log del instalador, log del hub (checkpoint.log), procesos y, si el
+# hub no está en marcha, una ejecución directa con stdout/stderr a ficheros (el exe no tiene consola: lo normal es que
+# la salida vaya a checkpoint.log, pero un fallo previo a esa redirección solo se vería así).
+$script:shown = $false
+function Show-Diagnostics {
+  $script:shown = $true
+  Write-Host "===== diagnóstico del smoke ====="
+  if (Test-Path "$dir.log") { Write-Host "--- log del instalador (cola) ---"; Get-Content "$dir.log" -Tail 40 }
+  $log = Join-Path $env:APPDATA "checkpoint\logs\checkpoint.log"
+  if (Test-Path $log) { Write-Host "--- checkpoint.log (cola) ---"; Get-Content $log -Tail 120 } else { Write-Host "No existe $log" }
+  Write-Host "--- procesos checkpoint ---"
+  Get-Process checkpoint -ErrorAction SilentlyContinue | Format-Table Id, StartTime, Responding -AutoSize | Out-String | Write-Host
+  $hubExe = Join-Path $dir "checkpoint.exe"
+  if (-not (Get-Process checkpoint -ErrorAction SilentlyContinue) -and (Test-Path $hubExe)) {
+    $out = Join-Path $base "checkpoint-smoke.stdout.txt"
+    $err = Join-Path $base "checkpoint-smoke.stderr.txt"
+    Remove-Item $out, $err -ErrorAction SilentlyContinue
+    $d = Start-Process $hubExe -ArgumentList "--port", "8089" -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+    Start-Sleep -Seconds 15
+    Write-Host "--- ejecución directa de checkpoint.exe (15 s, puerto 8089): terminó=$($d.HasExited) ---"
+    if (-not $d.HasExited) { Stop-Process -Id $d.Id -Force -ErrorAction SilentlyContinue }
+    Write-Host "--- stdout ---"; if (Test-Path $out) { Get-Content $out -Tail 60 }
+    Write-Host "--- stderr ---"; if (Test-Path $err) { Get-Content $err -Tail 60 }
+    if (Test-Path $log) { Write-Host "--- checkpoint.log tras la ejecución directa ---"; Get-Content $log -Tail 60 }
+  }
+  Write-Host "===== fin del diagnóstico ====="
+}
+
 try {
   $session = $null
-  for ($i = 0; $i -lt 60 -and -not $session; $i++) {
-    try { $session = Invoke-RestMethod "http://127.0.0.1:8088/api/session" -TimeoutSec 3 } catch { Start-Sleep -Seconds 2 }
+  $deadline = (Get-Date).AddSeconds(120)
+  $grace = (Get-Date).AddSeconds(20)  # el instalador lanza el hub al acabar: margen para que aparezca el proceso
+  $lastError = $null
+  while (-not $session -and (Get-Date) -lt $deadline) {
+    try { $session = Invoke-RestMethod "http://127.0.0.1:8088/api/session" -TimeoutSec 3 }
+    catch {
+      $lastError = $_.Exception.Message
+      if ((Get-Date) -gt $grace -and -not (Get-Process checkpoint -ErrorAction SilentlyContinue)) { break }  # el hub murió: falla rápido
+      Start-Sleep -Seconds 2
+    }
   }
   if (-not $session) {
-    $log = Join-Path $env:APPDATA "checkpoint\logs\checkpoint.log"
-    if (Test-Path $log) { Get-Content $log -Tail 60 }
-    throw "El hub no responde en 127.0.0.1:8088 tras 120 s"
+    Show-Diagnostics
+    $why = if (Get-Process checkpoint -ErrorAction SilentlyContinue) { "no responde en 127.0.0.1:8088 tras 120 s" } else { "ha terminado (proceso checkpoint ausente)" }
+    throw "El hub $why. Último error: $lastError"
   }
   if ($session.noLogin -ne $true) { throw "Se esperaba noLogin=true: $($session | ConvertTo-Json -Compress)" }
   $page = Invoke-WebRequest "http://127.0.0.1:8088/" -UseBasicParsing -TimeoutSec 10
@@ -31,6 +67,10 @@ try {
   $zip = Invoke-WebRequest "http://127.0.0.1:8088/api/deck/plugin" -UseBasicParsing -TimeoutSec 10
   if ($zip.StatusCode -ne 200 -or $zip.Content.Length -lt 1000) { throw "El zip del plugin de Deck no se sirve" }
   Write-Host "OK: hub $version en 8088, noLogin, web y plugin de Deck servidos"
+}
+catch {
+  if (-not $script:shown) { Show-Diagnostics }
+  throw
 }
 finally {
   Get-Process checkpoint -ErrorAction SilentlyContinue | Stop-Process -Force

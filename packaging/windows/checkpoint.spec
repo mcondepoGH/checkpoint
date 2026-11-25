@@ -17,8 +17,30 @@ for required in (os.path.join(STATIC, "index.html"), DECK_ZIP, VERSION):
     if not os.path.isfile(required):
         sys.exit(f"checkpoint.spec: falta {required}")
 
-# `uvicorn.run("app.main:app_factory", factory=True)` importa por cadena: PyInstaller no lo ve.
-hidden = collect_submodules("app") + collect_submodules("uvicorn") + ["bcrypt", "cryptography", "yaml", "ruamel.yaml", "tray", "pystray", "pystray._win32", "PIL"]
+# Paquete `app` (backend/app): se recorre el árbol de ficheros y no la función de hooks de PyInstaller para submódulos, porque esa función se
+# evalúa aquí, antes de que `pathex` (backend/) esté en sys.path, y devolvía [] (el bundle salía sin `app`).
+APP_DIR = os.path.join(ROOT, "backend", "app")
+app_modules = []
+for dirpath, _dirs, files in os.walk(APP_DIR):
+    rel = os.path.relpath(dirpath, os.path.dirname(APP_DIR)).replace(os.sep, ".")
+    if "__pycache__" in rel:
+        continue
+    for f in files:
+        if f.endswith(".py"):
+            app_modules.append(rel if f == "__init__.py" else f"{rel}.{f[:-3]}")
+if "app.main" not in app_modules or "app.cli" not in app_modules:
+    sys.exit(f"checkpoint.spec: no se encontró el paquete app en {APP_DIR}")
+
+# app.cli importa app.main de forma estática; aun así se listan todos los módulos (routers y servicios cargados por
+# nombre) y los paquetes con carga dinámica (uvicorn: loops, protocolos, lifespan; fastapi/starlette; anyio).
+hidden = (
+    app_modules
+    + collect_submodules("uvicorn")
+    + collect_submodules("fastapi")
+    + collect_submodules("starlette")
+    + collect_submodules("anyio")
+    + ["bcrypt", "cryptography", "yaml", "ruamel.yaml", "tray", "pystray", "pystray._win32", "PIL"]
+)
 
 a = Analysis(
     [os.path.join(SPECPATH, "launcher.py")],

@@ -31,12 +31,16 @@ def serve(host=None, port=None) -> int:
         return 2
     import uvicorn
 
+    # Import estático y objeto (no una cadena de import): en el ejecutable congelado PyInstaller solo
+    # empaqueta lo que ve importado, y uvicorn fallaba con «Could not import module "app.main"».
+    from .main import app_factory
+
     print(
         f"Checkpoint ({runtime.runtime_name()}, {runtime.platform_name()}) en http://{host}:{port}\n"
         f"  config: {settings.CONFIG_PATH}\n  datos:  {settings.DATA_DIR}\n  web:    {settings.STATIC_DIR}",
         file=sys.stderr,
     )
-    uvicorn.run("app.main:app_factory", factory=True, host=host, port=port, server_header=False)
+    uvicorn.run(app_factory, factory=True, host=host, port=port, server_header=False)
     return 0
 
 
